@@ -1,0 +1,27 @@
+{
+  "permissions": {
+    "defaultMode": "dontAsk",
+    "allow": [
+      "Read", "Grep", "Glob", "Edit", "Write", "Agent",
+      "Bash(git status*)", "Bash(git diff*)", "Bash(git show*)",
+      "Bash(git log*)", "Bash(git grep*)", "Bash(git ls-files*)",
+      "Bash(git add *)", "Bash(git commit *)", "Bash(git fetch *)",
+      "Bash(ls*)", "Bash(rg *)", "Bash(grep *)", "Bash(uname*)",
+      "Bash(swift build*)", "Bash(swift test*)", "Bash(cargo build*)",
+      "Bash(cargo test*)", "Bash(cargo clippy*)", "Bash(cargo fmt*)",
+      "Bash(npm run *)", "Bash(npm test*)", "Bash(npm ci*)",
+      "Bash(python -m *)", "Bash(python3 -m *)",
+      "Bash(bash .agents/scripts/verify-*)"
+    ],
+    "deny": [
+      "Read(**/.env*)", "Read(**/.agents/HUMAN.md)",
+      "Edit(**/.claude/**)", "Write(**/.claude/**)",
+      "Edit(**/CLAUDE.md)", "Write(**/CLAUDE.md)",
+      "Edit(**/.agents/**)", "Write(**/.agents/**)",
+      "Edit(**/.github/**)", "Write(**/.github/**)",
+      "Bash(gh *)", "Bash(git push*)", "Bash(git -C *)",
+      "Bash(git reset*)", "Bash(git clean*)", "Bash(git checkout*)",
+      "Bash(git switch*)", "Bash(git worktree*)", "Bash(sudo*)"
+    ]
+  }
+}
