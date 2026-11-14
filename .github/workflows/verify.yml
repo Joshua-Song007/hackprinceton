@@ -1,0 +1,11 @@
+name: verify
+on:
+  pull_request:
+  push:
+    branches: [main]
+jobs:
+  swift:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash .agents/scripts/verify-swift.sh

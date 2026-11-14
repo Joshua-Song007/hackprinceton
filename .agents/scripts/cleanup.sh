@@ -25,7 +25,7 @@ for b in $(git branch --list 'agent/*' --format='%(refname:short)'); do
   esac
   [ "$(git rev-parse "$b")" = "$oid" ] || { echo "✗ $b: has commits that are not in PR #$num, kept"; kept=$((kept+1)); continue; }
   wt=$(wt_for "$b")
-  if [ -n "$wt" ] && [ -n "$(git -C "$wt" status --porcelain 2>/dev/null | grep -v '^??.*target/')" ]; then
+  if [ -n "$wt" ] && [ -n "$(git -C "$wt" status --porcelain 2>/dev/null | grep -v '^??.*.build/')" ]; then
     echo "✗ $b: worktree $wt has uncommitted changes, kept"; kept=$((kept+1)); continue
   fi
   echo "✓ $b: PR #$num $state, cleaning"

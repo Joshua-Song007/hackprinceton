@@ -1,11 +1,17 @@
 #!/usr/bin/env bash
-# Launch an autonomous agent in its own git worktree + branch agent/<slug>.
-# usage: .agents/scripts/run.sh [-i] <slug> "<task, e.g. implement PLAN.md items 2.1-2.9>"
-#   -i  interactive session instead of headless. AGENT_BUDGET=<usd> caps headless spend (default 5).
-# Worktree must contain .agents/ (i.e. Phase 2 files merged to origin/main).
+# Launch an autonomous agent in its own git worktree + branch agent/<laptop>/<slug>.
+# usage: OMNI_LAPTOP=<name> .agents/scripts/run.sh [-i] [--orch] <slug> "<task, e.g. implement plan.md items 1.3>"
+#   -i      interactive session instead of headless. AGENT_BUDGET=<usd> caps headless spend (default 5, orchestrator 10).
+#   --orch  orchestrator role: Opus, .agents/settings.orch.json (push + gh). Default role is worker: Sonnet, .agents/settings.json (commit only).
+# Worktree must contain .agents/ (i.e. merged to origin/main).
 set -euo pipefail
-interactive=0; [ "${1:-}" = "-i" ] && { interactive=1; shift; }
-slug=${1:?usage: run.sh [-i] <slug> "<task>"}; task=${2:?usage: run.sh [-i] <slug> "<task>"}
+interactive=0; role=worker
+while [ "${1:-}" = "-i" ] || [ "${1:-}" = "--orch" ]; do
+  [ "$1" = "-i" ] && interactive=1; [ "$1" = "--orch" ] && role=orch; shift
+done
+slug=${1:?usage: run.sh [-i] [--orch] <slug> "<task>"}; task=${2:?usage: run.sh [-i] [--orch] <slug> "<task>"}
+laptop=${OMNI_LAPTOP:?set OMNI_LAPTOP to this laptop name (letters, digits, dashes)}
+[[ "$laptop" =~ ^[a-z0-9-]+$ && "$slug" =~ ^[a-z0-9-]+$ ]] || { echo "run.sh: laptop and slug must match [a-z0-9-]+" >&2; exit 2; }
 repo=$(git rev-parse --show-toplevel)
 root="$(dirname "$repo")/$(basename "$repo").worktrees"
 wt="$root/$slug"
@@ -14,19 +20,22 @@ mkdir -p "$root"
 until mkdir "$root/.setup.lock" 2>/dev/null; do sleep 1; done
 trap 'rmdir "$root/.setup.lock" 2>/dev/null' EXIT
 git -C "$repo" fetch -q origin main
-[ -d "$wt" ] || git -C "$repo" worktree add -q --no-track -b "agent/$slug" "$wt" origin/main
+[ -d "$wt" ] || git -C "$repo" worktree add -q --no-track -b "agent/$laptop/$slug" "$wt" origin/main
+[ "$role" = orch ] && git -C "$wt" merge -q --ff-only origin/main || true   # orchestrator worktree stays on fresh main; its work goes on other branches
 rm -f "$(git -C "$wt" rev-parse --git-dir)/agent-stopgate"
 git -C "$wt" sparse-checkout set --no-cone '/*' '!/.agents/HUMAN.md'   # human-only doc: never materialized in an agent's worktree
 rmdir "$root/.setup.lock"; trap - EXIT
 cd "$wt"
 
+if [ "$role" = orch ]; then settings=.agents/settings.orch.json; model=claude-opus-5-5; budget=10; extra=" You are the orchestrator for laptop $laptop: also follow .agents/ORCHESTRATOR.md."
+else settings=.agents/settings.json; model=claude-sonnet-5-5; budget=5; extra=""; fi
 args=(
-  --settings .agents/settings.json
+  --settings "$settings"
   --setting-sources project          # ignore personal user settings: same rules for every teammate
   --strict-mcp-config                # no MCP servers (no Figma/Higgsfield/ElevenLabs credit spend)
   --permission-mode dontAsk
-  --model "${AGENT_MODEL:-claude-sonnet-5-5}"   # pinned: the user-level default is not loaded (--setting-sources project)
-  --append-system-prompt "You are an autonomous agent on branch agent/$slug. Follow .agents/AGENTS.md."
+  --model "$model"   # pinned per role (orchestrator Opus, workers Sonnet): the user-level default is not loaded (--setting-sources project)
+  --append-system-prompt "You are an autonomous agent on branch agent/$laptop/$slug. Follow .agents/AGENTS.md.$extra"
 )
 [ -f .agents/agents.json ] && args+=(--agents "$(cat .agents/agents.json)")
 
@@ -34,7 +43,7 @@ if [ "$interactive" = 1 ]; then
   exec claude "${args[@]}" "$task"
 fi
 mkdir -p "$root/logs"
-out=$(claude -p "$task" "${args[@]}" --permission-prompts none --max-budget-usd "${AGENT_BUDGET:-5}" --output-format json) || true
+out=$(claude -p "$task" "${args[@]}" --permission-prompts none --max-budget-usd "${AGENT_BUDGET:-$budget}" --output-format json) || true
 echo "$out" > "$root/logs/$slug.json"
 # ponytail: needs jq. On a subscription the dollar figure is a relative usage measure, not a bill.
 if jq -e . >/dev/null 2>&1 <<<"$out"; then
