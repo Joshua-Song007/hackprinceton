@@ -3,6 +3,7 @@
   "requiredTier": 3,
   "playerOrigin": [0, 1.6, 0],
   "runMode": "screen",
+  "inputs": { "head": true, "heartRate": true, "gestures": ["flick", "pinch"], "players": [1, 32] },
   "clientScripts": ["enemy", "player"],
   "serverScripts": ["game"],
   "entities": [

@@ -23,6 +23,7 @@
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Mutex, OnceLock};
+use std::time::{Duration, Instant};
 
 use axum::extract::ws::{rejection::WebSocketUpgradeRejection, Message, WebSocket, WebSocketUpgrade};
 use axum::extract::{Path, State};
@@ -43,6 +44,12 @@ use crate::AppState;
 
 const MAX_MESSAGE_BYTES: usize = 64 * 1024;
 const MAX_GAME_ID_LEN: usize = 128;
+/// `ctx.after` limits: delay clamped to this range, at most this many pending timers per session.
+const MIN_TIMER_MS: u64 = 50;
+const MAX_TIMER_MS: u64 = 3_600_000;
+const MAX_TIMERS: usize = 64;
+/// How often a connected socket asks its session to run due timers.
+const TICK: Duration = Duration::from_millis(50);
 
 /// An event a server script sends out.
 #[derive(Debug, Clone, PartialEq)]
@@ -52,6 +59,10 @@ pub enum Outgoing {
     Fire { player: String, name: String, data: Value },
     /// `ctx.remote.fireAll(name, data)`
     FireAll { name: String, data: Value },
+    /// `ctx.after(ms, tag, data)`: run `onTimer(ctx, tag, data)` after `ms` (id chosen by the script host)
+    After { id: u64, ms: u64, tag: String, data: Value },
+    /// `ctx.cancel(id)`
+    Cancel { id: u64 },
 }
 
 /// The server-script engine for one game session (implemented by script_host.rs).
@@ -59,6 +70,12 @@ pub trait ScriptHost: Send {
     fn on_player_join(&mut self, player: &str) -> Vec<Outgoing>;
     fn on_player_leave(&mut self, player: &str) -> Vec<Outgoing>;
     fn on_remote(&mut self, player: &str, name: &str, data: &Value) -> Vec<Outgoing>;
+    /// A `ctx.after` timer came due.
+    fn on_timer(&mut self, _tag: &str, _data: &Value) -> Vec<Outgoing> {
+        Vec::new()
+    }
+    /// Display name for a player id, called before that player's `on_player_join`.
+    fn set_player_name(&mut self, _player: &str, _name: &str) {}
 }
 
 /// Host used when a game has no server scripts: ignores everything.
@@ -104,15 +121,30 @@ struct Player {
     tx: UnboundedSender<String>,
 }
 
+struct Timer {
+    id: u64,
+    due: Instant,
+    tag: String,
+    data: Value,
+}
+
 struct Session {
     host: Box<dyn ScriptHost>,
     players: HashMap<String, Player>,
+    timers: Vec<Timer>,
 }
 
 impl Session {
-    fn deliver(&self, game_id: &str, events: Vec<Outgoing>) {
+    fn deliver(&mut self, game_id: &str, events: Vec<Outgoing>) {
         for ev in events {
             match ev {
+                Outgoing::After { id, ms, tag, data } => {
+                    if self.timers.len() < MAX_TIMERS {
+                        let due = Instant::now() + Duration::from_millis(ms.clamp(MIN_TIMER_MS, MAX_TIMER_MS));
+                        self.timers.push(Timer { id, due, tag, data });
+                    }
+                }
+                Outgoing::Cancel { id } => self.timers.retain(|t| t.id != id),
                 Outgoing::Fire { player, name, data } => {
                     bus().publish(game_id, "out", json!({ "player": player, "name": name, "data": data }));
                     if let (Some(p), Some(text)) = (self.players.get(&player), encode(name, data)) {
@@ -161,13 +193,30 @@ impl Registry {
     /// sender is dropped, which ends that socket). `release` builds the host when this join starts
     /// the session; None (no published version) means no server scripts.
     pub fn join(&self, game_id: &str, player: &str, tx: UnboundedSender<String>, release: Option<Release>) -> u64 {
+        self.join_inner(game_id, player, None, tx, release)
+    }
+
+    /// Like `join`, for a real connection: records the display name for scripts and sends the joiner a
+    /// `_welcome` frame `{"id", "name"}` (also on a reconnect) so a client script knows its own player id.
+    pub fn join_named(&self, game_id: &str, player: &str, name: &str, tx: UnboundedSender<String>, release: Option<Release>) -> u64 {
+        self.join_inner(game_id, player, Some(name), tx, release)
+    }
+
+    fn join_inner(&self, game_id: &str, player: &str, name: Option<&str>, tx: UnboundedSender<String>, release: Option<Release>) -> u64 {
         let conn = self.next_conn.fetch_add(1, Ordering::Relaxed);
         let mut map = self.lock();
         let created = !map.contains_key(game_id);
         let session = map.entry(game_id.to_string()).or_insert_with(|| Session {
             host: (self.factory)(game_id, release.as_ref().map_or(&[][..], |r| r.sources.as_slice())),
             players: HashMap::new(),
+            timers: Vec::new(),
         });
+        if let Some(name) = name {
+            session.host.set_player_name(player, name);
+            if let Some(text) = encode("_welcome".into(), json!({ "id": player, "name": name })) {
+                let _ = tx.send(text);
+            }
+        }
         let replaced = session
             .players
             .insert(player.to_string(), Player { conn, tx })
@@ -190,6 +239,7 @@ impl Registry {
         let Some(session) = map.get_mut(game_id) else { return };
         bus().publish(game_id, "reload", json!({ "version": release.version }));
         session.host = (self.factory)(game_id, &release.sources);
+        session.timers.clear(); // the old host's timers belong to the old scripts
         session.deliver(
             game_id,
             vec![Outgoing::FireAll { name: "_reload".into(), data: json!({ "version": release.version }) }],
@@ -229,6 +279,27 @@ impl Registry {
         bus().publish(game_id, "in", json!({ "player": player, "name": frame.name, "data": frame.data }));
         let out = session.host.on_remote(player, &frame.name, &frame.data);
         session.deliver(game_id, out);
+    }
+
+    /// Runs the session's timers that are due at `now`, oldest first. Timers a handler schedules while
+    /// running wait for a later tick, so a script cannot spin the loop with `ctx.after(0)`.
+    pub fn tick(&self, game_id: &str, now: Instant) {
+        let mut map = self.lock();
+        let Some(session) = map.get_mut(game_id) else { return };
+        let mut due: Vec<Timer> = Vec::new();
+        let mut i = 0;
+        while i < session.timers.len() {
+            if session.timers[i].due <= now {
+                due.push(session.timers.remove(i));
+            } else {
+                i += 1;
+            }
+        }
+        due.sort_by_key(|t| t.due);
+        for t in due {
+            let out = session.host.on_timer(&t.tag, &t.data);
+            session.deliver(game_id, out);
+        }
     }
 
     #[cfg(test)]
@@ -283,17 +354,19 @@ async fn play(
     match ws {
         Ok(ws) => ws
             .max_message_size(MAX_MESSAGE_BYTES)
-            .on_upgrade(move |socket| run_socket(socket, game_id, account.id, release)),
+            .on_upgrade(move |socket| run_socket(socket, game_id, account.id, account.display_name, release)),
         Err(rej) => rej.into_response(),
     }
 }
 
-async fn run_socket(mut socket: WebSocket, game_id: String, player: String, release: Option<Release>) {
+async fn run_socket(mut socket: WebSocket, game_id: String, player: String, name: String, release: Option<Release>) {
     let reg = registry();
     let (tx, mut rx) = unbounded_channel::<String>();
-    let conn = reg.join(&game_id, &player, tx, release);
+    let conn = reg.join_named(&game_id, &player, &name, tx, release);
+    let mut ticker = tokio::time::interval(TICK);
     loop {
         tokio::select! {
+            _ = ticker.tick() => reg.tick(&game_id, Instant::now()),
             out = rx.recv() => match out {
                 Some(text) => {
                     if socket.send(Message::Text(text.into())).await.is_err() {
@@ -340,10 +413,21 @@ mod tests {
             self.log.lock().unwrap().push(format!("leave:{player}"));
             Vec::new()
         }
+        fn on_timer(&mut self, tag: &str, data: &Value) -> Vec<Outgoing> {
+            self.log.lock().unwrap().push(format!("timer:{tag}"));
+            vec![Outgoing::FireAll { name: "fired".into(), data: data.clone() }]
+        }
+        fn set_player_name(&mut self, player: &str, name: &str) {
+            self.log.lock().unwrap().push(format!("name:{player}:{name}"));
+        }
         fn on_remote(&mut self, player: &str, name: &str, data: &Value) -> Vec<Outgoing> {
             self.log.lock().unwrap().push(format!("remote:{player}:{name}"));
             if name == "all" {
                 vec![Outgoing::FireAll { name: "hit".into(), data: data.clone() }]
+            } else if name == "arm" {
+                vec![Outgoing::After { id: 7, ms: 100, tag: "t".into(), data: data.clone() }]
+            } else if name == "disarm" {
+                vec![Outgoing::Cancel { id: 7 }]
             } else if let Some(target) = name.strip_prefix("to:") {
                 vec![Outgoing::Fire { player: target.into(), name: "dm".into(), data: data.clone() }]
             } else {
@@ -452,6 +536,50 @@ mod tests {
         assert_eq!(drain(&mut a2).last(), Some(&json!({"name":"pong","data":null})));
         // replacing join does not re-run on_player_join
         assert_eq!(log.lock().unwrap().iter().filter(|l| *l == "join:a").count(), 1);
+    }
+
+    #[test]
+    fn timer_fires_once_when_due_and_can_be_cancelled() {
+        let (r, log) = reg();
+        let (ca, mut a) = player(&r, "g", "a");
+        drain(&mut a);
+        r.remote("g", "a", ca, r#"{"name":"arm","data":{"n":1}}"#);
+        r.tick("g", Instant::now()); // not due yet (100 ms)
+        assert!(drain(&mut a).is_empty());
+        r.tick("g", Instant::now() + Duration::from_secs(1));
+        assert_eq!(drain(&mut a), vec![json!({"name":"fired","data":{"n":1}})]);
+        r.tick("g", Instant::now() + Duration::from_secs(2)); // one-shot
+        assert!(drain(&mut a).is_empty());
+        r.remote("g", "a", ca, r#"{"name":"arm"}"#);
+        r.remote("g", "a", ca, r#"{"name":"disarm"}"#);
+        r.tick("g", Instant::now() + Duration::from_secs(5));
+        assert!(drain(&mut a).is_empty());
+        assert_eq!(log.lock().unwrap().iter().filter(|l| *l == "timer:t").count(), 1);
+    }
+
+    #[test]
+    fn join_named_sends_welcome_and_name_even_on_reconnect() {
+        let (r, log) = reg();
+        let (tx, mut rx) = unbounded_channel();
+        r.join_named("g", "a", "Ada", tx, None);
+        let got = drain(&mut rx);
+        assert_eq!(got[0], json!({"name":"_welcome","data":{"id":"a","name":"Ada"}}));
+        let (tx2, mut rx2) = unbounded_channel();
+        r.join_named("g", "a", "Ada", tx2, None);
+        assert_eq!(drain(&mut rx2)[0]["name"], "_welcome");
+        assert!(log.lock().unwrap().contains(&"name:a:Ada".to_string()));
+    }
+
+    #[test]
+    fn reload_drops_pending_timers() {
+        let (r, _) = reg();
+        let (ca, mut a) = player(&r, "g", "a");
+        drain(&mut a);
+        r.remote("g", "a", ca, r#"{"name":"arm"}"#);
+        r.reload("g", Release { version: 2, sources: vec![] });
+        drain(&mut a);
+        r.tick("g", Instant::now() + Duration::from_secs(5));
+        assert!(drain(&mut a).is_empty());
     }
 
     #[tokio::test]

@@ -33,7 +33,7 @@ const MAX_PENDING: usize = 100; // console/error events kept between two debug p
 const MAX_LOG_CHARS: usize = 2000;
 
 const GLUE: &str = r#"
-(function (fire, fireAll, report, log) {
+(function (fire, fireAll, report, log, after, cancel) {
   "use strict";
   var scripts = [];
   var state = {};
@@ -54,17 +54,31 @@ const GLUE: &str = r#"
     fire: function (playerId, name, data) { fire(String(playerId), String(name), encode(data)); },
     fireAll: function (name, data) { fireAll(String(name), encode(data)); }
   });
-  var ctx = Object.freeze({ state: state, remote: remote });
+  var names = {};
+  var nextTimer = 1;
+  var ctx = Object.freeze({
+    state: state,
+    remote: remote,
+    now: function () { return Date.now(); },
+    after: function (ms, tag, data) {
+      var id = nextTimer++;
+      after(id, Number(ms) || 0, String(tag), encode(data));
+      return id;
+    },
+    cancel: function (id) { cancel(Number(id)); }
+  });
   globalThis.__omniHost = {
     add: function (definition) { scripts.push(definition); },
+    setName: function (playerId, name) { names[playerId] = String(name); },
     stateJSON: function () { return encode(state); },
     dispatch: function (handler, playerId, name, dataJson) {
-      var args = [ctx, Object.freeze({ id: playerId })];
-      if (handler === "onRemote") {
-        var data = null;
+      var args = [ctx, Object.freeze({ id: playerId, name: names[playerId] || "" })];
+      var data = null;
+      if (handler === "onRemote" || handler === "onTimer") {
         try { data = JSON.parse(dataJson); } catch (e) { data = null; }
-        args.push(name, data);
       }
+      if (handler === "onRemote") { args.push(name, data); }
+      else if (handler === "onTimer") { args = [ctx, name, data]; }
       scripts.forEach(function (script) {
         if (typeof script[handler] !== "function") { return; }
         try { script[handler].apply(script, args); }
@@ -177,6 +191,8 @@ impl QuickJsHost {
         self.arm();
         let out = self.out.clone();
         let out2 = self.out.clone();
+        let out3 = self.out.clone();
+        let out4 = self.out.clone();
         let errors = self.errors.clone();
         let pending = self.pending.clone();
         let pending2 = self.pending.clone();
@@ -204,8 +220,18 @@ impl QuickJsHost {
                 push_pending(&pending2, "log", json!({ "level": level, "msg": msg }));
             })
             .map_err(fail)?;
+            let after = Function::new(ctx.clone(), move |id: f64, ms: f64, tag: String, data: String| {
+                let data = serde_json::from_str(&data).unwrap_or(Value::Null);
+                // ms is clamped to the session's limits where the timer is stored (session.rs)
+                out3.lock().unwrap_or_else(|p| p.into_inner()).push(Outgoing::After { id: id as u64, ms: ms.max(0.0) as u64, tag, data });
+            })
+            .map_err(fail)?;
+            let cancel = Function::new(ctx.clone(), move |id: f64| {
+                out4.lock().unwrap_or_else(|p| p.into_inner()).push(Outgoing::Cancel { id: id as u64 });
+            })
+            .map_err(fail)?;
             let glue: Function = ctx.eval(GLUE).map_err(fail)?;
-            glue.call::<_, ()>((fire, fire_all, report, log)).map_err(fail)?;
+            glue.call::<_, ()>((fire, fire_all, report, log, after, cancel)).map_err(fail)?;
             Ok(())
         })
     }
@@ -296,6 +322,19 @@ impl ScriptHost for QuickJsHost {
     }
     fn on_remote(&mut self, player: &str, name: &str, data: &Value) -> Vec<Outgoing> {
         self.dispatch("onRemote", player, name, data)
+    }
+    fn on_timer(&mut self, tag: &str, data: &Value) -> Vec<Outgoing> {
+        self.dispatch("onTimer", "", tag, data)
+    }
+    fn set_player_name(&mut self, player: &str, name: &str) {
+        self.arm();
+        self.context.with(|ctx| {
+            let host: Option<Object> = ctx.globals().get("__omniHost").ok();
+            let set: Option<Function> = host.and_then(|h| h.get("setName").ok());
+            if let Some(set) = set {
+                let _ = set.call::<_, ()>((player, name));
+            }
+        });
     }
 }
 
@@ -397,8 +436,35 @@ mod tests {
         let out = h.on_remote("a", "x", &Value::Null);
         let Outgoing::FireAll { data, .. } = &out[0] else { panic!("expected FireAll") };
         assert_eq!(data["io"], json!(vec!["undefined"; 6]));
-        assert_eq!(data["keys"], json!(["remote", "state"]));
+        assert_eq!(data["keys"], json!(["after", "cancel", "now", "remote", "state"]));
         assert_eq!(data["frozen"], json!(true));
+    }
+
+    #[test]
+    fn after_and_cancel_are_queued_and_on_timer_receives_tag_and_data() {
+        let src = r#"export default serverScript({
+          onRemote(ctx, player, name) {
+            if (name === "arm") { ctx.state.id = ctx.after(1000, "boom", { n: 1 }); ctx.state.later = ctx.after(2000, "x"); }
+            if (name === "disarm") ctx.cancel(ctx.state.later);
+          },
+          onTimer(ctx, tag, data) { ctx.state.fired = [tag, data]; },
+        });"#;
+        let mut h = QuickJsHost::new("test", &[src.to_string()]).unwrap();
+        let out = h.on_remote("a", "arm", &Value::Null);
+        assert_eq!(out[0], Outgoing::After { id: 1, ms: 1000, tag: "boom".into(), data: json!({"n":1}) });
+        assert_eq!(out[1], Outgoing::After { id: 2, ms: 2000, tag: "x".into(), data: Value::Null });
+        assert_eq!(h.on_remote("a", "disarm", &Value::Null), vec![Outgoing::Cancel { id: 2 }]);
+        h.on_timer("boom", &json!({"n":1}));
+        assert_eq!(serde_json::from_str::<Value>(&h.state_json()).unwrap()["fired"], json!(["boom", {"n":1}]));
+    }
+
+    #[test]
+    fn player_has_a_name_after_set_player_name() {
+        let src = "export default serverScript({ onPlayerJoin(ctx, p) { ctx.state.who = [p.id, p.name]; } });";
+        let mut h = QuickJsHost::new("test", &[src.to_string()]).unwrap();
+        h.set_player_name("a", "Ada");
+        h.on_player_join("a");
+        assert_eq!(serde_json::from_str::<Value>(&h.state_json()).unwrap()["who"], json!(["a", "Ada"]));
     }
 
     #[test]

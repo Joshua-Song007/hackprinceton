@@ -32,6 +32,7 @@ export interface LayoutHooks {
 }
 
 const CURRENT_KEY = 'omni.studio.layout.current';
+const CORE_PANELS = ['viewport', 'explorer', 'inspector'];
 const NAMED_KEY = 'omni.studio.layouts';
 const SASH_STEP = 16;
 const COLLAPSED_SIZE = 28;
@@ -91,6 +92,8 @@ export class LayoutManager {
       const data = JSON.parse(json) as SerializedDockview;
       const ids = Object.values(data.panels ?? {}).map((p) => (p as { contentComponent?: string }).contentComponent);
       if (ids.some((id) => !id || !this.specs.has(id))) return false;
+      // A layout missing a core panel (e.g. only the viewport left open) strands a creator; start from the default instead.
+      if (CORE_PANELS.some((id) => this.specs.has(id) && !ids.includes(id))) return false;
       this.api.fromJSON(data);
       return true;
     } catch {
@@ -116,33 +119,32 @@ export class LayoutManager {
     if (preset === 'script-focus') {
       b('editor');
       b('explorer', { referencePanel: 'editor', direction: 'left' });
-      b('devices', { referencePanel: 'explorer', direction: 'within' }, {}, true);
+      b('test', { referencePanel: 'explorer', direction: 'within' }, {}, true);
       b('viewport', { referencePanel: 'editor', direction: 'right' });
       b('inspector', { referencePanel: 'viewport', direction: 'below' });
-      b('output', { direction: 'below' } as never);
-      sizes = { explorer: { width: 220 }, viewport: { width: 380 }, inspector: { height: 240 }, output: { height: 140 } };
+      b('console', { direction: 'below' } as never);
+      sizes = { explorer: { width: 220 }, viewport: { width: 380 }, inspector: { height: 240 }, console: { height: 140 } };
     } else if (preset === 'debug-focus') {
       b('viewport');
       b('editor', { referencePanel: 'viewport', direction: 'within' }, {}, true);
       b('explorer', { referencePanel: 'viewport', direction: 'left' });
-      b('devices', { referencePanel: 'explorer', direction: 'within' }, {}, true);
+      b('test', { referencePanel: 'explorer', direction: 'within' }, {}, true);
       b('inspector', { referencePanel: 'viewport', direction: 'right' });
-      b('output', { direction: 'below' } as never);
-      sizes = { explorer: { width: 200 }, inspector: { width: 260 }, output: { height: 420 } };
+      b('console', { direction: 'below' } as never);
+      sizes = { explorer: { width: 200 }, inspector: { width: 260 }, console: { height: 420 } };
     } else {
       // StudioWindow: sidebar 240, inspector 280, debug area 200, viewport takes the rest.
       b('viewport');
       b('editor', { referencePanel: 'viewport', direction: 'within' }, {}, true);
       b('explorer', { referencePanel: 'viewport', direction: 'left' });
-      b('devices', { referencePanel: 'explorer', direction: 'within' }, {}, true);
+      b('test', { referencePanel: 'explorer', direction: 'within' }, {}, true);
       b('inspector', { referencePanel: 'viewport', direction: 'right' });
-      b('output', { direction: 'below' } as never);
-      sizes = { explorer: { width: 240 }, inspector: { width: 280 }, output: { height: 200 } };
+      b('console', { direction: 'below' } as never);
+      sizes = { explorer: { width: 240 }, inspector: { width: 280 }, console: { height: 200 } };
     }
-    for (const id of ['server', 'state', 'packets']) b(id, { referencePanel: 'output', direction: 'within' }, {}, true);
     // The panel that holds the rest keeps its size; sidebars, inspector and debug area get theirs.
     for (const [id, size] of Object.entries(sizes)) this.api.getPanel(id)?.api.setSize(size);
-    this.api.getPanel('output')?.api.setActive();
+    this.api.getPanel('console')?.api.setActive();
     this.api.getPanel('viewport')?.api.setActive();
     this.restoring = false;
     this.storage.setItem(CURRENT_KEY, JSON.stringify(this.api.toJSON()));

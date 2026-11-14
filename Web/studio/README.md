@@ -116,7 +116,7 @@ cd Web/studio && npx tauri build
 | `src/main.ts` | Composition root: the only file that wires `@omni/sim` and `@omni/cloud` to the runtime |
 | `src/layout.ts` | Docking, presets, saved layouts, keyboard panel control |
 | `src/run.ts` | Run local, Run on server, test players, viewport and Devices panel |
-| `src/debug-panel.ts` | Output, Server, State and Packets tabs |
+| `src/debug-panel.ts` | Console panel: client output and server rows merged, State column, Packets (Advanced) |
 | `src/editor.ts`, `explorer.ts`, `inspector.ts` | Script editor, entity tree, entity inspector |
 | `src/account.ts`, `preferences.ts`, `project.ts` | Sign-in and publish, settings, project model and autosave |
 | `src/theme.css` | Imports the brand-kit `tokens.css` and `bundle.css`; no new colors |

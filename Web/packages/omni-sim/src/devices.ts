@@ -13,7 +13,12 @@ interface Device {
   seq: number;
 }
 
+export type SimDeviceKind = 'airpods' | 'phone' | 'watch';
+export const SIM_DEVICE_KINDS: readonly SimDeviceKind[] = ['airpods', 'phone', 'watch'];
+
 export interface SimDevicesOptions {
+  /** Which virtual devices exist; default all three. */
+  kinds?: readonly SimDeviceKind[];
   rateHz?: number;
   /** Host clock in ms. Defaults to performance.now. */
   now?: () => number;
@@ -28,14 +33,38 @@ export class SimDevices {
   private airpods: Device = { deviceId: 'sim-airpods', kind: 'airpods', slot: 'head', seq: 0 };
   private phone: Device = { deviceId: 'sim-phone', kind: 'phone', slot: 'hand', seq: 0 };
   private watch: Device = { deviceId: 'sim-watch', kind: 'watch', slot: 'leftWrist', seq: 0 };
+  private present: Set<SimDeviceKind>;
   private yaw = 0;
   private pitch = 0;
   private heartRate = 72;
+  private pos: [number, number, number] | null = null;
+  private gpsAccuracy = 3;
+  private drift: [number, number] = [0, 0];
+  private ticks = 0;
+  /** Queued accel samples per device, one sent per tick; a [0, 0, 0] follows the last so the held value resets. */
+  private accelQueue = new Map<SimDeviceKind, Vec3[]>();
 
   constructor(emit: (packet: UsisPacket) => void, options: SimDevicesOptions = {}) {
     this.emit = emit;
+    this.present = new Set(options.kinds ?? SIM_DEVICE_KINDS);
     this.rateHz = options.rateHz ?? SIM_RATE_HZ;
     this.now = options.now ?? (() => performance.now());
+  }
+
+  has(kind: SimDeviceKind): boolean {
+    return this.present.has(kind);
+  }
+
+  list(): SimDeviceKind[] {
+    return SIM_DEVICE_KINDS.filter((k) => this.present.has(k));
+  }
+
+  addDevice(kind: SimDeviceKind): void {
+    this.present.add(kind);
+  }
+
+  removeDevice(kind: SimDeviceKind): void {
+    this.present.delete(kind);
   }
 
   /** Starts the 50 Hz stream; the device clock restarts at 0. */
@@ -61,18 +90,56 @@ export class SimDevices {
     return { yaw: this.yaw, pitch: this.pitch };
   }
 
+  /** Meters, world frame. Until set, head packets carry no `position` and the scene's playerOrigin applies. */
+  setPosition(x: number, y: number, z: number): void {
+    this.pos = [x, y, z];
+  }
+
+  get position(): readonly [number, number, number] {
+    return this.pos ?? [0, 1.6, 0];
+  }
+
+  /** Phone GPS accuracy in meters (0 = perfect fix). Real phones report about 3 to 10 m outdoors. */
+  setGpsAccuracy(meters: number): void {
+    this.gpsAccuracy = Math.max(0, meters);
+  }
+
+  get gpsAccuracyMeters(): number {
+    return this.gpsAccuracy;
+  }
+
+  /** Plays an accel clip (m/s², device frame, one sample per tick) on a device, e.g. `accelPulse` for a swing or punch. */
+  playAccel(kind: SimDeviceKind, samples: readonly Vec3[]): void {
+    if (this.present.has(kind)) this.accelQueue.set(kind, [...samples, [0, 0, 0]]);
+  }
+
   setHeartRate(bpm: number): void {
     this.heartRate = Math.max(0, bpm);
   }
 
   /** A phone gesture, emitted immediately as one packet. */
   gesture(type: GestureType, dir?: Vec3): void {
+    if (!this.present.has('phone')) return;
     this.send(this.phone, { gesture: dir ? { type, dir } : { type } });
   }
 
   private tick(): void {
-    this.send(this.airpods, { orientation: quat.fromYawPitch(this.yaw, this.pitch) });
-    this.send(this.watch, { heartRate: this.heartRate });
+    if (this.present.has('airpods')) this.send(this.airpods, { orientation: quat.fromYawPitch(this.yaw, this.pitch), ...(this.pos ? { position: [...this.pos] as [number, number, number] } : {}) });
+    if (this.present.has('watch')) this.send(this.watch, { heartRate: this.heartRate });
+    const byKind: Record<SimDeviceKind, Device> = { airpods: this.airpods, phone: this.phone, watch: this.watch };
+    for (const [kind, q] of this.accelQueue) {
+      const a = q.shift();
+      if (a) this.send(byKind[kind], { accel: a });
+      if (!q.length) this.accelQueue.delete(kind);
+    }
+    // Phone GPS: one fix per second, the true position plus slow drift and per-fix noise, both scaled by accuracy.
+    if (this.ticks++ % this.rateHz === 0 && this.present.has('phone') && this.pos) {
+      const a = this.gpsAccuracy;
+      const clamp = (v: number) => Math.max(-a, Math.min(a, v));
+      this.drift = [clamp(this.drift[0] + gauss() * 0.1 * a), clamp(this.drift[1] + gauss() * 0.1 * a)];
+      const [x, y, z] = this.pos;
+      this.send(this.phone, { position: [x + this.drift[0] + gauss() * a / 2, y, z + this.drift[1] + gauss() * a / 2], accuracy: a });
+    }
   }
 
   private send(d: Device, ch: UsisChannels): void {
@@ -83,7 +150,21 @@ export class SimDevices {
   }
 }
 
-const GESTURE_KEYS: Record<string, GestureType> = { t: 'tap', f: 'flick', p: 'pinch' };
+/** A half-sine accel pulse along `axis` (unit), peak m/s², lasting `ms` at `rateHz`: a quick swing, punch or lunge. */
+export function accelPulse(axis: Vec3, peak: number, ms = 150, rateHz = SIM_RATE_HZ): Vec3[] {
+  const n = Math.max(1, Math.round((ms / 1000) * rateHz));
+  return Array.from({ length: n }, (_, i) => {
+    const k = peak * Math.sin((Math.PI * (i + 0.5)) / n);
+    return [axis[0] * k, axis[1] * k, axis[2] * k] as Vec3;
+  });
+}
+
+/** Standard normal sample (Box-Muller). */
+function gauss(): number {
+  return Math.sqrt(-2 * Math.log(1 - Math.random())) * Math.cos(2 * Math.PI * Math.random());
+}
+
+const GESTURE_KEYS: Record<string, GestureType> = { t: 'tap', g: 'doubleTap', f: 'flick', p: 'pinch', h: 'squeeze' };
 
 /** Drag to look: horizontal drag changes yaw, vertical changes pitch. Returns a detach function. */
 export function attachMouseLook(target: HTMLElement, devices: SimDevices, radiansPerPixel = 0.005): () => void {
@@ -111,7 +192,7 @@ export function attachMouseLook(target: HTMLElement, devices: SimDevices, radian
   };
 }
 
-/** Keys T = tap, F = flick, P = pinch (ignored while typing in an input). Returns a detach function. */
+/** Keys T = tap, G = double tap, F = flick, P = pinch, H = squeeze (ignored while typing in an input). Returns a detach function. */
 export function attachGestureKeys(target: EventTarget, devices: SimDevices): () => void {
   const onKey = (e: Event) => {
     const k = e as KeyboardEvent;

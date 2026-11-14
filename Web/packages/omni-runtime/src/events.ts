@@ -3,7 +3,7 @@
 // look-at tests the head forward ray against the entity's box bounds instead of an angle cone [provisional].
 import { quat, vec3, type Slot, type Vec3 } from '@omni/core';
 import type { InputFrame } from './input';
-import { flattenScene, scriptName, type SceneDescription, type WorldEntity } from './scene';
+import { flattenScene, scriptName, type CustomGesture, type SceneDescription, type WorldEntity } from './scene';
 
 export type GameHandler = 'onLookAt' | 'onGesture' | 'onHeartRate' | 'onTriggerEnter' | 'onTriggerExit';
 
@@ -70,8 +70,12 @@ export class SceneEvents {
   private gazeMs = new Map<string, number>();
   private fired = new Set<string>();
   private lastBpm: number | undefined;
+  private custom: [string, CustomGesture][];
+  /** Per custom gesture: above threshold last tick (rising-edge detection, since accel is sample-and-hold) and cooldown left. */
+  private motion = new Map<string, { above: boolean; coolMs: number }>();
 
   constructor(scene: SceneDescription, options: EventOptions = {}) {
+    this.custom = Object.entries(scene.gestures ?? {});
     this.entities = flattenScene(scene);
     this.playerOrigin = scene.playerOrigin;
     this.options = { lookDwellMs: 500, restBpm: 60, maxBpm: 180, ...options };
@@ -130,6 +134,21 @@ export class SceneEvents {
     for (const d of frame.devices) {
       if (d.stale) continue;
       for (const g of d.gestures) events.push({ handler: 'onGesture', args: [g.dir ? { type: g.type, dir: g.dir } : { type: g.type }] });
+    }
+
+    // Custom motion gestures: accel along the axis rising past the threshold fires once, then cools down.
+    for (const [name, def] of this.custom) {
+      const m = this.motion.get(name) ?? { above: false, coolMs: 0 };
+      m.coolMs = Math.max(0, m.coolMs - Math.max(0, dtMs));
+      const d = frame.devices.find((x) => x.slot === def.slot && !x.stale && x.accel);
+      const along = d?.accel ? vec3.dot(d.accel, def.axis) : 0;
+      const above = along >= def.threshold;
+      if (above && !m.above && m.coolMs === 0) {
+        events.push({ handler: 'onGesture', args: [{ type: name, dir: def.axis }] });
+        m.coolMs = def.cooldownMs;
+      }
+      m.above = above;
+      this.motion.set(name, m);
     }
 
     const bpm = frame.devices.find((d) => !d.stale && d.heartRate !== undefined)?.heartRate;

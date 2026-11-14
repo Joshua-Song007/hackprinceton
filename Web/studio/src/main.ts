@@ -3,14 +3,22 @@ import { flattenScene } from '@omni/runtime';
 import './theme.css';
 import { AccountController, describeError, openAccountSheet } from './account';
 import { createInspectorPanel } from './inspector';
-import { DebugStore, createOutputPanel, createPacketsPanel, createServerPanel, createStatePanel } from './debug-panel';
-import { EditorBus, createEditorPanel } from './editor';
+import { DebugStore, createConsolePanel } from './debug-panel';
+import { EditorBus, createEditorPanel, openApiSheet } from './editor';
 import { Selection, createExplorerPanel } from './explorer';
 import { LayoutManager, type PanelSpec } from './layout';
 import { PreferenceStore, bindPreferences, inDesktopApp, openSettingsSheet } from './preferences';
-import { Project, TEMPLATES, attachAutosave, loadDraft, templateSnapshot, type ProjectSnapshot } from './project';
-import { RunController, ViewportHost, createDevicesPanel, createViewportPanel } from './run';
-import { announce, button, el, openMenu, openSheet, promptSheet, rovingToolbar } from './ui';
+import { createTestPanel } from './testPanel';
+import { openNewGameSheet } from './newGame';
+import { walkEntities, Project, TEMPLATES, attachAutosave, templateSnapshot, type ProjectSnapshot } from './project';
+import { RunController, ViewportHost, createViewportPanel } from './run';
+import { announce, button, el, openMenu, openSheet, promptSheet, rovingToolbar, type MenuItem } from './ui';
+import { installShortcuts, mod, mountMenuBar } from './menubar';
+import { renderLoginScreen } from './loginScreen';
+import { renderProjectsScreen } from './projectsScreen';
+import { nextScreen, type Screen } from './screens';
+import { rememberRecent } from './recent';
+import { openProjectFile, safeFileName, saveProjectFile, type SavedFile } from './projectFile';
 
 const params = new URLSearchParams(location.search);
 /** A test-player tab (opened by "Add test player"): its own dev account, no autosave, no stored session. */
@@ -43,11 +51,8 @@ const panels: PanelSpec[] = [
   { id: 'viewport', title: 'Viewport', create: () => createViewportPanel(viewport, run) },
   { id: 'inspector', title: 'Inspector', create: () => createInspectorPanel(project, selection) },
   { id: 'editor', title: 'Script editor', create: () => createEditorPanel(project, editor) },
-  { id: 'output', title: 'Output', create: () => createOutputPanel(debug) },
-  { id: 'server', title: 'Server', create: () => createServerPanel(debug) },
-  { id: 'state', title: 'State', create: () => createStatePanel(debug) },
-  { id: 'packets', title: 'Packets', create: () => createPacketsPanel(debug) },
-  { id: 'devices', title: 'Devices', create: () => createDevicesPanel(run) },
+  { id: 'console', title: 'Console', create: () => createConsolePanel(debug) },
+  { id: 'test', title: 'Test', create: () => createTestPanel(project, run) },
 ];
 // Desktop: a dockview popout window (window.open, same JS context) keeps the panel live with the main window's state.
 layout = new LayoutManager(document.getElementById('dock')!, panels, inDesktopApp() ? {
@@ -71,6 +76,9 @@ project.onChange((c) => {
 });
 selection.onChange((id) => viewport.select(id));
 viewport.onPick = (id) => selection.set(id);
+viewport.selectedId = () => selection.entityId;
+viewport.entityY = (id) => { let y: number | undefined; walkEntities(project.scene, (e, eid) => { if (eid === id && Array.isArray(e.position)) y = Number(e.position[1]); }); return y; };
+viewport.onMove = (id, x, z) => project.updateEntity(id, (e) => { const p = (e.position as number[] | undefined) ?? [0, 0, 0]; e.position = [x, p[1] ?? 0, z]; });
 prefs.onChange(() => viewport.refreshColors());
 
 // Actions
@@ -96,17 +104,43 @@ const confirmDiscard = (): Promise<boolean> => new Promise((resolve) => {
     queueMicrotask(() => keep.focus());
   });
 });
-const openSnapshot = async (snapshot: ProjectSnapshot) => {
-  if (!(await confirmDiscard())) return;
+/** The file this project was opened from / last saved to; Save overwrites it, Save as picks a new one. */
+let projectFile: SavedFile | null = null;
+const openSnapshot = async (snapshot: ProjectSnapshot): Promise<boolean> => {
+  if (!(await confirmDiscard())) return false;
   run.stop();
   project.load(snapshot);
+  projectFile = null;
   status(`Opened ${project.name}`);
+  return true;
 };
 
-const save = () => {
-  project.markSaved();
-  status(`Saved ${project.name} locally`);
+// Screens: login and projects are full-window overlays; the editor stays mounted underneath.
+const screenEl = document.getElementById('screen')!;
+const studioEl = document.getElementById('studio')!;
+let hasProject = false;
+const showScreen = (s: Screen) => {
+  const overlay = s !== 'editor';
+  screenEl.hidden = !overlay;
+  studioEl.inert = overlay;
+  if (overlay) document.title = `${s === 'login' ? 'Sign in' : 'Projects'} - Omni Studio`;
+  else renderChrome();
+  if (s === 'login') renderLoginScreen(screenEl, account, prefs, () => showScreen(nextScreen(true, hasProject)));
+  else if (s === 'projects') {
+    renderProjectsScreen(screenEl, {
+      account,
+      open: (snapshot, file) => void openSnapshot(snapshot).then((ok) => {
+        if (!ok) return;
+        if (file) projectFile = file;
+        hasProject = true;
+        showScreen('editor');
+      }),
+      signOut: () => void account.signOut().catch(() => showScreen('login')),
+      back: hasProject ? () => showScreen('editor') : undefined,
+    });
+  }
 };
+if (!testPlayer) account.onChange(() => !account.account && showScreen('login'));
 
 const guard = (work: () => Promise<void> | void) => async () => {
   try {
@@ -118,6 +152,28 @@ const guard = (work: () => Promise<void> | void) => async () => {
   }
 };
 
+const saveTo = (asNew: boolean) => guard(async () => {
+  const saved = await saveProjectFile(project.snapshot(), projectFile?.name ?? safeFileName(project.name), asNew ? null : (projectFile?.handle ?? null));
+  if (!saved) return; // picker cancelled
+  projectFile = saved;
+  project.markSaved();
+  void rememberRecent(saved.name, project.snapshot());
+  status(`Saved ${project.name} to ${saved.name}`);
+});
+const save = saveTo(false);
+const saveAs = saveTo(true);
+
+const openFile = guard(async () => {
+  if (!(await confirmDiscard())) return;
+  const opened = await openProjectFile();
+  if (!opened) return;
+  run.stop();
+  project.load(opened.snapshot);
+  projectFile = { name: opened.name, handle: opened.handle };
+  void rememberRecent(opened.name, opened.snapshot);
+  status(`Opened ${opened.name}`);
+});
+
 const publish = guard(async () => {
   if (!account.account || !account.gameId) return openAccountSheet(account, prefs, { project, openSnapshot });
   const v = await account.publish(project);
@@ -127,32 +183,34 @@ const publish = guard(async () => {
 
 // Toolbar
 const toolbar = document.getElementById('toolbar')!;
-const runLocal = button('Run local', guard(() => run.runLocal()), { icon: 'play', variant: 'borderless', ariaLabel: 'Run local (F5)' });
-const runServer = button('Run on server', guard(() => run.runServer()), { icon: 'play', variant: 'borderless' });
+const runLocal = button('Play', guard(() => run.runLocal()), { icon: 'play', variant: 'borderless', ariaLabel: 'Play (F5)' });
+// Less common ways to run sit behind one menu so the toolbar stays Play, Stop, Publish.
+const runServer = button('', () => openMenu(runServer, [
+  { label: 'Play locally', shortcut: 'F5', disabled: run.running, run: () => void guard(() => run.runLocal())() },
+  { label: 'Play on server', disabled: run.running, run: () => void guard(() => run.runServer())() },
+  { label: 'Add test player (new tab)', disabled: !project.gameId || !project.version, run: () => void guard(() => run.addTestPlayer())() },
+]), { icon: 'chev', variant: 'borderless', ariaLabel: 'More ways to play' });
 const stop = button('Stop', () => run.stop(), { icon: 'stop', variant: 'borderless', ariaLabel: 'Stop (Shift+F5)' });
-const testPlayerButton = button('Add test player', guard(() => run.addTestPlayer()), { variant: 'borderless' });
 const projectButton = button('', () => {
   const items = TEMPLATES.map((t) => ({ label: `Open template: ${t.label}`, run: () => openSnapshot(templateSnapshot(t.id)) }));
   openMenu(projectButton, [
     ...items,
     { label: 'Open from cloud (latest version)...', run: () => openAccountSheet(account, prefs, { project, openSnapshot }) },
     { separator: true },
-    { label: 'Save (Ctrl+S)', run: save },
+    { label: 'Save', shortcut: mod('Ctrl+S'), run: save },
+    { label: 'Save as...', shortcut: mod('Ctrl+Shift+S'), run: saveAs },
   ]);
 }, { variant: 'borderless' });
 projectButton.classList.add('om-scheme');
 const publishButton = button('Publish', publish, { variant: 'default' });
-const windowButton = button('Window', () =>
-  layout.openMenu(windowButton, () => promptSheet('Save layout', 'Layout name', '', 'Save', (name) => {
-    if (!name) return 'Enter a name for this layout.';
-    layout.saveNamed(name);
-    status(`Saved layout ${name}`);
-    return undefined;
-  }), (name) => layout.deleteNamed(name)), { variant: 'borderless' });
-const accountButton = button('Sign in', () => openAccountSheet(account, prefs, { project, openSnapshot }), { variant: 'borderless' });
-const settingsButton = button('Settings', () => openSettingsSheet(prefs), { variant: 'borderless' });
+const saveLayoutAs = () => promptSheet('Save layout', 'Layout name', '', 'Save', (name) => {
+  if (!name) return 'Enter a name for this layout.';
+  layout.saveNamed(name);
+  status(`Saved layout ${name}`);
+  return undefined;
+});
 const sep = () => el('span', { class: 'om-sep', 'aria-hidden': 'true' });
-toolbar.append(runLocal, runServer, stop, testPlayerButton, sep(), projectButton, activity, publishButton, windowButton, accountButton, settingsButton);
+toolbar.append(runLocal, runServer, stop, sep(), projectButton, activity, publishButton);
 rovingToolbar(toolbar);
 
 // Status bar
@@ -169,8 +227,7 @@ const renderActivity = () => {
 const renderState = () => {
   const s = run.status;
   stop.disabled = !run.running;
-  runLocal.disabled = runServer.disabled = run.running;
-  testPlayerButton.disabled = !project.gameId || !project.version;
+  runLocal.disabled = run.running;
   renderActivity();
   statusbar.replaceChildren(
     el('span', {}, [s.text]), el('span', { class: 'om-spacer' }),
@@ -184,9 +241,7 @@ const renderChrome = () => {
   const label = project.name + (project.dirty ? ' (unsaved)' : '');
   projectButton.replaceChildren(label);
   projectButton.setAttribute('aria-label', `${label}, project menu`);
-  accountButton.textContent = account.account ? `Account: ${account.account.display_name || account.account.subject}` : 'Sign in';
-  document.title = `${testPlayer ? 'Test player: ' : ''}${project.dirty ? '* ' : ''}${project.name} - Omni Studio`;
-  testPlayerButton.disabled = !project.gameId || !project.version;
+  if (screenEl.hidden) document.title = `${testPlayer ? 'Test player: ' : ''}${project.dirty ? '* ' : ''}${project.name} - Omni Studio`;
   renderActivity();
 };
 run.onChange(renderState);
@@ -195,17 +250,109 @@ account.onChange(renderChrome);
 renderState();
 renderChrome();
 
-// Keyboard: Ctrl+S saves, F5 runs locally, Shift+F5 stops.
-window.addEventListener('keydown', (e) => {
-  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
-    e.preventDefault();
-    save();
-  } else if (e.key === 'F5') {
-    e.preventDefault();
-    if (e.shiftKey) run.stop();
-    else if (!run.running) void guard(() => run.runLocal())();
-  }
-});
+// Menu bar and the shortcut table behind it. Text fields and the script editor keep their own Ctrl+Z / Ctrl+Y.
+const startLocal = () => {
+  if (!run.running) void guard(() => run.runLocal())();
+};
+const startServer = () => {
+  if (!run.running) void guard(() => run.runServer())();
+};
+const undo = () => {
+  project.undo();
+  status('Undo');
+};
+const redo = () => {
+  project.redo();
+  status('Redo');
+};
+const frame = () => {
+  if (!viewport.frameSelected()) status('Select an entity to frame it');
+};
+const deleteSelected = () => {
+  const id = selection.entityId;
+  if (id) status(project.deleteEntity(id) ? `Deleted ${id}` : `Could not delete ${id}`);
+};
+installShortcuts([
+  { key: 's', ctrl: true, inText: true, run: () => void save() },
+  { key: 's', ctrl: true, shift: true, inText: true, run: () => void saveAs() },
+  { key: 'o', ctrl: true, inText: true, run: () => void openFile() },
+  { key: 'z', ctrl: true, run: undo },
+  { key: 'z', ctrl: true, shift: true, run: redo },
+  { key: 'y', ctrl: true, run: redo },
+  { key: 'f5', inText: true, run: startLocal },
+  { key: 'f5', shift: true, inText: true, run: () => run.stop() },
+]);
+const layoutLabel = (id: 'default' | 'script-focus' | 'debug-focus', label: string): MenuItem => ({ label, run: () => layout.applyPreset(id) });
+mountMenuBar(document.getElementById('menubar')!, [
+  {
+    label: 'File',
+    items: () => [
+      { label: 'Projects...', run: () => showScreen('projects') },
+      { label: 'New game...', run: () => openNewGameSheet((snap) => void openSnapshot(snap)) },
+      ...TEMPLATES.map((t) => ({ label: `Open template: ${t.label}`, run: () => void openSnapshot(templateSnapshot(t.id)) })),
+      { label: 'Open from cloud...', run: () => openAccountSheet(account, prefs, { project, openSnapshot }) },
+      { label: 'Open file...', shortcut: mod('Ctrl+O'), run: () => void openFile() },
+      { separator: true },
+      { label: 'Save', shortcut: mod('Ctrl+S'), run: () => void save() },
+      { label: 'Save as...', shortcut: mod('Ctrl+Shift+S'), run: () => void saveAs() },
+      { separator: true },
+      { label: 'Publish', run: () => void publish() },
+      { label: 'Account and games...', run: () => openAccountSheet(account, prefs, { project, openSnapshot }) },
+      { label: 'Settings...', run: () => openSettingsSheet(prefs) },
+      { label: 'Sign out', run: () => void account.signOut().catch(() => showScreen('login')) },
+    ],
+  },
+  {
+    label: 'Edit',
+    items: () => [
+      { label: 'Undo', shortcut: mod('Ctrl+Z'), disabled: !project.canUndo, run: undo },
+      { label: 'Redo', shortcut: mod('Ctrl+Shift+Z'), disabled: !project.canRedo, run: redo },
+      { separator: true },
+      { label: 'Delete selected entity', disabled: !selection.entityId, run: deleteSelected },
+    ],
+  },
+  {
+    label: 'View',
+    items: () => [
+      { label: 'Frame selected', shortcut: 'F', run: frame },
+      { label: 'Reset camera', run: () => viewport.resetCamera() },
+      { separator: true },
+      layoutLabel('default', 'Layout: default'),
+      layoutLabel('script-focus', 'Layout: script focus'),
+      layoutLabel('debug-focus', 'Layout: debug focus'),
+      { label: 'Reset layout', run: () => layout.reset() },
+    ],
+  },
+  { label: 'Window', items: () => layout.menuItems(saveLayoutAs, (name) => layout.deleteNamed(name)) },
+  {
+    label: 'Run',
+    items: () => [
+      { label: 'Play locally', shortcut: 'F5', disabled: run.running, run: startLocal },
+      { label: 'Play on server', disabled: run.running, run: startServer },
+      { label: 'Stop', shortcut: 'Shift+F5', disabled: !run.running, run: () => run.stop() },
+      { label: 'Add player', disabled: !run.running, run: () => void guard(() => run.addPlayer())() },
+      { label: 'Add test player', disabled: !project.gameId || !project.version, run: () => void guard(() => run.addTestPlayer())() },
+    ],
+  },
+  {
+    label: 'Help',
+    items: () => [{ label: 'API reference...', run: () => openApiSheet() }, {
+      label: 'Viewport controls...',
+      run: () => openSheet('Viewport controls', (body, close) => body.append(
+        el('ul', {}, [
+          'Right drag: rotate (hold Alt to rotate around the vertical axis only)',
+          'Middle drag, or Shift + left drag: pan',
+          'Scroll wheel: zoom',
+          'W A S D: fly forward, left, back, right (hold Shift to go faster)',
+          'Q / E: fly down / up',
+          'Left click: select',
+          'F: frame the selected entity',
+        ].map((t) => el('li', {}, [t]))),
+        el('div', { class: 'sheet-actions' }, [button('Close', close, { variant: 'default' })]),
+      )),
+    }],
+  },
+]);
 window.addEventListener('beforeunload', (e) => {
   if (project.dirty && !testPlayer) e.preventDefault();
 });
@@ -245,8 +392,6 @@ if (testPlayer) {
   })();
 } else {
   attachAutosave(project, (message) => debug.addOutput('warn', message));
-  loadDraft().then((draft) => {
-    if (draft && !project.dirty) project.load(draft);
-  }).catch(() => {});
   if (account.account) void account.refreshGames().catch(() => {});
+  showScreen(nextScreen(!!account.account, false));
 }

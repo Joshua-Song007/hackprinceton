@@ -2,8 +2,11 @@
 // Every edit goes through `project.updateEntity`, so the scene JSON is the single source of truth.
 import type { PanelView } from './layout';
 import type { Selection } from './explorer';
-import { walkEntities, type Project, type RawEntity } from './project';
-import { announce, el, icon } from './ui';
+import { GESTURE_TYPES, SLOTS } from '@omni/core';
+import { parseGestures, parseInputs, type CustomGesture, type SceneInputs } from '@omni/runtime';
+import { inferInputs } from './needs';
+import { eulerToQuat, quatToEuler, type Project, type RawEntity } from './project';
+import { announce, button, el, icon, openMenu, promptSheet } from './ui';
 
 type V3 = [number, number, number];
 const decimals = (step: number) => (String(step).split('.')[1] ?? '').length;
@@ -102,11 +105,28 @@ export function createInspectorPanel(project: Project, selection: Selection): Pa
     return el('div', { class: 'om-field' }, [input]);
   };
 
+  const select = (label: string, options: readonly string[], value: string, onChange: (v: string) => void) => {
+    const s = el('select', { 'aria-label': label, class: 'om-select' });
+    for (const o of options) s.append(el('option', { value: o, selected: o === value }, [o]));
+    s.addEventListener('change', () => onChange(s.value));
+    return s;
+  };
+
   const componentSection = (c: Record<string, unknown>, index: number): HTMLElement => {
     const set = (patch: Record<string, unknown>) => edit((e) => Object.assign(e.components![index]!, patch));
     switch (c.type) {
       case 'trigger': {
-        const rows: HTMLElement[] = [prop('Shape', readout(String(c.shape))), prop('Probe slots', readout((c.probeSlots as string[] | undefined)?.join(', ') ?? 'head'))];
+        // structural change (radius <-> size), so it goes through project directly and re-renders
+        const shape = select('Trigger shape', ['sphere', 'box'], String(c.shape), (v) => {
+          const id = selection.entityId;
+          if (id) project.updateEntity(id, (e) => {
+            const t = e.components![index]!;
+            delete t.radius;
+            delete t.size;
+            Object.assign(t, v === 'box' ? { shape: v, size: [1, 1, 1] } : { shape: v, radius: 1 });
+          });
+        });
+        const rows: HTMLElement[] = [prop('Shape', shape), prop('Probe slots', readout((c.probeSlots as string[] | undefined)?.join(', ') ?? 'head'))];
         if (c.shape === 'sphere') rows.push(prop('Radius (m)', numberField('Trigger radius in meters', Number(c.radius), 'Enter a number greater than 0 for radius.', (n) => n > 0 && set({ radius: n }))));
         else rows.push(vector3Field('Size', 'm', (c.size as number[]) ?? [1, 1, 1], 0.1, 1, (v) => v.every((n) => n > 0) && set({ size: v }), 'Enter a number greater than 0 for size.'));
         return section('Trigger', 'onTriggerEnter', rows);
@@ -123,35 +143,163 @@ export function createInspectorPanel(project: Project, selection: Selection): Pa
         ]);
       }
       default: {
-        const select = el('select', { 'aria-label': 'Script', class: 'om-select' });
+        const pick = el('select', { 'aria-label': 'Script', class: 'om-select' });
         const names = Object.keys(project.clientScripts);
-        for (const n of names.includes(String(c.name)) ? names : [String(c.name), ...names]) select.append(el('option', { value: n, selected: n === c.name }, [names.includes(n) ? n : `${n} (missing)`]));
-        select.addEventListener('change', () => set({ name: select.value }));
-        return section('Script', 'client', [prop('File', select)]);
+        for (const n of names.includes(String(c.name)) ? names : [String(c.name), ...names]) pick.append(el('option', { value: n, selected: n === c.name }, [names.includes(n) ? n : n ? `${n} (missing)` : 'Choose a script']));
+        pick.addEventListener('change', () => set({ name: pick.value }));
+        const fresh = button('New script...', () =>
+          promptSheet('New client script', 'Script name', '', 'Create and attach', (name) => {
+            const id = selection.entityId;
+            return id ? project.createAndAttachScript(id, name) : 'Select an entity first.';
+          }), { variant: 'small' });
+        return section('Script', 'client', [prop('File', pick), fresh]);
       }
     }
+  };
+
+  const withRemove = (sec: HTMLElement, index: number, label: string) => {
+    sec.querySelector('.om-section-body')!.append(button('Remove', () => {
+      const id = selection.entityId;
+      if (id && project.removeComponent(id, index)) announce(`Removed ${label} component. Undo brings it back.`);
+    }, { variant: 'small', ariaLabel: `Remove ${label} component` }));
+    return sec;
+  };
+
+  const sceneSettings = (): HTMLElement[] => {
+    const s = project.scene;
+    const setting = (key: string, value: unknown) => {
+      editing = true;
+      const error = project.setSceneSetting(key, value);
+      editing = false;
+      if (error) {
+        announce(error);
+        render();
+      }
+    };
+    const text = (label: string, value: string, key: string) => {
+      const input = el('input', { type: 'text', value, 'aria-label': label });
+      input.addEventListener('change', () => setting(key, input.value));
+      return el('div', { class: 'om-field' }, [input]);
+    };
+    const origin = vector3Field('Player origin', 'm', (s.playerOrigin as number[]) ?? [0, 0, 0], 0.01, 0, (v) => !project.setSceneSetting('playerOrigin', v));
+    const location = el('input', { type: 'checkbox', 'aria-label': 'Location permission', 'aria-describedby': 'scene-location-help', checked: (s.permissions as { location?: boolean } | undefined)?.location === true });
+    location.addEventListener('change', () => setting('permissions.location', location.checked));
+    const inputsGroup = (): HTMLElement[] => {
+      let current: SceneInputs | null = null;
+      try {
+        current = s.inputs ? parseInputs(s.inputs) : null;
+      } catch {
+        current = null;
+      }
+      if (!current) {
+        return [
+          el('p', { class: 'om-secondary' }, ['This scene does not declare inputs. Studio reads them from the scripts.']),
+          button('Declare from scripts', () => setting('inputs', inferInputs(project.clientScripts)), { variant: 'small' }),
+        ];
+      }
+      const now = current;
+      const apply = (next: SceneInputs) => setting('inputs', next);
+      const check = (label: string, on: boolean, next: (on: boolean) => SceneInputs) => {
+        const box = el('input', { type: 'checkbox', 'aria-label': label, checked: on });
+        box.addEventListener('change', () => apply(next(box.checked)));
+        return prop(label, box);
+      };
+      const players = (label: string, i: 0 | 1) => {
+        const input = el('input', { type: 'number', min: 1, max: 32, step: 1, value: String(now.players[i]), 'aria-label': label });
+        input.addEventListener('change', () => apply({ ...now, players: i === 0 ? [Number(input.value), now.players[1]] : [now.players[0], Number(input.value)] }));
+        return prop(label, el('div', { class: 'om-field' }, [input]));
+      };
+      const gestureLabel = { tap: 'Tap', doubleTap: 'Double tap', flick: 'Flick', squeeze: 'Squeeze', pinch: 'Pinch' } as const;
+      return [
+        check('Head', now.head, (on) => ({ ...now, head: on })),
+        check('Position', now.position, (on) => ({ ...now, position: on })),
+        check('Heart rate', now.heartRate, (on) => ({ ...now, heartRate: on })),
+        ...GESTURE_TYPES.map((g) => check(gestureLabel[g], now.gestures.includes(g), (on) => ({ ...now, gestures: GESTURE_TYPES.filter((x) => (x === g ? on : now.gestures.includes(x))) }))),
+        players('Min players', 0),
+        players('Max players', 1),
+      ];
+    };
+    const motionGroup = (): HTMLElement[] => {
+      let defs: Record<string, CustomGesture> = {};
+      try {
+        defs = parseGestures(s.gestures);
+      } catch {
+        defs = {};
+      }
+      const AXES: Record<string, CustomGesture['axis']> = { x: [1, 0, 0], y: [0, 1, 0], z: [0, 0, 1], '-z': [0, 0, -1] };
+      const axisName = (a: CustomGesture['axis']) => Object.entries(AXES).find(([, v]) => v.every((n, i) => n === a[i]))?.[0] ?? 'x';
+      const rows = Object.entries(defs).map(([name, d]) => {
+        const change = (patch: Partial<CustomGesture>) => setting('gestures', { ...defs, [name]: { ...d, ...patch } });
+        const num = (label: string, value: number, key: 'threshold' | 'cooldownMs') => {
+          const input = el('input', { type: 'number', min: 0, step: 1, value: String(value), 'aria-label': `${name} ${label}` });
+          input.addEventListener('change', () => change({ [key]: Number(input.value) }));
+          return prop(label, el('div', { class: 'om-field' }, [input]));
+        };
+        return section(name, '', [
+          prop('Slot', select(`${name} slot`, [...SLOTS], d.slot, (v) => change({ slot: v as CustomGesture['slot'] }))),
+          prop('Axis', select(`${name} axis`, Object.keys(AXES), axisName(d.axis), (v) => change({ axis: AXES[v]! }))),
+          num('Threshold (m/s²)', d.threshold, 'threshold'),
+          num('Cooldown (ms)', d.cooldownMs, 'cooldownMs'),
+          button('Remove', () => {
+            const { [name]: _gone, ...rest } = defs;
+            setting('gestures', rest);
+          }, { variant: 'small', ariaLabel: `Remove motion gesture ${name}` }),
+        ]);
+      });
+      return [
+        ...rows,
+        button('Add motion gesture', () => {
+          let n = 1;
+          while (`gesture${n}` in defs) n++;
+          setting('gestures', { ...defs, [`gesture${n}`]: { slot: 'hand', axis: [0, 0, -1], threshold: 20, cooldownMs: 400 } });
+        }, { variant: 'small' }),
+      ];
+    };
+    return [
+      el('div', { class: 'pn-title' }, [icon('cube'), el('span', {}, ['Scene settings'])]),
+      section('Scene', '', [
+        prop('Name', text('Scene name', String(s.name ?? ''), 'name')),
+        prop('Run mode', select('Run mode', ['screen', 'device'], String(s.runMode ?? 'screen'), (v) => setting('runMode', v))),
+        prop('Required tier', select('Required tier', ['1', '2', '3'], String(s.requiredTier ?? 1), (v) => setting('requiredTier', Number(v)))),
+        origin,
+        prop('Location permission', location),
+        el('p', { id: 'scene-location-help', class: 'om-secondary' }, ['Lets scripts read this player’s own position and send it as a game event.']),
+      ]),
+      section('Inputs', '', inputsGroup()),
+      section('Motion gestures', '', motionGroup()),
+    ];
   };
 
   const render = () => {
     const id = selection.entityId;
     const entity = id ? project.entity(id) : undefined;
-    if (!id || !entity) return void root.replaceChildren(el('div', { class: 'pn-empty' }, ['Select an entity in the Explorer to edit its transform and components.']));
+    if (!id || !entity) return void root.replaceChildren(...sceneSettings());
     const name = el('input', { value: String(entity.name ?? ''), 'aria-label': 'Entity name' });
     name.addEventListener('change', () => {
-      edit((e) => (e.name = name.value));
-      let renamed: string | null = null;
-      walkEntities(project.scene, (e, eid) => {
-        if (e === entity) renamed = eid;
-      });
-      selection.set(renamed);
-      if (renamed === id) render();
+      const r = project.renameEntity(id, name.value);
+      if ('error' in r) {
+        announce(r.error);
+        name.value = String(entity.name ?? '');
+        return name.setAttribute('aria-invalid', 'true');
+      }
+      selection.set(r.id);
+      render();
     });
+    const color = el('input', { type: 'text', value: String(entity.color ?? ''), 'aria-label': 'Color', placeholder: '#rrggbb' });
+    color.addEventListener('change', () => edit((e) => (color.value ? (e.color = color.value) : delete e.color)));
+    const look = section('Appearance', '', [
+      prop('Shape', select('Entity shape', ['box', 'sphere'], String(entity.shape ?? 'box'), (v) => edit((e) => (e.shape = v)))),
+      prop('Color', el('div', { class: 'om-field' }, [color])),
+    ]);
     const transform = section('Transform', '', [
       vector3Field('Position', 'm', (entity.position as number[]) ?? [0, 0, 0], 0.01, 0, (v) => edit((e) => (e.position = v))),
+      vector3Field('Rotation', 'deg', quatToEuler((entity.rotation as number[]) ?? [0, 0, 0, 1]), 1, 0, (v) => edit((e) => (e.rotation = eulerToQuat(v)))),
       vector3Field('Scale', '', (entity.scale as number[]) ?? [1, 1, 1], 0.01, 1, (v) => edit((e) => (e.scale = v))),
     ]);
-    const components = (entity.components ?? []).map((c, i) => componentSection(c, i));
-    root.replaceChildren(el('div', { class: 'pn-title' }, [icon('cube'), name]), transform, ...components);
+    const components = (entity.components ?? []).map((c, i) => withRemove(componentSection(c, i), i, String(c.type)));
+    const addBtn = button('Add component', () =>
+      openMenu(addBtn, (['script', 'trigger', 'audioEmitter'] as const).map((t) => ({ label: t === 'audioEmitter' ? 'Audio emitter' : t[0]!.toUpperCase() + t.slice(1), run: () => project.addComponent(id, t) }))), { variant: 'small' });
+    root.replaceChildren(el('div', { class: 'pn-title' }, [icon('cube'), name]), look, transform, ...components, addBtn);
   };
 
   const offs = [
