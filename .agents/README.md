@@ -7,7 +7,7 @@ Instructions and tooling for autonomous agents. `.claude/` is human-only: agents
 - `LOOP.md` — the whole unattended loop, bottom to top: layers, escalation table, adopted/rejected playbook rules, how to prompt it, limits.
 - `ORCHESTRATOR.md` — the per-laptop orchestrator cycle: pick work, launch workers, open PRs, review and merge, Mac verification, permissions, escalation.
 - `settings.json` — worker permissions + stop-hook (commit, push own `agent/*` branch only, no `gh`).
-- `settings.orch.json` — orchestrator permissions + stop-hook (full `gh`, any `git push` including `main` and force; still no `.claude/` edits, no `gh repo delete` / `auth` / `secret`).
+- `settings.orch.json` — orchestrator permissions + stop-hook (full `gh`, any `git push` including `main` and force; still no `.claude/` edits, no `gh repo delete` / `secret` / key commands; `gh auth` and `git clean` are allowed).
 - `agents.json` — subagents: `reviewer` and `swift-package-worker`.
 - `BOOTSTRAP.md` — runbook for a manual Claude session on any of the four laptops: identify the laptop, clean clone, setup, verify, start `loop.sh` detached, confirm the first cycle. Prompt: "follow .agents/BOOTSTRAP.md".
 - `HUMAN.md` — human cheat sheet, hidden from agents (never materialized in an agent worktree).

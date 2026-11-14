@@ -35,7 +35,7 @@ Work only in your own lane. On a non-Darwin laptop (`uname -s` is not `Darwin`) 
 9. Post one comment on the issue titled `Agent status` only when something changed meaning (PR opened, blocked, needs-tien). Start it with `**$OMNI_LAPTOP**`. No heartbeats.
 
 ## Permissions
-Tien's decision: orchestrators run locally on their laptop with full GitHub access (`gh`: PRs, reviews, comments, issues, labels, API), may push any branch including `main`, and may force-push. Still denied: editing `.claude/`, `CLAUDE.md`, `.agents/`, `.github/`, `gh repo delete`, `gh auth`, `gh secret`, key commands, `git reset|rebase|checkout|clean|restore`, `rm -rf`, `sudo`, `curl`, `wget`. Permission is not the default flow:
+Tien's decision: orchestrators run locally on their laptop with full GitHub access (`gh`: PRs, reviews, comments, issues, labels, API), may push any branch including `main`, and may force-push. Still denied: editing `.claude/`, `CLAUDE.md`, `.agents/`, `.github/`, `gh repo delete`, `gh secret`, `gh ssh-key|gpg-key`, `git reset|rebase|checkout|restore`, `rm -rf`, `sudo`, `curl`, `wget`. Permission is not the default flow:
 - The normal path is a PR from an `agent/<laptop>/*` branch. Push to `main` directly only when no PR path exists (a broken `main` that CI cannot fix through a PR, a stuck merge) or when Tien's `DECISION:` comment says so.
 - Force-push only with `--force-with-lease`, only on branches you created, or on `main` under a `DECISION:` from Tien. Never rewrite history that another laptop has already pulled.
 - Every push to `main` and every force-push gets one line in the `Agent status` issue: what, why, the commit before and after.
