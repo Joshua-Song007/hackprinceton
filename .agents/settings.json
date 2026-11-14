@@ -13,6 +13,7 @@
       "Bash(git show*)",
       "Bash(git add *)",
       "Bash(git commit *)",
+      "Bash(git rm *)",
       "Bash(git branch)",
       "Bash(git branch --show-current)",
       "Bash(git branch -vv)",
