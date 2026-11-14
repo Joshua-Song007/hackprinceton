@@ -422,6 +422,16 @@ Goal: the live AI path is run once for real; today only `OMNI_AGENT_FAKE=1` is e
 - Status: Anthropic and Google keys are untested; OpenAI is blocked on account credits; the Google default model id is unverified.
 - Done when: one prompt succeeds per provider (or is recorded as blocked with the reason), the Google default model id is confirmed against the provider's model list, and the demo notes say which providers were run live.
 
+### 10.9 Remaining marketplace fixes (open after PR #162)
+- [ ] Ship `uv.lock` in bundles: raise `MAX_FILE_BYTES` to 1 MiB in `Backend/src/api/marketplace.rs` (done and tested on branch `agent/tienvu-lol/omni-ws1-registry`; needs review and merge).
+- [ ] Seed-time plugin id rule `^[a-z0-9-]{1,64}$` in `read_plugin`; skip and log bad ids.
+- [ ] `src-tauri/src/plugins.rs`: key `Runtimes` by (project, plugin); `write_bundle` clears the old plugin dir after validation (no stale files on reinstall).
+- [ ] `Web/studio/src/marketplace/installer.ts`: browser start hint still mentions `OMNI_AGENT_FAKE=1`; remove it (fake mode is gone).
+- [ ] Runtime: sanitise provider exception text in `error` events (a provider could echo a key); do not hold the project lock while sending to a slow socket.
+- [ ] Non-Windows `stop_runtime` kills only the direct child; use process groups so `uv` leaves no orphaned python.
+- [ ] Postgres paths (0002 migrate guard, upsert, installs) have no CI run; add a `DATABASE_URL` job.
+- [ ] Live model run: OpenAI key has no credits; Anthropic and Google untested; Google default model id unverified.
+
 ---
 
 ## Phase 6: Collaborative Coding Space (stretch)
