@@ -10,6 +10,10 @@
 # These env vars are passed on to the loop when set: LOOP_DELAY IDLE_DELAY BUILD_DELAY MAINT_DELAY BUILD_MAX_CYCLES AGENT_BUDGET AGENT_TURNS.
 # Still manual: gh auth login, the claude login, Xcode 16+ (Mac), and keeping a laptop on power with the lid open (caffeinate stops idle sleep, not lid sleep).
 set -uo pipefail
+# The historical instructions above apply only when OMNI_LEGACY=1 is explicitly set.
+if [ "${OMNI_LEGACY:-0}" != 1 ]; then
+  exec bash "$(dirname "$0")/start-autonomy.sh" "$@"
+fi
 cd "$(dirname "$0")/../.."
 laptop=${1:?usage: start.sh <laptop> [--integrator] [--dry-run]}; shift
 role=orch; dry=0

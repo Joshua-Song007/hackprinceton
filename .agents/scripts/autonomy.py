@@ -8,6 +8,7 @@ import json
 import os
 from pathlib import Path
 import re
+import signal
 import subprocess
 import sys
 import tempfile
@@ -23,12 +24,46 @@ TTL = int(os.environ.get('CLAIM_TTL', '900'))
 MODELS = {'orch': 'claude-opus-5-5', 'worker': 'claude-sonnet-5-5', 'reviewer': 'claude-sonnet-5-5'}
 
 
-def run(args, cwd=None, data=None, check=True, env=None):
-    p = subprocess.run(args, cwd=ROOT if cwd is None else cwd, input=data, capture_output=True, text=True,
-                       encoding='utf-8', errors='replace', env=env)
-    if check and p.returncode:
-        raise RuntimeError(f'{args[0]} failed: {p.stderr[-1500:]}')
-    return p
+def terminate_tree(process):
+    if os.name == 'nt':
+        subprocess.run(['taskkill', '/PID', str(process.pid), '/T', '/F'], capture_output=True, timeout=15)
+    else:
+        try:
+            os.killpg(process.pid, signal.SIGTERM)
+            try:
+                process.wait(timeout=3)
+            except subprocess.TimeoutExpired:
+                pass
+            # The leader can exit while descendants still own pipes; kill the whole group anyway.
+            os.killpg(process.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+
+
+def run(args, cwd=None, data=None, check=True, env=None, timeout=120, stop_aware=False):
+    options = {'creationflags': subprocess.CREATE_NEW_PROCESS_GROUP} if os.name == 'nt' else {'start_new_session': True}
+    p = subprocess.Popen(args, cwd=ROOT if cwd is None else cwd, stdin=subprocess.PIPE if data is not None else subprocess.DEVNULL,
+                         stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding='utf-8', errors='replace', env=env, **options)
+    deadline = time.monotonic() + timeout
+    while True:
+        try:
+            out, err = p.communicate(input=data, timeout=min(1, max(0.01, deadline - time.monotonic())))
+            break
+        except subprocess.TimeoutExpired:
+            data = None
+            stop = stop_aware and (local_stop() or (ROOT / 'STOP').exists() or (ROOT / f'STOP-{os.environ.get("OMNI_LAPTOP", "")}').exists())
+            if stop or time.monotonic() >= deadline:
+                terminate_tree(p)
+                try:
+                    p.communicate(timeout=5)
+                except subprocess.TimeoutExpired:
+                    p.stdout.close()
+                    p.stderr.close()
+                raise RuntimeError(f'{args[0]} stopped or exceeded {timeout}s wall-time limit')
+    result = subprocess.CompletedProcess(args, p.returncode, out, err)
+    if check and result.returncode:
+        raise RuntimeError(f'{args[0]} failed: {result.stderr[-1500:]}')
+    return result
 
 
 def git(*args, data=None):
@@ -56,7 +91,7 @@ class Store:
         if not p.stdout.strip():
             return '', {'claims': {}, 'workers': {}, 'stop': False}
         sha = p.stdout.split()[0]
-        git('fetch', '-q', 'origin', REF)
+        git('fetch', '-q', '--no-write-fetch-head', '--no-auto-maintenance', 'origin', REF)
         # Fetch may race another writer; the advertised SHA remains the CAS expected value.
         raw = git('show', f'{sha}:state.json')
         return sha, json.loads(raw)
@@ -64,8 +99,12 @@ class Store:
     def update(self, change):
         for _ in range(12):
             old, state = self.read()
+            before = json.dumps(state, sort_keys=True)
             result = change(state)
-            blob = git('hash-object', '-w', '--stdin', data=json.dumps(state, sort_keys=True))
+            after = json.dumps(state, sort_keys=True)
+            if after == before:
+                return result
+            blob = git('hash-object', '-w', '--stdin', data=after)
             tree = git('mktree', '-z', data=f'100644 blob {blob}\tstate.json\0')
             args = ['commit-tree', tree]
             if old:
@@ -144,13 +183,15 @@ def test_count(text):
     counts += re.findall(r'(?:^|\n)# tests\s+(\d+)', text)
     counts += re.findall(r'Ran\s+(\d+)\s+tests?', text)
     skipped = re.findall(r'(?:skipped[=: ]+)(\d+)', text, re.I)
+    skipped += re.findall(r'(\d+)\s+(?:tests?\s+)?skipped', text, re.I)
     return max(0, max(map(int, counts), default=0) - max(map(int, skipped), default=0))
 
 
 def dod(wt, b):
     evidence = {}
     for kind in ('build', 'tests', 'lint'):
-        p = run(['bash', '-lc', b['checks'][kind]], cwd=wt, check=False)
+        p = run(['bash', '-lc', b['checks'][kind]], cwd=wt, check=False,
+                timeout=int(os.environ.get('CHECK_TIMEOUT', '900')), stop_aware=True)
         output = p.stdout + p.stderr
         evidence[kind] = {'exit': p.returncode, 'tail': output[-2500:]}
         if p.returncode or (kind == 'tests' and test_count(output) == 0):
@@ -181,7 +222,7 @@ def model(role, wt, task, pack, attempt=1):
     if os.environ.get('OMNI_BARE') == '1':
         args += ['--bare', '--disable-slash-commands']
     if role == 'orch':
-        args += ['--tools', 'Read,Grep,Glob,Bash', '--allowedTools', f'Read,Grep,Glob,Bash(gh issue *),Bash(gh label *),Bash(gh pr list *),Bash(gh pr view *),Bash(git show *),Bash(python {HERE / "autonomy.py"} retry *)']
+        args += ['--tools', 'Read,Grep,Glob,Bash', '--allowedTools', f'Read,Grep,Glob,Bash(gh issue *),Bash(gh label *),Bash(gh pr list *),Bash(gh pr view *),Bash(git show *),Bash(python "{(HERE / "autonomy.py").as_posix()}" retry *)']
     elif role == 'reviewer':
         args += ['--tools', 'Read,Grep,Glob,Bash', '--allowedTools', 'Read,Grep,Glob,Bash(git diff *),Bash(git show *)']
     else:
@@ -192,7 +233,11 @@ def model(role, wt, task, pack, attempt=1):
     env = os.environ.copy()
     if attempt > 1:
         env['CLAUDE_CODE_EFFORT_LEVEL'] = 'high'
-    p = run(args, cwd=wt, check=False, env=env)
+    try:
+        p = run(args, cwd=wt, check=False, env=env,
+                timeout=int(os.environ.get('SESSION_TIMEOUT', '1800')), stop_aware=True)
+    except RuntimeError as error:
+        p = subprocess.CompletedProcess(args, 124, '', str(error))
     (LOGS / f'{session}.result.json').write_text(p.stdout, encoding='utf-8')
     try:
         result = json.loads(p.stdout)
@@ -221,14 +266,31 @@ def generate_pack():
 def worktree(branch):
     parent = ROOT.parent / (ROOT.name + '.worktrees')
     wt = parent / branch.replace('/', '-')
-    git('fetch', '-q', 'origin', 'main')
-    git('worktree', 'add', '--no-track', '-b', branch, str(wt), 'origin/main')
-    run(['git', 'sparse-checkout', 'set', '--no-cone', '*', '!CLAUDE.md', '!.claude/', '!.agents/HUMAN.md'], cwd=wt)
+    parent.mkdir(parents=True, exist_ok=True)
+    lock = parent / '.setup.lock'
+    for attempt in range(120):
+        try:
+            lock.mkdir()
+            break
+        except FileExistsError:
+            if attempt == 119:
+                raise RuntimeError(f'worktree setup lock is busy/stale: {lock}')
+            time.sleep(1)
+    try:
+        git('fetch', '-q', '--no-write-fetch-head', '--no-auto-maintenance', 'origin', 'main')
+        git('worktree', 'add', '--no-track', '-b', branch, str(wt), 'origin/main')
+        run(['git', 'sparse-checkout', 'set', '--no-cone', '*', '!CLAUDE.md', '!.claude/', '!.agents/HUMAN.md'], cwd=wt)
+    finally:
+        lock.rmdir()
     return wt
 
 
+def local_stop():
+    return bool(os.environ.get('OMNI_STOP_FILE') and Path(os.environ['OMNI_STOP_FILE']).exists())
+
+
 def stopped(store, worker):
-    if any((ROOT / n).exists() for n in ('STOP', f'STOP-{worker}')):
+    if local_stop() or any((ROOT / n).exists() for n in ('STOP', f'STOP-{worker}')):
         return True
     for name in ('STOP', f'STOP-{worker}'):
         if run(['git', 'cat-file', '-e', f'origin/main:{name}'], check=False).returncode == 0:
@@ -250,6 +312,30 @@ def status(repo, number, state, pr='', tests='', blocker=''):
         f'STATUS: {state}\nPR: {pr or "none"}\nTESTS: {tests or "not run"}\nBLOCKER: {blocker or "none"}'})
 
 
+def quota_group(worker):
+    return os.environ.get('OMNI_QUOTA_GROUP', worker)
+
+
+def cooling(store, worker):
+    s = store.read()[1]
+    return s.get('quota_groups', {}).get(quota_group(worker), {}).get('reset_at', 0) > time.time()
+
+
+def limit_error(result):
+    return bool(result.get('is_error') and re.search(
+        r'429|rate.?limit|usage limit|credit balance|out of credits|quota', str(result.get('result', '')), re.I))
+
+
+def rate_limited(store, result, worker):
+    if not limit_error(result):
+        return False
+    def pause(s):
+        group = s.setdefault('quota_groups', {}).setdefault(quota_group(worker), {})
+        group.update(reset_at=time.time() + int(os.environ.get('LIMIT_WINDOW', '18000')), last_429=time.time())
+    store.update(pause)
+    return True
+
+
 def worker_cycle(store, repo, worker):
     now = time.time()
     def idle(s):
@@ -257,7 +343,7 @@ def worker_cycle(store, repo, worker):
         w.update(heartbeat=now, state='idle')
     store.update(idle)
     ws = store.read()[1]['workers'].get(worker, {})
-    if ws.get('reset_at', 0) > now:
+    if ws.get('reset_at', 0) > now or cooling(store, worker):
         return
     issues = json.loads(gh('issue', 'list', '--state', 'open', '--label', 'ready', '--limit', '200', '--json', 'number,body,author'))
     for issue in issues:
@@ -277,6 +363,13 @@ def worker_cycle(store, repo, worker):
             continue
         execute_issue(store, repo, worker, number, token, b, issue['body'])
         return
+
+
+def stage_scope(wt, files):
+    tracked = set(run(['git', 'ls-files'], cwd=wt).stdout.splitlines())
+    paths = [p for p in files if (wt / p).is_file() or p in tracked]
+    if paths:
+        run(['git', 'add', '-A', '--', *paths], cwd=wt)
 
 
 def execute_issue(store, repo, worker, number, token, b, body):
@@ -306,18 +399,19 @@ def execute_issue(store, repo, worker, number, token, b, body):
         mirror(repo, number, c)
         branch = f'agent/{worker}/issue-{number}-{token[:8]}'
         wt = worktree(branch)
+        base_sha = run(['git', 'rev-parse', 'HEAD'], cwd=wt).stdout.strip()
         result = model('worker', wt, body + '\nPrevious checkpoint/reason: ' + c.get('checkpoint', ''), pack_text(), c['attempt'])
         text = str(result.get('result', ''))
         u = result.get('usage', {})
         used = sum(u.get(k, 0) for k in ('input_tokens', 'output_tokens', 'cache_creation_input_tokens', 'cache_read_input_tokens'))
-        limited = bool(re.search(r'429|rate.?limit|usage limit|credit balance|out of credits|quota', text, re.I))
+        limited = limit_error(result)
         previous = store.read()[1]['workers'].get(worker, {})
         window_start = previous.get('window_start', time.time())
         window_tokens = previous.get('tokens_used', 0)
         if time.time() - window_start >= int(os.environ.get('LIMIT_WINDOW', '18000')):
             window_start, window_tokens = time.time(), 0
         total = window_tokens + used
-        near = bool(re.search(r'approaching.*limit|nearing.*limit|OFFLINE:', text, re.I))
+        near = bool(re.search(r'^(?:OFFLINE|NEAR-LIMIT):', text, re.M))
         cap = int(os.environ.get('WORKER_TOKEN_LIMIT', '0'))
         near = near or bool(cap and total >= cap * 0.9)
         reset = max(time.time() + 60, window_start + int(os.environ.get('LIMIT_WINDOW', '18000'))) if limited or near else 0
@@ -325,26 +419,39 @@ def execute_issue(store, repo, worker, number, token, b, body):
             s['workers'][worker].update(tokens_used=total, window_start=window_start,
                                          last_429=time.time() if limited else ws_last(s, worker),
                                          reset_at=reset, usage_source='CLI session totals; reset ETA estimated, provider quota unknown')
+            group = s.setdefault('quota_groups', {}).setdefault(quota_group(worker), {})
+            group_start = group.get('window_start', time.time())
+            group_tokens = group.get('tokens_used', 0)
+            if time.time() - group_start >= int(os.environ.get('LIMIT_WINDOW', '18000')):
+                group_start, group_tokens = time.time(), 0
+            group.update(tokens_used=group_tokens + used, window_start=group_start)
+            if reset or (cap and group['tokens_used'] >= cap * 0.9):
+                group['reset_at'] = reset or max(time.time() + 60, group_start + int(os.environ.get('LIMIT_WINDOW', '18000')))
         store.update(usage)
         if limited or result.get('is_error'):
             raise RuntimeError(('rate-limited; reset ETA is conservative fallback. ' if limited else '') + text[-700:])
         if lost.is_set() or stopped(store, worker):
             raise RuntimeError('STOP or heartbeat loss; checkpoint only')
-        changed = run(['git', 'diff', '--name-only', 'origin/main'], cwd=wt).stdout.splitlines()
+        changed = run(['git', 'diff', '--name-only', base_sha], cwd=wt).stdout.splitlines()
         untracked = run(['git', 'ls-files', '--others', '--exclude-standard'], cwd=wt).stdout.splitlines()
         if not set(changed + untracked) <= set(b['files']):
             raise RuntimeError('changes outside exact brief files')
         if not changed and not untracked:
             raise RuntimeError('no implementation changes')
         evidence = dod(wt, b)
-        run(['git', 'add', '--', *b['files']], cwd=wt)
+        stage_scope(wt, b['files'])
         if run(['git', 'diff', '--cached', '--quiet'], cwd=wt, check=False).returncode:
             run(['git', 'commit', '-m', f'feat: implement issue #{number}\n\nRefs #{number}'], cwd=wt)
         if run(['git', 'status', '--porcelain'], cwd=wt).stdout.strip():
             raise RuntimeError('checks modified worktree; refuse unverified publication')
         owned(store.read()[1], number, token)
+        final_files = run(['git', 'diff', '--name-only', base_sha], cwd=wt).stdout.splitlines()
+        if not set(final_files) <= set(b['files']) or stopped(store, worker):
+            raise RuntimeError('STOP or post-check scope violation; checkpoint only')
         run(['git', 'push', '-u', 'origin', branch], cwd=wt)
         sha = run(['git', 'rev-parse', 'HEAD'], cwd=wt).stdout.strip()
+        if stopped(store, worker):
+            raise RuntimeError('STOP after push; checkpoint only')
         pr = gh('pr', 'create', '--head', branch, '--base', 'main', '--title', f'Implement #{number}', '--body',
                 f'AUTONOMY-V2\nCloses #{number}\n\nSTATUS: review\nTESTS: build/tests/lint passed\nBLOCKER: none')
         def delivered(s):
@@ -358,7 +465,7 @@ def execute_issue(store, repo, worker, number, token, b, body):
         try:
             owned(store.read()[1], number, token)
             if wt is not None:
-                run(['git', 'add', '--', *b['files']], cwd=wt)
+                stage_scope(wt, b['files'])
                 if run(['git', 'diff', '--cached', '--quiet'], cwd=wt, check=False).returncode:
                     run(['git', 'commit', '-m', f'chore: checkpoint #{number}'], cwd=wt)
                 run(['git', 'push', '-u', 'origin', branch], cwd=wt)
@@ -386,9 +493,14 @@ def orchestration_cycle(store, repo, worker):
     state = store.read()[1]
     for number in released:
         mirror(repo, number, state['claims'][number])
+    if cooling(store, worker):
+        return
     for number, c in state['claims'].items():
         if c['status'] == 'review':
-            review_merge(store, repo, number, c)
+            try:
+                review_merge(store, repo, number, c, worker)
+            except Exception as error:
+                print(f'PR {c.get("pr")}: deferred: {error}', file=sys.stderr)
     # Include user comments, CI transitions and issue edits; exclude heartbeat-only branch changes.
     issues = gh('issue', 'list', '--state', 'all', '--limit', '300', '--json', 'number,updatedAt,state')
     prs = gh('pr', 'list', '--state', 'open', '--limit', '100', '--json', 'number,updatedAt,headRefOid,statusCheckRollup')
@@ -404,11 +516,11 @@ def orchestration_cycle(store, repo, worker):
     wt = worktree(f'agent/{worker}/planner-{uuid.uuid4().hex[:8]}')
     compact = {n: {k: c.get(k) for k in ('status', 'owner', 'attempt', 'rounds', 'blocker', 'pr')}
                for n, c in state['claims'].items() if c['status'] != 'done'}
-    task = ('Run one planning cycle. Control command: python ' + str(HERE / 'autonomy.py') + ' retry <issue-number>\n'
+    task = ('Run one planning cycle. Control command: python "' + (HERE / 'autonomy.py').as_posix() + '" retry <issue-number>\n'
             + 'Coordination state:\n' + json.dumps(compact) + '\nPLAN (read once):\n' + plan
             + '\nIssue state:\n' + issues + '\nPR state:\n' + prs)
     result = model('orch', wt, task, generate_pack())
-    if re.search(r'429|rate.?limit|usage limit|credit balance|out of credits|quota', str(result.get('result', '')), re.I):
+    if rate_limited(store, result, worker):
         store.update(lambda s: s.update(orchestrator_reset_at=time.time() + int(os.environ.get('LIMIT_WINDOW', '18000'))))
     elif not result.get('is_error'):
         # Save the input fingerprint: a change during the model call must wake the next cycle.
@@ -416,16 +528,33 @@ def orchestration_cycle(store, repo, worker):
     run(['git', 'worktree', 'remove', str(wt)], check=False)
 
 
-def review_merge(store, repo, number, c):
+def passing_ci(pr):
+    result = run(['gh', 'pr', 'checks', pr, '--json', 'bucket,name'], check=False)
+    if result.returncode not in (0, 1, 8) or not result.stdout.strip():
+        return False
+    try:
+        checks = json.loads(result.stdout)
+    except ValueError:
+        return False
+    return bool(checks) and all(x['bucket'] == 'pass' for x in checks) and any(x['name'] == 'agent-dod' for x in checks)
+
+
+def review_merge(store, repo, number, c, orchestrator=None):
     pr = c['pr'].rstrip('/').split('/')[-1]
-    p = json.loads(gh('pr', 'view', pr, '--json', 'headRefOid,headRefName,state,labels,isDraft'))
+    p = json.loads(gh('pr', 'view', pr, '--json', 'headRefOid,headRefName,state,labels,isDraft,body'))
     if p['state'] == 'MERGED':
         store.update(lambda s: s['claims'][number].update(status='done'))
         generate_pack()
         return
     if p['state'] != 'OPEN' or p['isDraft'] or any(l['name'] in ('human-hold', 'blocked', 'needs-tien', 'URGENT-HUMAN') for l in p['labels']):
         return
+    body = p.get('body', '')
+    if 'AUTONOMY-V2' not in body or not re.search(r'^Closes #' + re.escape(str(number)) + r'\s*$', body, re.M):
+        store.update(lambda s: s['claims'][number].update(status='blocked', blocker='managed PR metadata removed or changed'))
+        return
     sha = p['headRefOid']
+    if not passing_ci(pr):
+        return
     if c.get('review_sha') != sha:
         if c.get('rounds', 0) >= 3:
             store.update(lambda s: s['claims'][number].update(status='blocked', blocker='three review rounds exhausted'))
@@ -438,12 +567,17 @@ def review_merge(store, repo, number, c):
         try:
             run(['git', 'fetch', 'origin', f'pull/{pr}/head'], cwd=wt)
             run(['git', 'checkout', '--detach', sha], cwd=wt)
-            evidence = dod(wt, b)
+            # PR commands execute only on an isolated hosted CI runner, never with merge credentials.
+            evidence = {'worker_checks': c.get('evidence', {}), 'independent_ci': 'agent-dod passed at current head'}
             result = model('reviewer', wt, f'Issue brief:\n{issue["body"]}\nReview git diff origin/main...HEAD. SHA: {sha}\nDoD evidence:\n{json.dumps(evidence)}', pack_text())
+            if rate_limited(store, result, os.environ.get('OMNI_LAPTOP', 'orch')):
+                return
             approve = not result.get('is_error') and str(result.get('result', '')).strip().endswith('VERDICT: APPROVE')
             gh('pr', 'comment', pr, '--body', f'REVIEW-SHA: {sha}\n{str(result.get("result", ""))[-3500:]}')
             store.update(lambda s: s['claims'][number].update(review_sha=sha, approved=approve, rounds=c.get('rounds', 0) + 1))
             if not approve:
+                store.update(lambda s: s['claims'][number].update(status='blocked', blocker='review rejected; scoped correction required'))
+                mirror(repo, number, store.read()[1]['claims'][number])
                 status(repo, number, 'blocked', c['pr'], blocker='review rejected; orchestrator must issue a scoped correction, no automatic conversation')
                 return
         except Exception as error:
@@ -456,10 +590,9 @@ def review_merge(store, repo, number, c):
     current = store.read()[1]['claims'][number]
     if not current.get('approved') or current.get('review_sha') != sha:
         return
-    checks = json.loads(gh('pr', 'checks', pr, '--json', 'bucket,name'))
-    if not checks or any(x['bucket'] != 'pass' for x in checks):
+    if not passing_ci(pr):
         return
-    if stopped(store, 'orch'):
+    if stopped(store, orchestrator or os.environ.get('OMNI_LAPTOP', 'orch')):
         return
     gh('pr', 'merge', pr, '--squash', '--match-head-commit', sha)
     store.update(lambda s: s['claims'][number].update(status='done'))
@@ -530,14 +663,57 @@ def main():
         lock.mkdir()
     except FileExistsError:
         raise RuntimeError(f'loop already running or stale lock: {lock}; verify process before removing')
+    children = []
+    stop_path = LOGS / f'{worker}-local-{uuid.uuid4().hex[:8]}.stop'
     try:
-        loop(store, repo, worker, role, args.command)
+        count = int(os.environ.get('OMNI_LOCAL_WORKERS', '0')) if role == 'orch' else 0
+        if not 0 <= count <= 4:
+            raise ValueError('OMNI_LOCAL_WORKERS must be between 0 and 4')
+        if count and args.command == 'once':
+            raise ValueError('local worker supervision requires loop, not once')
+        if count and not git('remote', 'get-url', 'origin').startswith('https://github.com/'):
+            raise ValueError('local workers require HTTPS github.com origin, not inherited SSH credentials')
+        for env in local_worker_envs(worker, count, stop_path):
+            output = (LOGS / f'{env["OMNI_LAPTOP"]}.out').open('a', encoding='utf-8')
+            child = subprocess.Popen([sys.executable, str(HERE / 'autonomy.py'), 'loop'], cwd=ROOT,
+                                     env=env, stdout=output, stderr=subprocess.STDOUT,
+                                     **({'creationflags': subprocess.CREATE_NEW_PROCESS_GROUP} if os.name == 'nt' else {'start_new_session': True}))
+            output.close()
+            children.append(child)
+        loop(store, repo, worker, role, args.command, children)
     finally:
+        stop_path.touch()
+        for child in children:
+            try:
+                child.wait(timeout=90)
+            except subprocess.TimeoutExpired:
+                terminate_tree(child)
+                child.wait(timeout=15)
+        stop_path.unlink(missing_ok=True)
         lock.rmdir()
 
 
-def loop(store, repo, worker, role, command):
+def local_worker_envs(worker, count, stop_path):
+    if count and not os.environ.get('OMNI_LOCAL_WORKER_GH_TOKEN'):
+        raise ValueError('local workers require a separate worker-scoped OMNI_LOCAL_WORKER_GH_TOKEN')
+    result = []
+    for i in range(count):
+        env = os.environ.copy()
+        token = env.pop('OMNI_LOCAL_WORKER_GH_TOKEN')
+        env.update(OMNI_ROLE='worker', OMNI_LAPTOP=f'{worker}-local-{i + 1}',
+                   OMNI_LOCAL_WORKERS='0', OMNI_STOP_FILE=str(stop_path),
+                   OMNI_QUOTA_GROUP=os.environ.get('OMNI_QUOTA_GROUP', worker),
+                   GH_TOKEN=token, GITHUB_TOKEN=token,
+                   GIT_CONFIG_COUNT='2', GIT_CONFIG_KEY_0='credential.helper', GIT_CONFIG_VALUE_0='',
+                   GIT_CONFIG_KEY_1='credential.helper', GIT_CONFIG_VALUE_1='!gh auth git-credential')
+        result.append(env)
+    return result
+
+
+def loop(store, repo, worker, role, command, children=()):
     while True:
+        if any(child.poll() is not None for child in children):
+            raise RuntimeError('local worker exited; stop supervisor and inspect its output/lock before restarting')
         try:
             git('fetch', '-q', 'origin', 'main')
             if stopped(store, worker):
@@ -553,7 +729,7 @@ def loop(store, repo, worker, role, command):
             break
         # Short intervals make local STOP responsive even during quota cooldown.
         for _ in range(int(os.environ.get('LOOP_DELAY', '60'))):
-            if (ROOT / 'STOP').exists() or (ROOT / f'STOP-{worker}').exists():
+            if local_stop() or (ROOT / 'STOP').exists() or (ROOT / f'STOP-{worker}').exists():
                 return
             time.sleep(1)
 
