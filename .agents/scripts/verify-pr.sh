@@ -16,7 +16,8 @@ out="$root/logs/verify-$n.out"; wt="$root/verify-$n"; res=""; mac=0; [ "$(uname 
     sha=$(git -C "$repo" rev-parse FETCH_HEAD)
     git -C "$repo" worktree remove --force "$wt" 2>/dev/null; git -C "$repo" worktree prune   # a crashed earlier run may have left it
     if ! git -C "$repo" worktree add -q --detach "$wt" "$sha"; then res="VERIFY-FAILED $sha"
-    elif (cd "$wt" && { [ "$mac" = 0 ] || .agents/scripts/verify-swift.sh; } && .agents/scripts/verify-nonswift.sh); then
+    elif (cd "$wt" && { [ "$mac" = 0 ] || .agents/scripts/verify-swift.sh; } && .agents/scripts/verify-nonswift.sh \
+          && { ! git diff --name-only origin/main...HEAD | grep -q '^Backend/' || { .agents/scripts/verify-backend.sh && echo "verify-backend: OK"; }; }); then
       if [ "$mac" = 1 ]; then res="MAC-VERIFIED $sha"; else res="VERIFIED $sha"; fi
     else res="VERIFY-FAILED $sha"; fi
     git -C "$repo" worktree remove --force "$wt" 2>/dev/null
