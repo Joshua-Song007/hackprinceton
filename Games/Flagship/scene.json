@@ -1,6 +1,6 @@
 {
   "name": "Hollow Choir",
-  "requiredTier": 3,
+  "requiredTier": 1,
   "playerOrigin": [0, 1.6, 0],
   "runMode": "screen",
   "inputs": { "head": true, "heartRate": true, "gestures": ["flick", "pinch"], "players": [1, 32] },

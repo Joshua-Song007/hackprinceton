@@ -13,3 +13,9 @@ serde_json = "1"
 # JS engine for server scripts: rquickjs is provisional (deno_core vs rquickjs not decided)
 rquickjs = { version = "0.9", features = ["parallel"] }
 tower-http = { version = "0.6", features = ["cors", "fs"] }
+# Sign in with Apple (9.1): RS256 verify of the identity token, and a fetch of Apple's signing keys.
+# rust_crypto and rustls-tls (ring) avoid aws-lc, which needs a C toolchain on the Windows lane.
+jsonwebtoken = { version = "12", default-features = false, features = ["rust_crypto"] }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
+# OS random bytes for session tokens (accounts.rs new_token); already in Cargo.lock through other crates.
+getrandom = "0.3"

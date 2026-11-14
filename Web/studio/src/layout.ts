@@ -191,6 +191,26 @@ export class LayoutManager {
     return !!this.api.getPanel(id);
   }
 
+  /** Adds a panel after construction (plugins). Re-registering an id replaces its spec. */
+  register(spec: PanelSpec): void {
+    this.specs.set(spec.id, spec);
+  }
+
+  /** Closes a registered panel and forgets it, so it leaves the Window menu and saved layouts stop naming it. */
+  unregister(id: string): void {
+    this.api.getPanel(id)?.api.close();
+    this.specs.delete(id);
+  }
+
+  /** Shows a panel docked to the right of the viewport (a tab in the active group when there is no viewport). */
+  openRight(id: string): void {
+    if (!this.isOpen(id)) {
+      if (this.api.getPanel('viewport')) this.add(id, { referencePanel: 'viewport', direction: 'right' }, { initialWidth: 360 });
+      else this.togglePanel(id);
+    }
+    this.api.getPanel(id)?.api.setActive();
+  }
+
   /** Shows a closed panel as a tab in the active group, or closes an open one. */
   togglePanel(id: string): void {
     const open = this.api.getPanel(id);

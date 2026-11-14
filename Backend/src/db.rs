@@ -21,20 +21,25 @@ pub enum Db {
 }
 
 const MIGRATION_0001: &str = include_str!("../migrations/0001_init.sql");
+const MIGRATION_0002: &str = include_str!("../migrations/0002_plugins.sql");
 
 /// Lazy pool: no connection is made until a query runs.
 pub fn connect_lazy(url: &str) -> DbResult<PgPool> {
     PgPoolOptions::new().connect_lazy(url)
 }
 
-/// Applies 0001_init.sql once. Skips when the `accounts` table already exists.
+/// Applies 0001_init.sql and 0002_plugins.sql, each once: a step is skipped when its table
+/// (`accounts`, `plugins`) already exists.
 pub async fn migrate(pool: &PgPool) -> DbResult<()> {
-    let exists: bool = sqlx::query("SELECT to_regclass('public.accounts') IS NOT NULL")
-        .fetch_one(pool)
-        .await?
-        .try_get(0)?;
-    if !exists {
-        sqlx::raw_sql(MIGRATION_0001).execute(pool).await?;
+    for (table, sql) in [("accounts", MIGRATION_0001), ("plugins", MIGRATION_0002)] {
+        let exists: bool = sqlx::query("SELECT to_regclass($1) IS NOT NULL")
+            .bind(format!("public.{table}"))
+            .fetch_one(pool)
+            .await?
+            .try_get(0)?;
+        if !exists {
+            sqlx::raw_sql(sql).execute(pool).await?;
+        }
     }
     Ok(())
 }
@@ -80,6 +85,32 @@ pub struct NewGameVersion {
     pub assets: Value,
     pub metadata: Value,
     pub run_mode: String,
+}
+
+/// A marketplace plugin row. `bundle` is {"files":{"relpath":"utf8 content"}}.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Plugin {
+    pub id: String,
+    pub name: String,
+    pub version: String,
+    pub author: String,
+    pub category: String,
+    pub description: String,
+    pub manifest: Value,
+    pub bundle: Value,
+    pub installs: i64,
+}
+
+/// What GET /api/plugins lists (no manifest or bundle).
+#[derive(Debug, Clone, Serialize, PartialEq)]
+pub struct PluginSummary {
+    pub id: String,
+    pub name: String,
+    pub version: String,
+    pub author: String,
+    pub category: String,
+    pub description: String,
+    pub installs: i64,
 }
 
 // The sqlx `derive` feature is not enabled, so rows are mapped by hand.
@@ -265,6 +296,139 @@ pub async fn fetch_game_version(
     row.as_ref().map(version_from_row).transpose()
 }
 
+/// One row of the public library: a game with its newest version's run mode and required tier.
+#[derive(Debug, Clone, PartialEq)]
+pub struct CatalogRow {
+    pub id: String,
+    pub title: String,
+    pub author: String,
+    pub latest_version: i32,
+    pub run_mode: String,
+    pub required_tier: i32,
+}
+
+/// Tier a scene asks for: its `requiredTier` when that is a JSON integer, clamped to 1..=3;
+/// missing, null or any other type means 1 (SceneDescription's default). Shared by both stores.
+pub fn catalog_tier(v: &Value) -> i32 {
+    v.as_i64().map_or(1, |n| n.clamp(1, 3) as i32)
+}
+
+/// Every game that has at least one published version, newest-updated first. The tier comes from the
+/// newest version's scene; the scene itself is not returned.
+pub async fn list_catalog(db: &Db) -> DbResult<Vec<CatalogRow>> {
+    let pool = match db {
+        Db::Pg(pool) => pool,
+        Db::Mem(m) => return Ok(m.list_catalog()),
+    };
+    let rows = sqlx::query(
+        "SELECT g.id::text AS id, g.title, a.display_name AS author, v.version AS latest_version, \
+         v.run_mode, (v.scene->'requiredTier')::text AS required_tier \
+         FROM games g JOIN accounts a ON a.id = g.owner_id \
+         JOIN LATERAL (SELECT version, run_mode, scene FROM game_versions \
+         WHERE game_id = g.id ORDER BY version DESC LIMIT 1) v ON true \
+         ORDER BY g.updated_at DESC, g.id",
+    )
+    .fetch_all(pool)
+    .await?;
+    rows.iter()
+        .map(|r| -> DbResult<CatalogRow> {
+            // A scene whose tier does not parse counts as tier 1; it must not fail the whole catalog.
+            let tier: Option<String> = r.try_get("required_tier")?;
+            let tier = tier
+                .and_then(|t| serde_json::from_str::<Value>(&t).ok())
+                .unwrap_or(Value::Null);
+            Ok(CatalogRow {
+                id: r.try_get("id")?,
+                title: r.try_get("title")?,
+                author: r.try_get("author")?,
+                latest_version: r.try_get("latest_version")?,
+                run_mode: r.try_get("run_mode")?,
+                required_tier: catalog_tier(&tier),
+            })
+        })
+        .collect()
+}
+
+/// Inserts or updates a plugin by id; an existing row keeps its `installs` count.
+pub async fn upsert_plugin(db: &Db, p: &Plugin) -> DbResult<()> {
+    let pool = match db {
+        Db::Pg(pool) => pool,
+        Db::Mem(m) => return Ok(m.upsert_plugin(p)),
+    };
+    sqlx::query(
+        "INSERT INTO plugins (id, name, version, author, category, description, manifest, bundle) \
+         VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8::jsonb) \
+         ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, version = EXCLUDED.version, \
+         author = EXCLUDED.author, category = EXCLUDED.category, description = EXCLUDED.description, \
+         manifest = EXCLUDED.manifest, bundle = EXCLUDED.bundle",
+    )
+    .bind(&p.id)
+    .bind(&p.name)
+    .bind(&p.version)
+    .bind(&p.author)
+    .bind(&p.category)
+    .bind(&p.description)
+    .bind(p.manifest.to_string())
+    .bind(p.bundle.to_string())
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+pub async fn list_plugins(db: &Db) -> DbResult<Vec<PluginSummary>> {
+    let pool = match db {
+        Db::Pg(pool) => pool,
+        Db::Mem(m) => return Ok(m.list_plugins()),
+    };
+    let rows = sqlx::query(
+        "SELECT id, name, version, author, category, description, installs FROM plugins ORDER BY id",
+    )
+    .fetch_all(pool)
+    .await?;
+    rows.iter()
+        .map(|r| {
+            Ok(PluginSummary {
+                id: r.try_get("id")?,
+                name: r.try_get("name")?,
+                version: r.try_get("version")?,
+                author: r.try_get("author")?,
+                category: r.try_get("category")?,
+                description: r.try_get("description")?,
+                installs: r.try_get("installs")?,
+            })
+        })
+        .collect()
+}
+
+/// The manifest and bundle of one plugin, or None for an unknown id.
+pub async fn get_plugin_content(db: &Db, id: &str) -> DbResult<Option<(Value, Value)>> {
+    let pool = match db {
+        Db::Pg(pool) => pool,
+        Db::Mem(m) => return Ok(m.get_plugin_content(id)),
+    };
+    let row = sqlx::query("SELECT manifest::text AS manifest, bundle::text AS bundle FROM plugins WHERE id = $1")
+        .bind(id)
+        .fetch_optional(pool)
+        .await?;
+    match row {
+        Some(r) => Ok(Some((json_col(&r, "manifest")?, json_col(&r, "bundle")?))),
+        None => Ok(None),
+    }
+}
+
+/// Adds one install and returns the new count, or None for an unknown id.
+pub async fn add_plugin_install(db: &Db, id: &str) -> DbResult<Option<i64>> {
+    let pool = match db {
+        Db::Pg(pool) => pool,
+        Db::Mem(m) => return Ok(m.add_plugin_install(id)),
+    };
+    let row = sqlx::query("UPDATE plugins SET installs = installs + 1 WHERE id = $1 RETURNING installs")
+        .bind(id)
+        .fetch_optional(pool)
+        .await?;
+    row.map(|r| r.try_get("installs")).transpose()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -299,6 +463,23 @@ mod tests {
         };
         let back: GameVersion = serde_json::from_str(&serde_json::to_string(&v).unwrap()).unwrap();
         assert_eq!(v, back);
+    }
+
+    #[test]
+    fn catalog_tier_rules() {
+        for (v, want) in [
+            (json!(1), 1),
+            (json!(2), 2),
+            (json!(3), 3),
+            (json!(0), 1),
+            (json!(-2), 1),
+            (json!(7), 3),
+            (json!(2.5), 1),
+            (json!("2"), 1),
+            (json!(null), 1),
+        ] {
+            assert_eq!(catalog_tier(&v), want, "{v}");
+        }
     }
 
     // Runs only with DATABASE_URL set; the schema is created by `migrate` on a fresh database.
@@ -340,6 +521,14 @@ mod tests {
         let first = fetch_game_version(&db, &g.id, Some(1)).await.unwrap().unwrap();
         assert_eq!(first.id, v1.id);
         assert!(fetch_game_version(&db, &g.id, Some(9)).await.unwrap().is_none());
+        let unpublished = create_game(&db, &a.id, "Draft").await.unwrap();
+        let catalog = list_catalog(&db).await.unwrap();
+        let row = catalog.iter().find(|r| r.id == g.id).expect("published game is listed");
+        assert_eq!(
+            (row.latest_version, row.run_mode.as_str(), row.author.as_str(), row.required_tier),
+            (2, "device", "A", 1)
+        );
+        assert!(catalog.iter().all(|r| r.id != unpublished.id));
         sqlx::query("DELETE FROM accounts WHERE id = $1::uuid")
             .bind(&a.id)
             .execute(&pool)

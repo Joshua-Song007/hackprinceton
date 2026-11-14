@@ -7,6 +7,7 @@
 # Settings come from the environment or a prompt: OMNI_DOMAIN (DNS name, or empty for this
 # server's IP), DATABASE_URL (empty = Postgres in Docker, the `localdb` profile),
 # OMNI_DEV_SIGNIN (1 lets anyone create an account; needed for demo.sh, keep 0 otherwise).
+# OMNI_APPLE_AUDIENCES (comma-separated app bundle ids for Sign in with Apple; empty = that route answers 503).
 set -euo pipefail
 
 REPO_URL="${1:-${OMNI_REPO_URL:-https://github.com/Joshua-Song007/hackprinceton}}"
@@ -51,11 +52,16 @@ fi
 cd "$DIR/Deploy"
 if [ -f .env ]; then
   echo "Keeping existing $DIR/Deploy/.env"
+  # Added after the first deploy: append it when given and not yet in .env.
+  if [ -n "${OMNI_APPLE_AUDIENCES:-}" ] && ! grep -q '^OMNI_APPLE_AUDIENCES=' .env; then
+    echo "OMNI_APPLE_AUDIENCES=$OMNI_APPLE_AUDIENCES" >> .env
+  fi
 else
   ask OMNI_DOMAIN "Domain pointing at this server (empty = use this server's IP, self-signed certificate)"
   ask DATABASE_URL "Postgres URL, e.g. TigerData (empty = Postgres in Docker)" secret
   ask OMNI_DEV_SIGNIN "Enable dev sign-in, 1 or 0 (1 lets anyone create an account) [0]"
   OMNI_DEV_SIGNIN="${OMNI_DEV_SIGNIN:-0}"
+  ask OMNI_APPLE_AUDIENCES "Sign in with Apple bundle ids, comma-separated (empty = Apple sign-in off)"
   if [ -z "${OMNI_DOMAIN:-}" ]; then
     OMNI_DOMAIN="$(curl -fsS https://api.ipify.org 2>/dev/null || hostname -I | awk '{print $1}')"
   fi
@@ -64,6 +70,7 @@ else
   {
     echo "OMNI_DOMAIN=$OMNI_DOMAIN"
     echo "OMNI_DEV_SIGNIN=$OMNI_DEV_SIGNIN"
+    echo "OMNI_APPLE_AUDIENCES=${OMNI_APPLE_AUDIENCES:-}"
     # An IP cannot get a public certificate: Caddy's internal CA signs it instead.
     case "$OMNI_DOMAIN" in
       *[!0-9.]* ) case "$OMNI_DOMAIN" in *:*) echo "OMNI_CADDY_GLOBAL=local_certs" ;; esac ;;

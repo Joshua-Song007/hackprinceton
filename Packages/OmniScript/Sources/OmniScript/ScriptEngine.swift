@@ -111,7 +111,7 @@ public final class ScriptEngine: EventDispatcher {
     }
 
     /// JavaScriptCore has no module loader: `export default X` becomes `__omniExportDefault(X)`.
-    static func rewriteExportDefault(_ source: String) -> String {
+    nonisolated static func rewriteExportDefault(_ source: String) -> String {
         guard let range = source.range(of: #"(?m)^\s*export\s+default\s+"#, options: .regularExpression) else { return source }
         var body = String(source[range.upperBound...])
         while let last = body.last, last.isWhitespace || last == ";" { body.removeLast() }

@@ -9,15 +9,22 @@ struct ViewportView: View {
         RealityView { content in
             content.add(model.sceneRoot)
             let camera = PerspectiveCamera()
-            camera.position = [0, 0.5, 4]
+            let o = model.playerOrigin
+            camera.position = [Float(o.x), Float(o.y) + 0.5, Float(o.z) + 4]
             content.add(camera)
         }
         .overlay(alignment: .topLeading) {
             VStack(alignment: .leading, spacing: 4) {
-                Text(model.headInsideTrigger ? "Trigger: head inside" : "Trigger: head outside")
+                Text(model.gameName ?? "No game loaded")
                     .font(.headline)
+                if let error = model.loadError {
+                    Text(error).font(.caption).foregroundStyle(.red)
+                }
                 Text("Frames \(model.framesRun) · output commands \(model.commandsSent)")
                     .font(.caption.monospacedDigit())
+                ForEach(Array(model.scriptErrors.suffix(3).enumerated()), id: \.offset) { _, error in
+                    Text(error).font(.caption2).foregroundStyle(.orange).lineLimit(2)
+                }
             }
             .padding(8)
             .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 6))

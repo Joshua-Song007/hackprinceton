@@ -61,6 +61,12 @@ export default serverScript({
         #expect(engine.stateJSON().contains("\"p2\":100"))
     }
 
+    @Test func loadsScriptWithLeadingComments() throws {
+        let (engine, _) = try makeEngine("// header comment\n// another\n" + sharedFixture)
+        engine.playerJoined("p1")
+        #expect(engine.stateJSON().contains("\"p1\":100"))
+    }
+
     @Test func remoteEventInFireAllOut() throws {
         let (engine, channel) = try makeEngine()
         engine.receive(RemoteEvent(playerId: "p1", name: "punch", data: "{\"dir\":[1,0,0]}"))

@@ -1,0 +1,15 @@
+/* Marketplace panel: brand-kit tokens only. State is spelled out in words, never color alone. */
+.mk { display: flex; flex-direction: column; font: 400 13px/1.4 var(--font-sans); }
+.mk-list { list-style: none; margin: 0; padding: 0; }
+.mk-item { display: grid; gap: var(--space-1); padding: var(--space-3) var(--space-2); border-bottom: 1px solid var(--line); }
+.mk-item[aria-busy="true"] { background: var(--bg-hover); }
+.mk-head { display: flex; align-items: baseline; gap: var(--space-2); }
+.mk-name { margin: 0; font: 500 13px/1.3 var(--font-sans); }
+.mk-version, .mk-meta { color: var(--text-secondary); font-size: 11px; font-variant-numeric: tabular-nums; }
+.mk-state { margin-left: auto; font-size: 11px; font-weight: 500; }
+.mk-state[data-state="installed"] { color: var(--ok); }
+.mk-desc { margin: 0; max-width: 65ch; }
+.mk-progress { margin: 0; min-height: 1.4em; color: var(--text-secondary); font-size: 11px; }
+.mk-error { margin: 0; color: var(--error); font-size: 11px; }
+.mk-actions { display: flex; flex-wrap: wrap; gap: var(--space-1); }
+.mk .om-btn:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }

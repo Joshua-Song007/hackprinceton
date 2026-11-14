@@ -85,6 +85,7 @@ Where one package is swapped for another without the consumer changing. Studio's
 | `RemoteChannel` (OmniScript) | OmniStudio: `InMemoryRemoteChannel` (in `LocalTestSession.swift`) · later the player app's game-server connection | OmniScript `ScriptEngine`, `ServerScriptEngine` |
 | `CatalogSource` (OmniLibrary, Phase 9) | OmniCloud: `CloudClient` | OmniLibrary `LibraryModel` |
 | `SessionStore` (OmniLibrary, Phase 9) | OmniLibrary: Keychain store · in-memory store (tests) | OmniPlayer `PlayerModel` |
+| `GameSource` (OmniLibrary, Phase 9) | OmniCloud: `CloudClient` | OmniLibrary `StubGameLauncher` |
 | `GameLauncher` (OmniLibrary, Phase 9) | OmniLibrary: `StubGameLauncher` (fetches the bundle only) · later a launcher that hands it to OmniRuntime / OmniScript | OmniPlayer `PlayerModel` |
 
 ## Type Ownership
@@ -110,6 +111,7 @@ Where one package is swapped for another without the consumer changing. Studio's
 | `CloudClient` | OmniCloud | **(plan decision)** one HTTP client for sign-in, publish and fetch |
 | `CatalogEntry` | OmniCloud | **(plan decision)** one row of the public library (id, title, author, latest version, run mode, required tier) |
 | `DeviceProfile`, `Playability`, `LibraryModel` | OmniLibrary | **(plan decision)** what this device is, whether it can play an entry, and the browse state |
+| `StoredSession`, `SessionStore`, `GameSource`, `GameLauncher`, `LaunchResult` | OmniLibrary | **(plan decision)** the persisted sign-in, the fetch seam and the launch seam; `StubGameLauncher` is the only launcher this round |
 
 ## Apple Framework Use
 
@@ -127,10 +129,10 @@ Where one package is swapped for another without the consumer changing. Studio's
 | OmniCompanion iOS | Network (via `Shared/BridgeClient.swift`), CoreMotion, Core Haptics, WatchConnectivity, SwiftUI, UIKit |
 | OmniCompanion watchOS | HealthKit, CoreMotion, WatchConnectivity, SwiftUI |
 | OmniCloud | Foundation (`URLSession`) |
-| OmniLibrary | Foundation, Security (Keychain), Observation |
+| OmniLibrary | Foundation, Security (Keychain), Observation, Synchronization (`Mutex` in the in-memory session store) |
 | OmniPlayer | SwiftUI, AuthenticationServices (Sign in with Apple) |
 | OmniStudio | SwiftUI, RealityKit, AppKit, Observation, Synchronization |
-| Backend (Rust, not Apple) | axum (with `ws`), tokio, sqlx (Postgres), serde, serde_json, rquickjs 0.9 (provisional; deno_core not picked) |
+| Backend (Rust, not Apple) | axum (with `ws`), tokio, sqlx (Postgres), serde, serde_json, rquickjs 0.9 (provisional; deno_core not picked), jsonwebtoken 12 (`rust_crypto`) and reqwest 0.12 (`rustls-tls`) for Sign in with Apple (Phase 9), getrandom 0.3 for session tokens |
 
 ## File Structure
 
@@ -275,6 +277,7 @@ Apps/
       Devices/     DeviceStatusView.swift  CalibrationControls.swift                  [P3]
       Scripting/   ScriptEditorView.swift                                             [P4]
       Inspector/   InspectorView.swift                                                [P4]
+      Game/        GameLoader.swift                                                   [P4, extra]
       Collab/      PresenceOverlayView.swift                                          [P6]
 
   OmniCompanion/
@@ -288,7 +291,7 @@ Apps/
 
   OmniPlayer/                                       (Phase 9: iOS + macOS player app, library shell)
     OmniPlayer.xcodeproj/project.pbxproj            [P9]
-    OmniPlayer.entitlements                         [P9]
+    OmniPlayer.entitlements  Info.plist             [P9, Info.plist extra]
     OmniPlayer/
       OmniPlayerApp.swift  PlayerModel.swift                                          [P9]
       Account/     AppleSignInView.swift                                              [P9]
@@ -322,7 +325,7 @@ Backend/                                            (plan decision: Rust Cargo p
 ## Placement Notes
 - **(plan decision, Phase 8)** `Web/` is an npm-workspace TypeScript SDK + Studio (`Web/packages/omni-{core,runtime,script,sim,cloud}`, `Web/studio`, desktop shell `Web/studio/src-tauri`), mirroring the Swift package boundaries for a browser / desktop Studio. Contracts are shared by importing the same files, never copies. `Deploy/` holds the Dockerfile, compose, Caddyfile and Vultr scripts; the backend image serves the built Studio. overview.md defines Studio as native macOS only: mismatch flagged in plan.md Phase 8, not decided.
 
-- `OmniStudio` is the composition root: it constructs the `InputPipeline`, the active `InputSource` / `OutputSink` pair, the `ScriptEngine` and the `SceneRunner`, and wires them together, in `AppModel.swift`. No package does this wiring. `AppModel` also drains the runtime's `OutputQueue` into the active sink each frame; `ModeController` (P3) takes over choosing the source/sink pair. (Changed 2026-11-14: as built, `AppModel` constructs the `InputPipeline`, `SceneRunner`, one sim head device, a `RecordingOutputSink` placeholder, the `ModeController` and `DemoMode`, but no `ScriptEngine`; `ModeController` builds the live `BridgeInputSource`, `BridgeOutputSink` and `BonjourListener`; `ScriptEngine` and `ServerScriptEngine` are constructed only in `LocalTestSession`. `ScriptEditorView`, `InspectorView`, `SimulatorPanelView` and `DebugOverlayView` exist but are not mounted in the window yet.)
+- `OmniStudio` is the composition root: it constructs the `InputPipeline`, the active `InputSource` / `OutputSink` pair, the `ScriptEngine` and the `SceneRunner`, and wires them together, in `AppModel.swift`. No package does this wiring. `AppModel` also drains the runtime's `OutputQueue` into the active sink each frame; `ModeController` (P3) takes over choosing the source/sink pair. (Changed 2026-11-14: as built, `AppModel` constructs the `InputPipeline`, `SceneRunner`, one sim head device, a `RecordingOutputSink` placeholder, the `ModeController` and `DemoMode`, but no `ScriptEngine`; `ModeController` builds the live `BridgeInputSource`, `BridgeOutputSink` and `BonjourListener`; `ScriptEngine` and `ServerScriptEngine` are constructed only in `LocalTestSession`. `ScriptEditorView`, `InspectorView`, `SimulatorPanelView` and `DebugOverlayView` exist but are not mounted in the window yet.) (Changed 2026-11-14: `AppModel` now also builds a `ScriptEngine` and, for games with server scripts, a `ServerScriptEngine`, joined by `InMemoryRemoteChannel`; it loads games through `GameLoader` and owns the `CloudClient` / `AccountModel` for Open from cloud.)
 - **(plan decision)** `SceneDescription.requiredTier` is a plain `Int` (1…3), so `OmniRuntime` stays off `CapabilityTier`; Studio maps it to `CapabilityTier` for the capability warning.
 - `BridgeClient` is shared by the iOS and watchOS targets under `Apps/OmniCompanion/Shared/`; the Watch reaches the Mac through the phone via `WatchRelay` → `WatchConnectivityReceiver`.
 - `Games/Flagship` holds data (scene + JS) only, so it cannot import Swift packages by construction; it reaches the engine through `OmniScript`'s `self` / `ctx` API.

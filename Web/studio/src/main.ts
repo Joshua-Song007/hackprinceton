@@ -7,6 +7,11 @@ import { DebugStore, createConsolePanel } from './debug-panel';
 import { EditorBus, createEditorPanel, openApiSheet } from './editor';
 import { Selection, createExplorerPanel } from './explorer';
 import { LayoutManager, type PanelSpec } from './layout';
+import { MarketplaceController, openScriptAndReveal, runtimePort } from './marketplace/controller';
+import { BrowserInstaller, TauriInstaller } from './marketplace/installer';
+import { MARKETPLACE_PANEL_ID, marketplacePanel } from './marketplace/panel';
+import { RegistryClient } from './marketplace/registry';
+import { deepAgentPanel } from './panels/deep-agent';
 import { PreferenceStore, bindPreferences, inDesktopApp, openSettingsSheet } from './preferences';
 import { createTestPanel } from './testPanel';
 import { openNewGameSheet } from './newGame';
@@ -46,7 +51,17 @@ const joinVersion = async (version: number | 'latest') => {
 };
 const run = new RunController({ project, debug, account, viewport, editor, reveal: (id) => layout.show(id), onReload: testPlayer ? joinVersion : undefined });
 
+const marketplace = new MarketplaceController({
+  registry: new RegistryClient(() => prefs.get().serverUrl),
+  installer: inDesktopApp() ? new TauriInstaller() : new BrowserInstaller(),
+  host: { register: (spec) => layout.register(spec), unregister: (id) => layout.unregister(id), openRight: (id) => layout.openRight(id) },
+  panels: { 'langchain-deepagents': (manifest) => deepAgentPanel({ url: `ws://localhost:${runtimePort(manifest)}/ws`, project, openScript: openScriptAndReveal(editor, (id) => layout.show(id)) }) },
+  projectId: () => (project.gameId ?? 'local').replace(/[^A-Za-z0-9_-]/g, '_'),
+  storage: localStorage,
+});
+
 const panels: PanelSpec[] = [
+  marketplacePanel(marketplace),
   { id: 'explorer', title: 'Explorer', create: () => createExplorerPanel(project, selection, editor) },
   { id: 'viewport', title: 'Viewport', create: () => createViewportPanel(viewport, run) },
   { id: 'inspector', title: 'Inspector', create: () => createInspectorPanel(project, selection) },
@@ -381,6 +396,7 @@ const checkForUpdate = async () => {
 if (inDesktopApp() && !testPlayer) checkForUpdate().catch((e) => debug.addOutput('warn', `Update check failed: ${e instanceof Error ? e.message : String(e)}`));
 
 // Start
+marketplace.registerInstalled(); // before start(), so a saved layout that names an installed plugin's panel loads
 layout.start();
 refreshScene();
 if (testPlayer) {
@@ -394,4 +410,5 @@ if (testPlayer) {
   attachAutosave(project, (message) => debug.addOutput('warn', message));
   if (account.account) void account.refreshGames().catch(() => {});
   showScreen(nextScreen(!!account.account, false));
+  void marketplace.boot();
 }

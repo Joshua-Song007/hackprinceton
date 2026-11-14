@@ -32,9 +32,15 @@
       location = "group:Packages/OmniCloud">
    </FileRef>
    <FileRef
+      location = "group:Packages/OmniLibrary">
+   </FileRef>
+   <FileRef
       location = "group:Apps/OmniStudio/OmniStudio.xcodeproj">
    </FileRef>
    <FileRef
       location = "group:Apps/OmniCompanion/OmniCompanion.xcodeproj">
+   </FileRef>
+   <FileRef
+      location = "group:Apps/OmniPlayer/OmniPlayer.xcodeproj">
    </FileRef>
 </Workspace>

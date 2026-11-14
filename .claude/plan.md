@@ -6,137 +6,155 @@
 
 ---
 
-## Phase 1: Workspace Scaffold & Core Runtime
+## Phase 1: Workspace Scaffold & Core Runtime (compressed)
 
-Goal: every package exists with its dependency boundary enforced, USIS v1 is defined, and a RealityKit trigger fires from a hard-coded packet.
+Built: every package exists with its dependency boundary enforced in each `Package.swift`; USIS v1 schema and Codable types; `InputSource` / `InputBus` / `OutputSink`; `OmniInput` pipeline (validation, clock sync, jitter buffer, calibration, capability tiers, stats); RealityKit `SceneRunner` with triggers and the Phase 1 exit test (hard-coded packet fires a trigger); Studio shell with viewport.
+
+Still open: FLAGGED, not decided: `pencil` channel units (iPad gives a 2D normalized tip and normalized hover, no tilt field; `roll` / `hover` required in the schema but absent on some Pencils). Unscheduled: playback path for `AudioEmitterComponent` / `self.audio.play`. Provisional (needs-tien-review): hand-written `OmniStudio.xcodeproj` (regenerate in Xcode before adding targets); `AppModel` placeholder `RecordingOutputSink`; overview.md update for `triggerEntered` / `triggerExited` events pending on user request.
 
 ### 1.1 Workspace & package scaffold
-- [x] `Omni.xcworkspace/contents.xcworkspacedata` — workspace referencing every local package and both app projects (Xcode-generated; commit as-is). (Refs to `Apps/OmniStudio/OmniStudio.xcodeproj` (1.6) and `Apps/OmniCompanion/OmniCompanion.xcodeproj` (3.3) dangle until those files are created; no revisit needed.)
-- [x] `Packages/OmniCore/Package.swift` — OmniCore manifest, no dependencies. (testTarget `OmniCoreTests` added in Phase 1.2 so `swift test` can run; no other package has a testTarget yet.)
-- [x] `Packages/OmniInput/Package.swift` — OmniInput manifest, depends on OmniCore. (testTarget `OmniInputTests` added in 1.3.)
-- [x] `Packages/OmniOutput/Package.swift` — OmniOutput manifest, depends on OmniCore.
-- [x] `Packages/OmniRuntime/Package.swift` — OmniRuntime manifest, depends on OmniCore and OmniInput only. (testTarget `OmniRuntimeTests` added in 1.5.)
-- [x] `Packages/OmniScript/Package.swift` — OmniScript manifest, depends on OmniRuntime. (testTarget `OmniScriptTests` to be added when the first test file lands, 2.3; declare `Resources/prelude.js` as a resource when it lands, 2.3.)
-- [x] `Packages/OmniScript/Sources/OmniScript/Module.swift` — empty module marker so the target compiles; removed when the first real OmniScript file lands (Phase 2).
-- [x] `Packages/OmniSim/Package.swift` — OmniSim manifest, depends on OmniCore, OmniInput, OmniOutput. (testTarget `OmniSimTests` to be added when the first test file lands, 2.2; declare the four `Presets/*.usis.jsonl` as resources, one explicit entry per file so `PresetLibrary.swift` stays a compiled source — verify when added, 2.2.)
-- [x] `Packages/OmniSim/Sources/OmniSim/Module.swift` — empty module marker; removed in Phase 2.
-- [x] `Packages/OmniBridge/Package.swift` — OmniBridge manifest, depends on OmniCore, OmniInput, OmniOutput. (testTarget `OmniBridgeTests` to be added when the first test file lands, 3.2.)
-- [x] `Packages/OmniBridge/Sources/OmniBridge/Module.swift` — empty module marker; removed in Phase 3.
-- [x] `Packages/OmniCollab/Package.swift` — OmniCollab manifest (stretch), depends on OmniCore.
-- [x] `Packages/OmniCollab/Sources/OmniCollab/Module.swift` — empty module marker; removed in Phase 6.
-- [x] `Packages/OmniAdapters/Package.swift` — OmniAdapters manifest (stretch), depends on OmniCore and OmniInput.
-- [x] `Packages/OmniAdapters/Sources/OmniAdapters/Module.swift` — empty module marker; stays until Phase 7.
-- [x] `.gitignore` — ignores `.build/`, `.swiftpm/`, `xcuserdata/` and `.DS_Store` so SwiftPM and Xcode output stays out of the repo (the file already existed but was empty, so only its contents are added; git itself is not touched).
+
+- [x] `Omni.xcworkspace/contents.xcworkspacedata`
+- [x] `Packages/OmniCore/Package.swift`
+- [x] `Packages/OmniInput/Package.swift`
+- [x] `Packages/OmniOutput/Package.swift`
+- [x] `Packages/OmniRuntime/Package.swift`
+- [x] `Packages/OmniScript/Package.swift`
+- [x] `Packages/OmniScript/Sources/OmniScript/Module.swift`
+- [x] `Packages/OmniSim/Package.swift`
+- [x] `Packages/OmniSim/Sources/OmniSim/Module.swift`
+- [x] `Packages/OmniBridge/Package.swift`
+- [x] `Packages/OmniBridge/Sources/OmniBridge/Module.swift`
+- [x] `Packages/OmniCollab/Package.swift`
+- [x] `Packages/OmniCollab/Sources/OmniCollab/Module.swift`
+- [x] `Packages/OmniAdapters/Package.swift`
+- [x] `Packages/OmniAdapters/Sources/OmniAdapters/Module.swift`
+- [x] `.gitignore`
 
 ### 1.2 OmniCore — math and USIS types (pure, no I/O)
-- [x] `Schema/usis.schema.json` — USIS v1 JSON Schema: envelope (`v`, `deviceId`, `kind`, `slot`, `source`, `t`, `seq`) and channels (orientation, position, accel, touch, gesture, heartRate, pencil). Source of truth for companions, sim and adapters.
-- [x] `Packages/OmniCore/Sources/OmniCore/Math/Vector3.swift` — 3-vector value type with lerp, dot, normalize, length. (Double precision, no `simd`, to keep OmniCore Foundation-only; OmniRuntime converts to Float at the RealityKit edge; no direct Vector3 tests scheduled.)
-- [x] `Packages/OmniCore/Sources/OmniCore/Math/Quaternion.swift` — unit quaternion `[x,y,z,w]` with multiply, inverse, slerp, yaw-only extraction, angle-between. (Up axis is +Y — a plan decision, not stated in overview.md; CoreMotion reference frames are Z-up, so companions and `AirPodsMotionSource` must convert; yaw-only reads the +Z axis heading, exact for Ry·Rx·Rz with |pitch| < 90°, yaw 0 when +Z is vertical; revisit when Phase 3 sources land.) (Changed 2026-11-14: forward is −Z, right +X, up +Y (RealityKit convention), now stated in overview.md (Module 1, Coordinate Frame). AirPods frame measured as X right / Y forward / Z up, so `AirPodsMotionSource` maps vectors `(x, y, z) → (x, z, −y)` and quaternions `[x, y, z, w] → [x, z, −y, w]`; see the AirPodsProbe item. iPhone/Watch frames not yet measured.)
-- [x] `Packages/OmniCore/Sources/OmniCore/Math/Pose.swift` — position + orientation value type.
-- [x] `Packages/OmniCore/Sources/OmniCore/USIS/UsisEnums.swift` — `DeviceKind`, `Slot`, `PacketSource`, `GestureType`, `TouchPhase` string-backed enums matching the schema.
-- [x] `Packages/OmniCore/Sources/OmniCore/USIS/UsisChannels.swift` — optional-per-channel Codable struct (a packet carries only changed channels; unknown channels ignored on decode). (`pencil.tip` modelled as Vector3 meters and `hover` as scalar meters — overview.md says only "Meters"; no revisit scheduled.) (FLAGGED 2026-11-14, not decided: the Pencil probe found the iPad gives `tip` as a 2D screen point (normalized 0–1 here) and hover `zOffset` normalized 0–1, not meters; the schema has no tilt (altitude / azimuth) field; `roll` and `hover` are required in the schema but are absent on Pencils without those features and roll is absent while hovering.)
-- [x] `Packages/OmniCore/Sources/OmniCore/USIS/UsisPacket.swift` — Codable envelope + channels, `v` field versioning. (Decode does not reject `v != 1`; version policy is `PacketValidator` in 1.3.)
-- [x] `Packages/OmniCore/Sources/OmniCore/Frame/InputFrame.swift` — world-space per-frame snapshot, no `source` field (InputFrame lives in OmniCore, not OmniInput, so OmniRuntime can consume it without depending on more than OmniInput's protocols — overview.md names the type but not its package; no revisit scheduled). (Shape is `InputFrame { timestamp, devices: [DeviceSample] }` with per-device world-space channels and a `stale` flag — overview.md does not specify it; no revisit scheduled.)
-- [x] `Packages/OmniCore/Sources/OmniCore/Output/OutputCommand.swift` — `{ target, type: haptic|audio, pattern, intensity, durationMs }` Codable (lives in OmniCore so OmniRuntime can queue commands without depending on OmniOutput; the `OutputSink` protocol stays in OmniOutput per overview.md). (No envelope fields (`v`/`t`/`seq`) — overview.md says "same envelope rules as USIS" without listing them; intensity clamped to 0–1 and durationMs floored at 0 on init and decode; revisit if the wire protocol in 3.1 needs sequencing.)
-- [x] `Packages/OmniCore/Tests/OmniCoreTests/QuaternionTests.swift` — slerp, inverse, yaw-only extraction against known values.
-- [x] `Packages/OmniCore/Tests/OmniCoreTests/UsisPacketTests.swift` — encode/decode round-trip of the overview.md example packet; unknown channels ignored; partial channels. (Also covers `OutputCommand` round-trip and clamping, since no separate test item exists for it.)
+
+- [x] `Schema/usis.schema.json`
+- [x] `Packages/OmniCore/Sources/OmniCore/Math/Vector3.swift`
+- [x] `Packages/OmniCore/Sources/OmniCore/Math/Quaternion.swift`
+- [x] `Packages/OmniCore/Sources/OmniCore/Math/Pose.swift`
+- [x] `Packages/OmniCore/Sources/OmniCore/USIS/UsisEnums.swift`
+- [x] `Packages/OmniCore/Sources/OmniCore/USIS/UsisChannels.swift`
+- [x] `Packages/OmniCore/Sources/OmniCore/USIS/UsisPacket.swift`
+- [x] `Packages/OmniCore/Sources/OmniCore/Frame/InputFrame.swift`
+- [x] `Packages/OmniCore/Sources/OmniCore/Output/OutputCommand.swift`
+- [x] `Packages/OmniCore/Tests/OmniCoreTests/QuaternionTests.swift`
+- [x] `Packages/OmniCore/Tests/OmniCoreTests/UsisPacketTests.swift`
 
 ### 1.3 OmniInput — protocols, validation, pipeline
-- [x] `Packages/OmniInput/Sources/OmniInput/InputSource.swift` — `InputSource` protocol: emits `UsisPacket`s, declares device descriptor (kind, slot, sample rate). (Push model: a source is started with the `InputBus` via `start(bus:)` and calls `ingest` / `recordClockSample` on it; `DeviceDescriptor` also declares the channels a device provides.)
-- [x] `Packages/OmniInput/Sources/OmniInput/InputBus.swift` — `InputBus` protocol: accepts packets from any source, serves `InputFrame`s. (Also carries `recordClockSample` so sources can report ping exchanges; calibration and stats live on the concrete `InputPipeline`, not on the protocol.)
-- [x] `Packages/OmniInput/Sources/OmniInput/PacketValidator.swift` — decode + schema-conformance check of raw JSON; invalid packets dropped and counted (hand-written Swift mirror of `Schema/usis.schema.json`, kept honest by the validator test). (Enforces the schema rules `UsisPacket` decoding does not: `v == 1`, `t`/`seq` ≥ 0, non-empty `deviceId`, unit-norm quaternion within tolerance, touch `x`/`y` in 0–1, pencil `pressure` in 0–1, `heartRate` ≥ 0.) (Stateless: drop counting lives in `InputPipeline` / `DeviceStats`; also rejects a `deviceId` longer than 128 characters.)
-- [x] `Packages/OmniInput/Sources/OmniInput/ClockSync.swift` — ping-exchange offset estimate `t_host − (t_send + rtt/2)`, periodic re-estimate, device→host time conversion. (Uses the lowest-rtt sample of the last 8 within 30 s; host time is monotonic uptime, and before the first ping the first packet anchors the device clock — plan decision, overview.md specifies neither; no revisit scheduled.)
-- [x] `Packages/OmniInput/Sources/OmniInput/JitterBuffer.swift` — per-device ring buffer; sample at `t_render = now − D` (D=50 ms default, tunable); slerp orientation, lerp vectors, sample-and-hold + EMA scalars; stale after 500 ms. (The overview's "ring buffer" is implemented as time-pruned, size-capped sorted arrays per channel; gestures and touches are queued events delivered once (late ones on the next frame, events older than 1 s discarded); heart-rate EMA is time-based with τ = 1 s; no revisit scheduled.)
-- [x] `Packages/OmniInput/Sources/OmniInput/Calibration.swift` — capture `q_cal`, apply `q_world = q_cal⁻¹ · q_raw`; yaw-only mode for AirPods. (Position and accel are not calibrated; AirPods default to yaw-only.)
-- [x] `Packages/OmniInput/Sources/OmniInput/CapabilityTier.swift` — Tier 1/2/3 definitions and "can these devices satisfy tier N" check. (Orientation is the baseline for every tier and touch is required by none, since overview.md lists AirPods as Tier 1; Tier 2 = orientation + position, Tier 3 = orientation + heartRate; hand tracking and gaze have no USIS v1 channel so they are not checked — plan decision.)
-- [x] `Packages/OmniInput/Sources/OmniInput/DeviceStats.swift` — per-device rate, latency, seq-gap count, stale flag, schema-error count (feeds Studio debug overlay; the only place `source` is retained).
-- [x] `Packages/OmniInput/Sources/OmniInput/InputPipeline.swift` — concrete `InputBus`: ingest → validate → clock-convert → buffer; per-frame sample → calibrate → build `InputFrame` with `source` stripped. (State is guarded by a `Mutex` (Synchronization) rather than an actor because RealityKit updates are synchronous; tracks at most 16 devices and counts rejected ones; ping results that arrive before a device's first packet are held until it appears.)
-- [x] `Packages/OmniInput/Tests/OmniInputTests/PacketValidatorTests.swift` — valid/invalid packets, versioning, drop counting. (Drop counting is exercised through `InputPipeline`.)
-- [x] `Packages/OmniInput/Tests/OmniInputTests/ClockSyncTests.swift` — offset estimate with synthetic rtt and skew.
-- [x] `Packages/OmniInput/Tests/OmniInputTests/JitterBufferTests.swift` — interpolation at mixed rates, hold, stale-freeze.
-- [x] `Packages/OmniInput/Tests/OmniInputTests/CalibrationTests.swift` — world-frame result after a calibration tap; yaw-only.
-- [x] `Packages/OmniInput/Tests/OmniInputTests/SourceStrippingTests.swift` — asserts `InputFrame` carries no source information.
+
+- [x] `Packages/OmniInput/Sources/OmniInput/InputSource.swift`
+- [x] `Packages/OmniInput/Sources/OmniInput/InputBus.swift`
+- [x] `Packages/OmniInput/Sources/OmniInput/PacketValidator.swift`
+- [x] `Packages/OmniInput/Sources/OmniInput/ClockSync.swift`
+- [x] `Packages/OmniInput/Sources/OmniInput/JitterBuffer.swift`
+- [x] `Packages/OmniInput/Sources/OmniInput/Calibration.swift`
+- [x] `Packages/OmniInput/Sources/OmniInput/CapabilityTier.swift`
+- [x] `Packages/OmniInput/Sources/OmniInput/DeviceStats.swift`
+- [x] `Packages/OmniInput/Sources/OmniInput/InputPipeline.swift`
+- [x] `Packages/OmniInput/Tests/OmniInputTests/PacketValidatorTests.swift`
+- [x] `Packages/OmniInput/Tests/OmniInputTests/ClockSyncTests.swift`
+- [x] `Packages/OmniInput/Tests/OmniInputTests/JitterBufferTests.swift`
+- [x] `Packages/OmniInput/Tests/OmniInputTests/CalibrationTests.swift`
+- [x] `Packages/OmniInput/Tests/OmniInputTests/SourceStrippingTests.swift`
 
 ### 1.4 OmniOutput
-- [x] `Packages/OmniOutput/Sources/OmniOutput/OutputSink.swift` — `OutputSink` protocol: receives `OutputCommand`s and delivers them to live devices or the simulator. (Synchronous, non-throwing batch `send`; implementations must be thread-safe and cannot be `@MainActor` classes (checked by compile); delivery failures are the sink's to count; no test item since it is a bare protocol, exercised by its first two implementations in 2.2 and 3.2.)
+
+- [x] `Packages/OmniOutput/Sources/OmniOutput/OutputSink.swift`
 
 ### 1.5 OmniRuntime — scene runner and first trigger
-- [x] `Packages/OmniRuntime/Sources/OmniRuntime/Components/TriggerComponent.swift` — RealityKit component: collision-volume trigger with enter/exit callbacks. (The volume is a plain shape tested by `TriggerSystem` with its own math, not RealityKit collision — overview.md says "RealityKit collision for triggers"; chosen so triggers resolve inside `SceneRunner.step` in the overview's frame order and run headless; `CollisionComponent` is added for raycasts in 2.1; `probeSlots` defaults to `[.head]` because overview.md does not say what enters a trigger; user decision, revisit only if physics-based triggers are wanted.)
-- [x] `Packages/OmniRuntime/Sources/OmniRuntime/Components/AudioEmitterComponent.swift` — RealityKit component: named spatial sound attached to an entity. (Data only: no plan item plays the sound yet, so `self.audio.play` in 2.3 needs a playback path; unscheduled, no revisit scheduled.)
-- [x] `Packages/OmniRuntime/Sources/OmniRuntime/Components/ScriptComponent.swift` — RealityKit component: names the script attached to an entity.
-- [x] `Packages/OmniRuntime/Sources/OmniRuntime/Events/GameEvent.swift` — `onLookAt`, `onGesture`, `onHeartRate`, `onRaycastHit` event enum. (Also has `triggerEntered` / `triggerExited` so data-only games can react to triggers; overview.md lists only the four input events, so the overview.md update is pending on user request.)
-- [x] `Packages/OmniRuntime/Sources/OmniRuntime/Events/EventDispatcher.swift` — protocol the runtime calls to deliver events to a script backend (lets OmniScript plug in without the runtime depending on it). (Main-actor; always receives a concrete entity that carries a `ScriptComponent`.)
-- [x] `Packages/OmniRuntime/Sources/OmniRuntime/Events/EventDeriver.swift` — protocol the 2.1 detectors conform to; `SceneRunner` asks each registered deriver for `GameEvent`s every step (extension point so `SceneRunner.swift` is not edited in 2.1; added after the audit, not in overview.md).
-- [x] `Packages/OmniRuntime/Sources/OmniRuntime/Systems/TriggerSystem.swift` — RealityKit system resolving trigger overlaps each update. (ECS-style system called by `SceneRunner`, not a registered `RealityKit.System`, for a fixed frame order and headless tests; returns the trigger `GameEvent`s.)
-- [x] `Packages/OmniRuntime/Sources/OmniRuntime/Output/OutputQueue.swift` — collects `OutputCommand`s during a frame; drained once at end of frame by the caller (Studio), never by the runtime.
-- [x] `Packages/OmniRuntime/Sources/OmniRuntime/SceneRunner.swift` — per-frame loop: take `InputFrame` → derive events → dispatch → resolve triggers → expose queued `OutputCommand`s for the caller to drain (the runtime never sees a sink). Never reads sockets, device APIs or sim state. (Main-actor; order is derive events → dispatch → resolve triggers → dispatch trigger events; derivers are registered on `derivers`.)
-- [x] `Packages/OmniRuntime/Tests/OmniRuntimeTests/SceneRunnerTriggerTests.swift` — hard-coded USIS packet through `InputPipeline` into `SceneRunner` fires a trigger (Phase 1 exit test). (18 tests; also covers `probeSlots`, stale probes, rotated and nested volumes, event routing to scripts and `OutputQueue`.)
+
+- [x] `Packages/OmniRuntime/Sources/OmniRuntime/Components/TriggerComponent.swift`
+- [x] `Packages/OmniRuntime/Sources/OmniRuntime/Components/AudioEmitterComponent.swift`
+- [x] `Packages/OmniRuntime/Sources/OmniRuntime/Components/ScriptComponent.swift`
+- [x] `Packages/OmniRuntime/Sources/OmniRuntime/Events/GameEvent.swift`
+- [x] `Packages/OmniRuntime/Sources/OmniRuntime/Events/EventDispatcher.swift`
+- [x] `Packages/OmniRuntime/Sources/OmniRuntime/Events/EventDeriver.swift`
+- [x] `Packages/OmniRuntime/Sources/OmniRuntime/Systems/TriggerSystem.swift`
+- [x] `Packages/OmniRuntime/Sources/OmniRuntime/Output/OutputQueue.swift`
+- [x] `Packages/OmniRuntime/Sources/OmniRuntime/SceneRunner.swift`
+- [x] `Packages/OmniRuntime/Tests/OmniRuntimeTests/SceneRunnerTriggerTests.swift`
 
 ### 1.6 OmniStudio shell
-- [x] `Apps/OmniStudio/OmniStudio.xcodeproj/project.pbxproj` — macOS app project linking the local packages (Xcode-generated). (Hand-written, objectVersion 77, placeholder IDs, bundle id com.omni.OmniStudio; regenerate in Xcode before adding targets [provisional: needs-tien-review].)
-- [x] `Apps/OmniStudio/OmniStudio/OmniStudioApp.swift` — SwiftUI app entry, single window.
-- [x] `Apps/OmniStudio/OmniStudio/AppModel.swift` — composition root: builds `InputPipeline`, `SceneRunner` (plus `ScriptEngine` once it exists, 2.3) and the sim `InputSource` / `OutputSink` pair for Phase 2; runs the per-frame loop and drains `OutputQueue` into the active sink (name and placement are a plan decision; `ModeController` takes over source/sink selection in 3.5). (Uses a placeholder `RecordingOutputSink` until swapped for `SimOutputSink`; sim head is a bare `VirtualDevice` kind headset with position; fixed deltaTime 1/60; no `ScriptEngine` yet [provisional: needs-tien-review].)
-- [x] `Apps/OmniStudio/OmniStudio/Viewport/ViewportView.swift` — `RealityView` hosting the `SceneRunner` scene; shows the hard-coded-packet trigger firing; reads its scene from `AppModel`. (Once `SceneDescription.runMode` exists (2.1), `device` games preview at phone aspect ratio.)
+
+- [x] `Apps/OmniStudio/OmniStudio.xcodeproj/project.pbxproj`
+- [x] `Apps/OmniStudio/OmniStudio/OmniStudioApp.swift`
+- [x] `Apps/OmniStudio/OmniStudio/AppModel.swift`
+- [x] `Apps/OmniStudio/OmniStudio/Viewport/ViewportView.swift`
+
+Full text: planHistory/phase-01.md
 
 ---
 
-## Phase 2: 3D Device Simulator
+## Phase 2: 3D Device Simulator (compressed)
 
-Goal: a creator can exercise every mechanic on a Mac alone; the jitter buffer is proven against simulated input (OmniSim tests) and derived events against hand-built `InputFrame`s (OmniRuntime tests) before any live device exists; OmniSim cannot depend on OmniRuntime, so no single sim-to-events test is scheduled. Also covers OmniScript, which `overview.md` does not assign to a phase (scheduled here so Phase 4 builds on a finished API; revisit only if scope forces it later).
+Built: derived events (look-at, gesture, heart-rate intensity, raycast hit), audio listener, `SceneDescription` / `SceneLoader`; OmniSim virtual devices, noise model, recorder / player, presets, sensor rig, gizmos, gaze, `SimOutputSink`; OmniScript (`prelude.js`, `SelfBridge`, `ContextBridge`, `ScriptEngine`, `ScriptReloader`, `RemoteChannel`, `ServerScriptEngine`); Studio simulator panel, `LocalTestSession`, debug overlay and capability warning.
+
+Still open: unscheduled: mounting `SimulatorPanelView` in the window; tests for `LocalTestSession`. Provisional (needs-tien-review): presets are hand-authored (pencil preset ~62 Hz, not 240 Hz), `ScriptReloader` / `RemoteChannel` / `ContextBridge` / `SelfBridge` API shapes, `UsisPlayer` leaves validation to `InputPipeline`, `SimOutputSink` queue cap, rig slot positions. Pencil unit decision still open (see Phase 1).
 
 ### 2.1 OmniRuntime — derived events
-- [x] `Packages/OmniRuntime/Sources/OmniRuntime/Events/LookAtDetector.swift` — head forward `f` vs direction to entity `ŝ`; fires `onLookAt` when `acos(f·ŝ) < θ_lock` (15°) held for 0.5 s. (Head position = the head sample's `position` when present, else `SceneDescription.playerOrigin` — plan decision, overview.md is silent.) (Head forward is −Z: usis.schema.json documents +X right, +Y up, −Z forward.) (Targets entities with a `ScriptComponent`; a stale head freezes the dwell timer; `playerOrigin` is a detector property the host sets from `SceneDescription` — provisional.)
-- [x] `Packages/OmniRuntime/Sources/OmniRuntime/Events/GestureEventMapper.swift` — maps gesture channels from any device to `onGesture(type, dir?)`.
-- [x] `Packages/OmniRuntime/Sources/OmniRuntime/Events/HeartRateIntensity.swift` — `d = clamp((HR − HR_rest)/(HR_max − HR_rest), 0, 1)` and `onHeartRate` emission. (rest/max default to 60/180 bpm and onHeartRate fires on change only — plan decisions, overview.md is silent; no revisit scheduled.)
-- [x] `Packages/OmniRuntime/Sources/OmniRuntime/Events/RaycastHitDetector.swift` — `onRaycastHit` from phone aim or simulator gaze via RealityKit raycast. (Pure slab test against `CollisionComponent` bounds, not a RealityKit scene query, so it runs headless inside `SceneRunner.step`; curved shapes match by bounding box; default aim slots head + hand; no revisit scheduled.)
-- [x] `Packages/OmniRuntime/Sources/OmniRuntime/Systems/AudioListenerSystem.swift` — moves the RealityKit audio listener with head pose from `InputFrame`. (Head position = the head sample's `position` when present, else `SceneDescription.playerOrigin` — plan decision, overview.md is silent.) (Moves a plain `Entity`; `AudioListenerComponent` needs macOS 26, so the host sets it if wanted. Called by Studio, not `SceneRunner`.)
-- [x] `Packages/OmniRuntime/Sources/OmniRuntime/Scene/SceneDescription.swift` — Codable declarative scene (entities, transforms, components, script names) (scene file format is not specified in overview.md; proposed here, confirm before building on it). (Also carries `requiredTier: Int` (1…3, default 1; an Int so OmniRuntime stays off `CapabilityTier`) and `playerOrigin` — plan decisions, overview.md specifies neither.) (Also carries `runMode`: `screen` | `device`, default `screen` (overview.md Module 7 Run Mode; the default is a plan decision), and lists client and server script names separately.)
-- [x] `Packages/OmniRuntime/Sources/OmniRuntime/Scene/SceneLoader.swift` — builds RealityKit entities and components from a `SceneDescription`.
-- [x] `Packages/OmniRuntime/Tests/OmniRuntimeTests/LookAtDetectorTests.swift` — threshold, dwell time, reset when gaze leaves.
-- [x] `Packages/OmniRuntime/Tests/OmniRuntimeTests/HeartRateIntensityTests.swift` — clamping and normalization.
-- [x] `Packages/OmniRuntime/Tests/OmniRuntimeTests/GestureEventMapperTests.swift` — each gesture type, with and without `dir`, maps to `onGesture` from any device; a stale device emits nothing (added after the plan.md audit; overview.md does not require it).
-- [x] `Packages/OmniRuntime/Tests/OmniRuntimeTests/RaycastHitDetectorTests.swift` — aim ray hits and misses a collision entity; nearest hit only; fires once per hit (added after the plan.md audit; overview.md does not require it; if RealityKit cannot run headless under `swift test`, the hit logic is tested as a pure function).
-- [x] `Packages/OmniRuntime/Tests/OmniRuntimeTests/AudioListenerSystemTests.swift` — listener transform follows head orientation and position; uses `SceneDescription.playerOrigin` when the head has no position (added after the plan.md audit; overview.md does not require it; same headless caveat as above).
-- [x] `Packages/OmniRuntime/Tests/OmniRuntimeTests/SceneLoaderTests.swift` — `SceneDescription` → entities, transforms, components and script names; `requiredTier` and `playerOrigin` parsed; unknown component rejected cleanly (added after the plan.md audit; overview.md does not require it).
+
+- [x] `Packages/OmniRuntime/Sources/OmniRuntime/Events/LookAtDetector.swift`
+- [x] `Packages/OmniRuntime/Sources/OmniRuntime/Events/GestureEventMapper.swift`
+- [x] `Packages/OmniRuntime/Sources/OmniRuntime/Events/HeartRateIntensity.swift`
+- [x] `Packages/OmniRuntime/Sources/OmniRuntime/Events/RaycastHitDetector.swift`
+- [x] `Packages/OmniRuntime/Sources/OmniRuntime/Systems/AudioListenerSystem.swift`
+- [x] `Packages/OmniRuntime/Sources/OmniRuntime/Scene/SceneDescription.swift`
+- [x] `Packages/OmniRuntime/Sources/OmniRuntime/Scene/SceneLoader.swift`
+- [x] `Packages/OmniRuntime/Tests/OmniRuntimeTests/LookAtDetectorTests.swift`
+- [x] `Packages/OmniRuntime/Tests/OmniRuntimeTests/HeartRateIntensityTests.swift`
+- [x] `Packages/OmniRuntime/Tests/OmniRuntimeTests/GestureEventMapperTests.swift`
+- [x] `Packages/OmniRuntime/Tests/OmniRuntimeTests/RaycastHitDetectorTests.swift`
+- [x] `Packages/OmniRuntime/Tests/OmniRuntimeTests/AudioListenerSystemTests.swift`
+- [x] `Packages/OmniRuntime/Tests/OmniRuntimeTests/SceneLoaderTests.swift`
 
 ### 2.2 OmniSim — virtual devices and recording
-- [x] `Packages/OmniSim/Sources/OmniSim/NoiseModel.swift` — per-device sample rate and noise parameters roughly matching real hardware (AirPods ~50 Hz, Watch 1–10 Hz, phone 60–120 Hz). (Also deletes `Module.swift`.) (Watch rate 5 Hz, the midpoint of the unmeasured 1–10 Hz range, provisional; randomness enters through an injected SeededGenerator; `Module.swift` has since been removed.)
-- [x] `Packages/OmniSim/Sources/OmniSim/VirtualDevice.swift` — base `InputSource` virtual device that exposes a feedback hook driven by `SimOutputSink` (only `SimOutputSink` conforms to `OutputSink`); stamps `source: "sim"`, advances `seq`, emits at its sample rate. (Stamps `t` from `HostClock` and emits unit quaternions even with noise, so the validator's 0.01 tolerance holds.) (sampleChannels runs under the device lock; subclasses keep their own state behind their own lock.)
-- [x] `Packages/OmniSim/Sources/OmniSim/Devices/VirtualAirPods.swift` — head orientation source, slot `head`.
-- [x] `Packages/OmniSim/Sources/OmniSim/Devices/VirtualWatch.swift` — wrist orientation, heart rate, gesture source.
-- [x] `Packages/OmniSim/Sources/OmniSim/Devices/VirtualPhone.swift` — orientation, accel, touch source.
-- [x] `Packages/OmniSim/Sources/OmniSim/Devices/VirtualPencil.swift` — tip, pressure, roll, hover source. (From the 2026-11-14 Pencil probe: emit contact samples at 240 Hz and hover at 60 Hz, pressure 0–1, altitude ~14–85°, roll only while in contact, squeeze ~0.2 s began → ended; units follow whatever the open `pencil` schema decision settles, see the `UsisChannels.swift` item.)
-- [x] `Packages/OmniSim/Sources/OmniSim/Recording/UsisRecorder.swift` — writes packets to `.usis.jsonl`, one per line.
-- [x] `Packages/OmniSim/Sources/OmniSim/Recording/UsisPlayer.swift` — replays a `.usis.jsonl` file as an `InputSource` with original timing. (Re-stamps `t` from `HostClock` and `seq` on looped replays so clock anchoring and seq-gap stats stay correct.) (`ReplayTimeline` is the pure scheduler; the first pass also re-stamps `t` from `HostClock`, not only looped passes; replayed packets are stamped `source: sim`; no `PacketValidator` in the player, invalid packets are dropped by `InputPipeline` [provisional: needs-tien-review].)
-- [x] `Packages/OmniSim/Sources/OmniSim/Presets/PresetLibrary.swift` — lists and loads bundled gesture presets. (Presets are hand-authored synthetic recordings, not captured from real hardware; they loop through UsisPlayer; the pencil preset runs ~62 Hz, not 240 Hz; `PresetLibraryTests.swift` added [provisional: needs-tien-review].)
-- [x] `Packages/OmniSim/Sources/OmniSim/Presets/airpods-head-pitch.usis.jsonl` — recorded preset: AirPods head pitch.
-- [x] `Packages/OmniSim/Sources/OmniSim/Presets/watch-double-tap.usis.jsonl` — recorded preset: Watch double-tap.
-- [x] `Packages/OmniSim/Sources/OmniSim/Presets/watch-flick.usis.jsonl` — recorded preset: Watch flick.
-- [x] `Packages/OmniSim/Sources/OmniSim/Presets/pencil-barrel-roll.usis.jsonl` — recorded preset: Pencil barrel roll.
-- [x] `Packages/OmniSim/Sources/OmniSim/Rig/SensorRigScene.swift` — RealityKit avatar with device slots (head, wrists, hand, pocket, stylus); clicking a slot spawns a virtual device. (`RigTests.swift` added; pinch only via VirtualWatch, ids `sim-<slot>`, Euler yaw-pitch-roll, slot positions guessed [provisional: needs-tien-review].)
-- [x] `Packages/OmniSim/Sources/OmniSim/Rig/GizmoController.swift` — transform gizmos and sliders driving a virtual device's orientation and position.
-- [x] `Packages/OmniSim/Sources/OmniSim/Rig/GazeRaycaster.swift` — mouse-driven gaze ray from the head; click emits pinch.
-- [x] `Packages/OmniSim/Sources/OmniSim/Feedback/SimOutputSink.swift` — `OutputSink` that shows haptic and audio commands on the virtual device (pulse ring, vibration icon, sound cone). (Queues commands behind a Mutex; the rig drains it on the main actor each frame.) (Queue capped at 1024, drops oldest; test file `SimOutputSinkTests.swift` added, not a plan item [provisional: needs-tien-review].)
-- [x] `Packages/OmniSim/Tests/OmniSimTests/UsisRecorderPlayerTests.swift` — record → replay round-trip preserves packets and timing.
-- [x] `Packages/OmniSim/Tests/OmniSimTests/NoiseModelTests.swift` — emitted rates and noise within tolerance of the declared model (exercises the jitter buffer in Sim mode).
-- [x] `Packages/OmniSim/Tests/OmniSimTests/SimPipelineTests.swift` — virtual devices and `UsisPlayer` through `InputPipeline`: jitter-buffer interpolation at mixed rates, stale-freeze, calibration, and an `InputFrame` that carries no source (added after the plan.md audit; overview.md does not require it).
+
+- [x] `Packages/OmniSim/Sources/OmniSim/NoiseModel.swift`
+- [x] `Packages/OmniSim/Sources/OmniSim/VirtualDevice.swift`
+- [x] `Packages/OmniSim/Sources/OmniSim/Devices/VirtualAirPods.swift`
+- [x] `Packages/OmniSim/Sources/OmniSim/Devices/VirtualWatch.swift`
+- [x] `Packages/OmniSim/Sources/OmniSim/Devices/VirtualPhone.swift`
+- [x] `Packages/OmniSim/Sources/OmniSim/Devices/VirtualPencil.swift`
+- [x] `Packages/OmniSim/Sources/OmniSim/Recording/UsisRecorder.swift`
+- [x] `Packages/OmniSim/Sources/OmniSim/Recording/UsisPlayer.swift`
+- [x] `Packages/OmniSim/Sources/OmniSim/Presets/PresetLibrary.swift`
+- [x] `Packages/OmniSim/Sources/OmniSim/Presets/airpods-head-pitch.usis.jsonl`
+- [x] `Packages/OmniSim/Sources/OmniSim/Presets/watch-double-tap.usis.jsonl`
+- [x] `Packages/OmniSim/Sources/OmniSim/Presets/watch-flick.usis.jsonl`
+- [x] `Packages/OmniSim/Sources/OmniSim/Presets/pencil-barrel-roll.usis.jsonl`
+- [x] `Packages/OmniSim/Sources/OmniSim/Rig/SensorRigScene.swift`
+- [x] `Packages/OmniSim/Sources/OmniSim/Rig/GizmoController.swift`
+- [x] `Packages/OmniSim/Sources/OmniSim/Rig/GazeRaycaster.swift`
+- [x] `Packages/OmniSim/Sources/OmniSim/Feedback/SimOutputSink.swift`
+- [x] `Packages/OmniSim/Tests/OmniSimTests/UsisRecorderPlayerTests.swift`
+- [x] `Packages/OmniSim/Tests/OmniSimTests/NoiseModelTests.swift`
+- [x] `Packages/OmniSim/Tests/OmniSimTests/SimPipelineTests.swift`
 
 ### 2.3 OmniScript — creator scripting API
-- [x] `Packages/OmniScript/Sources/OmniScript/Resources/prelude.js` — defines `script({...})` and handles `export default` for JavaScriptCore (which has no ES module loader). (Also defines `serverScript({...})`, overview.md Module 3.)
-- [x] `Packages/OmniScript/Sources/OmniScript/SelfBridge.swift` — `JSExport` surface for `self` (audio, speed, entity state). (Also deletes `Module.swift`.) (Imports RealityKit via OmniRuntime; `audio.play` sets `AudioEmitterComponent` only, no playback yet [provisional: needs-tien-review].)
-- [x] `Packages/OmniScript/Sources/OmniScript/ContextBridge.swift` — `JSExport` surface for `ctx` (`spawn`, `intensity`, output commands); no file, network or raw USIS access. (Also `ctx.remote.fire`, which sends through the `RemoteChannel`; the only network path a script has.) (`ctx.haptic` target defaults to "hand", 120 ms; `ctx.intensity` shared per engine [provisional: needs-tien-review].)
-- [x] `Packages/OmniScript/Sources/OmniScript/ScriptEngine.swift` — sandboxed `JSContext`; implements `EventDispatcher` to call `onLookAt`/`onGesture`/`onHeartRate`/`onRaycastHit` handlers. (Also calls `onTriggerEnter` / `onTriggerExit` handlers for the `triggerEntered` / `triggerExited` events added in 1.5.) (Also calls `onRemote` for remote events from the server, delivered at the start of the frame.)
-- [x] `Packages/OmniScript/Sources/OmniScript/ScriptReloader.swift` — recompiles a script on source change without restarting the scene. (Reports `Outcome` per update and keeps compile errors in `failures`; also has a batch `update` [provisional: needs-tien-review].)
-- [x] `Packages/OmniScript/Sources/OmniScript/RemoteChannel.swift` — protocol carrying remote events between client scripts and server scripts (player id, event name, JSON data); implemented in memory by Studio's `LocalTestSession` and later by the player app's game-server connection, so scripts can't tell which. (`fireToServer` / `fire(to:)` / `fireAll`, data as JSON text [provisional: needs-tien-review].)
-- [x] `Packages/OmniScript/Sources/OmniScript/ServerScriptEngine.swift` — sandboxed `JSContext` running a game's server scripts: `onPlayerJoin` / `onPlayerLeave` / `onRemote`, `ctx.state`, `ctx.remote.fire` / `fireAll`; never sees input. Mirrors the backend's `script_host.rs` (same `serverScript` API). (Fixture is a JS string constant that `Backend/tests/script_host.rs` copies; remote data crosses as JSON text, invalid -> null; also exposes `stateJSON()` and `handlerErrors` [provisional: needs-tien-review].)
-- [x] `Packages/OmniScript/Tests/OmniScriptTests/ScriptEngineTests.swift` — handler dispatch, sandbox isolation, error containment, hot reload. (Covers the trigger handlers too.) (Also `onRemote` dispatch and `ctx.remote.fire`.)
-- [x] `Packages/OmniScript/Tests/OmniScriptTests/ServerScriptEngineTests.swift` — join/leave, remote event in → `fireAll` out, sandbox isolation; uses the same server-script fixture as `Backend/tests/script_host.rs`.
+
+- [x] `Packages/OmniScript/Sources/OmniScript/Resources/prelude.js`
+- [x] `Packages/OmniScript/Sources/OmniScript/SelfBridge.swift`
+- [x] `Packages/OmniScript/Sources/OmniScript/ContextBridge.swift`
+- [x] `Packages/OmniScript/Sources/OmniScript/ScriptEngine.swift`
+- [x] `Packages/OmniScript/Sources/OmniScript/ScriptReloader.swift`
+- [x] `Packages/OmniScript/Sources/OmniScript/RemoteChannel.swift`
+- [x] `Packages/OmniScript/Sources/OmniScript/ServerScriptEngine.swift`
+- [x] `Packages/OmniScript/Tests/OmniScriptTests/ScriptEngineTests.swift`
+- [x] `Packages/OmniScript/Tests/OmniScriptTests/ServerScriptEngineTests.swift`
 
 ### 2.4 OmniStudio — simulator UI
-- [x] `Apps/OmniStudio/OmniStudio/Sim/SimulatorPanelView.swift` — device slot picker, gizmos/sliders, heart-rate slider, "spike" button, preset buttons, record/replay controls. (Also the simulated player count and which player the panel and viewport follow, overview.md Module 4 Multiple players.) (Panel state is UI-only for player count and selection until `LocalTestSession` exists. Recording captures only sources the panel starts itself; the head device is started by `AppModel` straight onto the pipeline. Mounting the panel in the window is unscheduled.)
-- [x] `Apps/OmniStudio/OmniStudio/Test/LocalTestSession.swift` — local multiplayer test (overview.md Module 7): one `ServerScriptEngine` plus N simulated players, each with its own `InputPipeline`, `SceneRunner` and client `ScriptEngine`, joined by an in-memory `RemoteChannel`; a game with no server scripts runs as a single player with no server. (Viewport shows one selected player — plan decision.) (Remote events are queued in an in-memory channel and delivered at a fixed point in `tick()`, not synchronously from inside script handlers; no tests scheduled.)
-- [x] `Apps/OmniStudio/OmniStudio/Debug/DebugOverlayView.swift` — live raw USIS JSON per device: rate, latency, stale flags, source, schema errors.
-- [x] `Apps/OmniStudio/OmniStudio/Debug/CapabilityWarningView.swift` — warns when connected or simulated devices cannot satisfy the game's declared capability tier (`SceneDescription.requiredTier`, mapped to `CapabilityTier`).
+
+- [x] `Apps/OmniStudio/OmniStudio/Sim/SimulatorPanelView.swift`
+- [x] `Apps/OmniStudio/OmniStudio/Test/LocalTestSession.swift`
+- [x] `Apps/OmniStudio/OmniStudio/Debug/DebugOverlayView.swift`
+- [x] `Apps/OmniStudio/OmniStudio/Debug/CapabilityWarningView.swift`
+
+Full text: planHistory/phase-02.md
 
 ---
 
@@ -184,12 +202,13 @@ Goal: real devices stream USIS into the same pipeline; Sim ↔ Live is a one-cli
 
 Goal: a game playable by a stranger in under 60 s using at least two input types, built only through the public runtime and script API. Name and design are unscheduled (`<Flagship>` placeholder). Also: creators sign in and publish from Studio to the Rust backend (4.1, 4.2).
 
-- [x] `Games/Flagship/scene.json` — `SceneDescription` for the game world. (Sets `requiredTier`.) (`SceneDescription` has no mesh component, so no visuals in the scene file [provisional: needs-tien-review].)
+- [x] `Games/Flagship/scene.json` — `SceneDescription` for the game world. (Sets `requiredTier`.) (`SceneDescription` has no mesh component, so no visuals in the scene file [provisional: needs-tien-review].) (Changed 2026-11-14: `requiredTier` 3 → 1; heart rate only scales aggression and the game plays without it, so phones show it playable. Published to Vultr as "Hollow Choir" by dev account "Omni", game `15d5eaa5-5ce8-4f87-a87a-08614e9ac91b` v1.)
 - [x] `Games/Flagship/scripts/enemy.js` — enemy behavior: `onLookAt` audio lock-on, `onHeartRate` aggression scaling. (API names `self.name`, `self.speed`, `self.audio.play`, `ctx.haptic` and plain `ctx.state` assumed; server uses `fireAll` only; sound and haptic names invented; same for `player.js` and `game.js` [provisional: needs-tien-review].)
 - [x] `Games/Flagship/scripts/player.js` — player abilities: `onGesture` actions, haptic feedback via `ctx`.
 - [x] `Games/Flagship/scripts/game.js` — win/lose flow and difficulty tuning.
 - [x] `Apps/OmniStudio/OmniStudio/Scripting/ScriptEditorView.swift` — script editor with hot reload through `ScriptReloader`. (Views built but not yet wired into the Studio window, as of #145; same for `InspectorView.swift`.)
 - [x] `Apps/OmniStudio/OmniStudio/Inspector/InspectorView.swift` — entity inspector for components and script assignment.
+- [x] `Apps/OmniStudio/OmniStudio/Game/GameLoader.swift` — reads a game (scene + client / server script sources) from a folder or a cloud `GameBundle`; `AppModel` loads Flagship from disk at launch and runs it, Game menu = Reload Flagship / Open folder / Open from cloud. (Added 2026-11-14, not in the original plan. One local player + local `ServerScriptEngine` inside `AppModel` through `ModeController`, so Sim / Live / Demo feed the game; `LocalTestSession` still unmounted. Every leaf entity drawn as a gray box (no mesh component in `SceneDescription`). Sim Watch adds Pinch / Flick toolbar buttons. Lookup: env `OMNI_GAME_DIR`, then `Games/Flagship` above cwd, app bundle or `#filePath`. Cloud URL env `OMNI_CLOUD_URL`, else localhost. Checked by a scratch harness (load, lookAt + trigger haptics, pinch adds output, no script errors), not committed; the window was never seen (no screen capture here); Open from cloud not exercised. FLAGGED: AirPods give no `position`, so head triggers never fire in Live; no confirmed live `gesture` source; `GameLoader.fromBundle` is what OmniPlayer needs to run games, move to a package then.)
 
 Not file-bound: sound design, visuals and feedback polish (no gray boxes); playtest with someone who has never seen it.
 
@@ -335,43 +354,101 @@ Rules for every Phase 9 item:
 - Re-listing an existing file is allowed for a follow-up change, as in 8.1.
 
 ### 9.1 Backend — catalog and Apple sign-in (changes to Phase 4.2 / 8.1 files, plus new files; blocks 9.2 and 9.4)
-- [ ] `Backend/Cargo.toml` — add an RS256 JWT verifier and an HTTPS client (to fetch Apple's signing keys); nothing else. (Crate names not decided [provisional: needs-tien-review]; accounts.rs currently says "no new crates".)
-- [ ] `Backend/src/db.rs` — `list_catalog(&Db)`: one row per game with id, title, owner `display_name`, latest version, `run_mode` and the scene JSON (the tier is read from `requiredTier`, default 1). Postgres query and `Db::Mem` arm.
-- [ ] `Backend/src/memstore.rs` — `MemStore::list_catalog`, same result as `db.rs`.
-- [ ] `Backend/src/api/library.rs` — `GET /api/library`, any signed-in account: id, title, author, latestVersion, runMode, requiredTier per game. (No description: `GameBundle` carries none. Every published game is listed; permissions and moderation undecided [provisional: needs-tien-review].)
-- [ ] `Backend/src/api/apple.rs` — `POST /api/accounts/apple` `{identityToken, displayName?}`: verify RS256 against Apple's keys, iss `https://appleid.apple.com`, aud in env `OMNI_APPLE_AUDIENCES`, not expired; `upsert_account` with provider `apple` and subject = `sub`, name from the request only (Apple omits it from the token and sends it once, at first authorization; `upsert_account` keeps the stored name when the new one is empty); returns the same `{token, account}` as dev sign-in. The key source is a trait so tests inject keys. (Check `store_session` visibility in `accounts.rs`; if private, make it `pub(crate)` in this item.)
-- [ ] `Backend/src/api/mod.rs` — declare the `library` and `apple` modules.
-- [ ] `Backend/src/lib.rs` — mount both routers.
-- [ ] `Backend/tests/library.rs` — catalog fields; signed-out rejected; newest version wins. In-memory store, so it runs without `DATABASE_URL`.
-- [ ] `Backend/tests/apple.rs` — valid token signs in; wrong audience, expired and bad signature rejected; a repeat sign-in without a name keeps the name. In-memory store, injected keys.
+- [x] `Backend/Cargo.toml` — add an RS256 JWT verifier and an HTTPS client (to fetch Apple's signing keys); nothing else. (Crate names not decided [provisional: needs-tien-review]; accounts.rs currently says "no new crates".) (Chosen: `jsonwebtoken` 12 with `rust_crypto` and `reqwest` 0.12 with `rustls-tls` + `json`, both default-features off; no aws-lc, which needs a C toolchain on Windows; `ring` was already in the tree via sqlx. `jsonwebtoken` 12 needs rustc 1.88+; checked on 1.95 only, no toolchain pin. `Cargo.lock` grew by ~840 lines. The "no new crates" comment in accounts.rs is now stale: flagged, not edited.) (Also `getrandom` 0.3 for `accounts.rs::new_token`; already in `Cargo.lock`, so no new package.)
+- [x] `Backend/src/db.rs` — `list_catalog(&Db)`: one row per game with id, title, owner `display_name`, latest version, `run_mode` and the scene JSON (the tier is read from `requiredTier`, default 1). Postgres query and `Db::Mem` arm. (Diverges: returns `required_tier` (`catalog_tier`: JSON integer clamped to 1..=3, anything else 1) and not the scene JSON, so the catalog never ships full scenes; games with no version are not listed; no paging or cap, undecided. The Postgres query has not run: no `DATABASE_URL` here, only the in-memory path is tested; `db_round_trip` covers it when `DATABASE_URL` is set.)
+- [x] `Backend/src/memstore.rs` — `MemStore::list_catalog`, same result as `db.rs`. (An owner with no account row gets author ""; Postgres has a foreign key.)
+- [x] `Backend/src/api/library.rs` — `GET /api/library`, any signed-in account: id, title, author, latestVersion, runMode, requiredTier per game. (No description: `GameBundle` carries none. Every published game is listed; permissions and moderation undecided [provisional: needs-tien-review].) (4 in-file tests plus `tests/library.rs`.)
+- [x] `Backend/src/api/apple.rs` — `POST /api/accounts/apple` `{identityToken, displayName?}`: verify RS256 against Apple's keys, iss `https://appleid.apple.com`, aud in env `OMNI_APPLE_AUDIENCES`, not expired; `upsert_account` with provider `apple` and subject = `sub`, name from the request only (Apple omits it from the token and sends it once, at first authorization; `upsert_account` keeps the stored name when the new one is empty); returns the same `{token, account}` as dev sign-in. The key source is a trait so tests inject keys. (Check `store_session` visibility in `accounts.rs`; if private, make it `pub(crate)` in this item.) (Done: `store_session` was private, now `pub(crate)`. Verified by 5 in-file tests (audience parsing, 400, 503 without a database or audiences, 401 for an undecodable token with no key lookup) and `tests/apple.rs`. Also added `HttpAppleKeys::with_url` so tests can point the real key source at a local server. `HttpAppleKeys` honors `HTTP_PROXY`, so a bad proxy setting on the server turns every Apple sign-in into a 502. Two checks are defence in depth, not gaps: the early `alg != RS256` check (the library's validation also refuses other algorithms) and `sub` in the required claims (the claims struct already rejects a missing `sub`). `OMNI_APPLE_AUDIENCES` unset means the route answers 503. Not built: nonce check (a stolen identity token can be replayed until it expires, ~10 min) and a rate limit. Also changed: `accounts.rs::new_token` now uses `getrandom` (OS randomness, fails closed), as that file's own comment required before any real sign-in; the comment above `new_token` is now stale, flagged, not edited. FLAGGED, not scheduled: `Deploy/vultr-bootstrap.sh` never asks for `OMNI_APPLE_AUDIENCES` and rewrites `.env` on re-run, so the hosted route answers 503 until that is fixed.) (Changed 2026-11-14: `Deploy/vultr-bootstrap.sh` now asks for `OMNI_APPLE_AUDIENCES` and appends it to an existing `.env` when passed; the flag's "rewrites `.env` on re-run" was wrong, the script keeps an existing `.env`. Bundle id not chosen (9.4), so the hosted Apple route still answers 503 until it is set.)
+- [x] `Backend/src/api/mod.rs` — declare the `library` and `apple` modules.
+- [x] `Backend/src/lib.rs` — mount both routers.
+- [x] `Backend/tests/library.rs` — catalog fields; signed-out rejected; newest version wins. In-memory store, so it runs without `DATABASE_URL`. (One test function on purpose: it sets `OMNI_DEV_SIGNIN`, and `set_var` must not race other test threads.)
+- [x] `Backend/tests/apple.rs` — valid token signs in; wrong audience, expired and bad signature rejected; a repeat sign-in without a name keeps the name. In-memory store, injected keys. (8 tests. Section A: valid sign-in and `/api/accounts/me` + `/api/library` with the issued session; repeat sign-in, blank name and rename; different `sub`; several audiences; 401 with no session for wrong audience, expired (1 h; default leeway is 60 s), bad signature, wrong issuer, HS256, unknown key id, missing `sub`, empty `sub`, garbage; 502 for a down key source; 503 with no audiences. Section B, one test fn because it sets `NO_PROXY` (reqwest honors `HTTP_PROXY`), runs the real `HttpAppleKeys` against a local server: one fetch then cache hits, no refetch for an unknown key id inside 60 s, 502 for a dead server, an error status and a non-key-set body. Test RSA key is a hex constant generated for this file. Mutation check in a scratch copy: audience, expiry and issuer checks, name trimming, key cache, fetch throttle, empty-audiences 503 and the empty-`sub` check each fail a test. Not testable without waiting: the 1 h cache expiry and the 60 s throttle release. Scratch builds must use their own `CARGO_TARGET_DIR`: sharing `Backend/target` made the repo run a stale mutated library.)
 
 ### 9.2 OmniCloud — catalog and Apple sign-in client
-- [ ] `Packages/OmniCloud/Package.swift` — add `.iOS(.v18)`. (OmniCloud was macOS-only; the iOS app needs it.)
-- [ ] `Packages/OmniCloud/Sources/OmniCloud/CloudClient.swift` — `CatalogEntry`; `listCatalog()`; `signInWithApple(identityToken:displayName:)`. (Same file as the client: `sessionToken` and `send` are `private`, so an extension in another file cannot use them.)
-- [ ] `Packages/OmniCloud/Tests/OmniCloudTests/LibraryAPITests.swift` — request and response coding against a stubbed `URLProtocol`; a 401 surfaces as `CloudError.unauthorized`.
+- [x] `Packages/OmniCloud/Package.swift` — add `.iOS(.v18)`. (OmniCloud was macOS-only; the iOS app needs it.) (Before the change the iOS Simulator build failed on one error, `URL.append(path:)` needs iOS 16; after it, `xcodebuild build -scheme OmniCloud -destination 'generic/platform=iOS Simulator'` succeeds. Build only: no iOS test run until 9.4.)
+- [x] `Packages/OmniCloud/Sources/OmniCloud/CloudClient.swift` — `CatalogEntry`; `listCatalog()`; `signInWithApple(identityToken:displayName:)`. (Same file as the client: `sessionToken` and `send` are `private`, so an extension in another file cannot use them.) (The new methods call the backend's real routes, `POST /api/accounts/apple` and `GET /api/library`, and read its real sign-in response (`{token, account}` with snake_case `display_name`). The existing methods (`signIn`, `publish`, `listGames`, `fetchGame`) still use the provisional `/v1` routes of `docs/agents/cloud-api.md`, which the backend does not serve: FLAGGED, not scheduled, and it breaks Studio's publish and sign-in against the real backend and the `fetchGame` the Play stub in 9.3 relies on. The file header comment ("routes provisional") and the `signIn` doc comment are now stale, flagged, not edited; `cloud-api.md` does not list the new routes.) (Fixed 2026-11-14: `signIn`, `publish`, `listGames`, `fetchGame` now use the backend's `/api` routes with its snake_case shapes; public Swift signatures unchanged. `signIn(token:)` adopts a pasted session token and checks it with `GET /api/accounts/me`; new `signInDev(name:)` = web Studio dev sign-in; `publish` without a game id creates it first (`POST /api/games`); `listGames` takes the latest version from `/api/library` (0 if never published); a version's title comes from `metadata.title`, else `metadata.name` (web Studio), else ""; assets travel as `{name: {contentType, data}}` base64, a plan decision. 22 OmniCloud tests pass; a scratch Swift client ran sign-in, create, publish x2, list, fetch and catalog against a local backend. Stale, flagged not edited: the file header comment ("routes provisional; see cloud-api.md") and the `signIn` doc comment; Studio's `SignInView` still asks for a pasted token rather than using `signInDev`.)
+- [x] `Packages/OmniCloud/Tests/OmniCloudTests/LibraryAPITests.swift` — request and response coding against a stubbed `URLProtocol`; a 401 surfaces as `CloudError.unauthorized`. (11 tests; full OmniCloud suite 20 passed on macOS. Uses its own `LibraryStub`, not `StubProtocol`: Swift Testing runs separate suites in parallel and `StubProtocol`'s statics are shared. Mutation check in a scratch copy: wrong route, session token not stored, missing `display_name` mapping, and no auth on `listCatalog` each fail named tests.)
 
 ### 9.3 OmniLibrary — device profile and library model (new package; depends on OmniCloud only; macOS 15 + iOS 18; testTarget `OmniLibraryTests`)
-- [ ] `Packages/OmniLibrary/Package.swift` — OmniLibrary manifest, depends on OmniCloud only.
-- [ ] `Packages/OmniLibrary/Sources/OmniLibrary/DeviceProfile.swift` — device kind (iPhone / iPad / Mac), model, OS, sensors, and `maxTier` (a plain Int 1…3, like `SceneDescription.requiredTier`, so OmniLibrary stays off OmniInput).
-- [ ] `Packages/OmniLibrary/Sources/OmniLibrary/Playability.swift` — pure function (catalog entry, device profile) → playable / needsController / needsTier(n) / needsDisplay. `device` games need a phone; `screen` games need a display plus controllers (overview.md Module 7 Run Mode).
-- [ ] `Packages/OmniLibrary/Sources/OmniLibrary/SessionStore.swift` — `SessionStore` protocol; Keychain implementation; in-memory implementation for tests.
-- [ ] `Packages/OmniLibrary/Sources/OmniLibrary/LibraryModel.swift` — main-actor observable model: loads the catalog through a `CatalogSource` protocol (`CloudClient` conforms), search, refresh, error state, per-entry playability.
-- [ ] `Packages/OmniLibrary/Sources/OmniLibrary/GameLauncher.swift` — `GameLauncher` protocol plus `StubGameLauncher` (fetches the `FetchedGame`, records it, no runtime). This is the seam the runtime plugs into in the next round.
-- [ ] `Packages/OmniLibrary/Tests/OmniLibraryTests/DeviceProfileTests.swift` — each device kind maps to its sensors and `maxTier`.
-- [ ] `Packages/OmniLibrary/Tests/OmniLibraryTests/PlayabilityTests.swift` — every outcome for both run modes and tiers 1 to 3.
-- [ ] `Packages/OmniLibrary/Tests/OmniLibraryTests/LibraryModelTests.swift` — load, search, error and empty states; `StubGameLauncher` and the in-memory session store.
+- [x] `Packages/OmniLibrary/Package.swift` — OmniLibrary manifest, depends on OmniCloud only. (The test target also lists the OmniCloud product, since the tests build `CatalogEntry` and `FetchedGame`.)
+- [x] `Packages/OmniLibrary/Sources/OmniLibrary/DeviceProfile.swift` — device kind (iPhone / iPad / Mac), model, OS, sensors, and `maxTier` (a plain Int 1…3, like `SceneDescription.requiredTier`, so OmniLibrary stays off OmniInput). (Presets: iPhone and iPad = display + touch + motion, Mac = display only; `maxTier` is 1 for every kind because Tier 2 (LiDAR) and Tier 3 (Watch) cannot be detected without ARKit, so `needsTier(2|3)` shows on every real device today; callers with better knowledge pass their own `maxTier`, clamped to 1…3. `current()` reads `hw.model` / `hw.machine` (or `SIMULATOR_MODEL_IDENTIFIER`) with no UIKit; a non-iPad iOS machine counts as iPhone. Not decided, no revisit scheduled.)
+- [x] `Packages/OmniLibrary/Sources/OmniLibrary/Playability.swift` — pure function (catalog entry, device profile) → playable / needsController / needsTier(n) / needsDisplay. `device` games need a phone; `screen` games need a display plus controllers (overview.md Module 7 Run Mode). (Diverges: a fifth outcome `needsPhone`, because a `device` game on a Mac or iPad fits none of the four listed. Check order: `device` needs an iPhone; `screen` and any unknown run mode need a display, then motion or touch; then the tier. A Mac has no built-in motion, so every screen game is `needsController` there until the Mac bridge input lands. [provisional: needs-tien-review])
+- [x] `Packages/OmniLibrary/Sources/OmniLibrary/SessionStore.swift` — `SessionStore` protocol; Keychain implementation; in-memory implementation for tests. (Stores a `StoredSession` (token + `Account`) as JSON in one generic-password item; save adds then updates on a duplicate; undecodable data is deleted and read as signed out; no `kSecUseDataProtectionKeychain`. FLAGGED, not built: `CloudClient` cannot export or restore its session token, so nothing can feed a stored session back into it; see the follow-up item in 9.4.)
+- [x] `Packages/OmniLibrary/Sources/OmniLibrary/LibraryModel.swift` — main-actor observable model: loads the catalog through a `CatalogSource` protocol (`CloudClient` conforms), search, refresh, error state, per-entry playability. (`load()` only from idle, `refresh()` always, both ignored while loading; a failure keeps the old entries; 401 or not signed in = `.failed(.signedOut)`; a cancelled task is not a failure; `reset()` bumps a generation so a request in flight at sign-out cannot refill the next user's library. Search is case and diacritic insensitive on title and author and keeps server order.)
+- [x] `Packages/OmniLibrary/Sources/OmniLibrary/GameLauncher.swift` — `GameLauncher` protocol plus `StubGameLauncher` (fetches the `FetchedGame`, records it, no runtime). This is the seam the runtime plugs into in the next round. (Adds a `GameSource` protocol that `CloudClient` conforms to, and `LaunchResult { game, started }`, always `started: false`. Fetches the entry's `latestVersion`, throws `LaunchError.mismatch` if the server returns another game or version, keeps the last 10. FLAGGED: `CloudClient.fetchGame` still calls the provisional `/v1` routes, so this works against fakes only until those are fixed; see 9.2.) (Changed 2026-11-14: `CloudClient` now uses the backend's `/api` routes (commit 122eeae), so the flag above is resolved and Play works against the real backend.)
+- [x] `Packages/OmniLibrary/Tests/OmniLibraryTests/DeviceProfileTests.swift` — each device kind maps to its sensors and `maxTier`. (Also tier clamping, machine-string parsing and `current()` on macOS.)
+- [x] `Packages/OmniLibrary/Tests/OmniLibraryTests/PlayabilityTests.swift` — every outcome for both run modes and tiers 1 to 3. (The 18-case matrix is written out, plus unknown run mode, tier below 1, custom profiles and check order.)
+- [x] `Packages/OmniLibrary/Tests/OmniLibraryTests/LibraryModelTests.swift` — load, search, error and empty states; `StubGameLauncher` and the in-memory session store. (36 tests across the package pass on macOS, OmniCloud's 20 still pass, the iOS Simulator build succeeds. Also covers cancellation, reset during a request in flight, the Keychain store (it works inside macOS `swift test`) and corrupt Keychain data. Mutation check in scratch copies: case-sensitive search, tier check first, tier off by one, refresh unguarded, failure wiping entries, no generation check, no mismatch check, nil version, corrupt data not cleared, no task-cancel check, uncapped history and no update on a duplicate each fail a named test; two of these first survived or hung and were fixed in the tests (gate valve and all-waiters fake, direct Keychain lookup). Not tested: iOS device Keychain, `DeviceProfile.current()` on iOS.)
 
 ### 9.4 OmniPlayer — iOS + macOS app (Mac worker; `xcodebuild` iOS Simulator and macOS builds in the PR)
-- [ ] `Omni.xcworkspace/contents.xcworkspacedata` — reference `Packages/OmniLibrary` and `Apps/OmniPlayer/OmniPlayer.xcodeproj`. (Xcode-generated; commit as-is.)
-- [ ] `Apps/OmniPlayer/OmniPlayer.xcodeproj/project.pbxproj` — multiplatform SwiftUI app (iOS 18 + macOS 15), one bundle id, links OmniLibrary and OmniCloud. (Hand-written like Studio's [provisional: needs-tien-review].)
-- [ ] `Apps/OmniPlayer/OmniPlayer.entitlements` — `com.apple.developer.applesignin`.
-- [ ] `Apps/OmniPlayer/OmniPlayer/OmniPlayerApp.swift` — SwiftUI app entry.
-- [ ] `Apps/OmniPlayer/OmniPlayer/PlayerModel.swift` — the second composition root: `CloudClient` (base URL from env `OMNI_CLOUD_URL`), session store, `DeviceProfile`, `LibraryModel`, `StubGameLauncher`.
-- [ ] `Apps/OmniPlayer/OmniPlayer/Account/AppleSignInView.swift` — `SignInWithAppleButton` → `signInWithApple`, passing the name from the first authorization; `#if DEBUG` dev-token fallback for the simulator.
-- [ ] `Apps/OmniPlayer/OmniPlayer/Library/LibraryView.swift` — grid / list, search, tier badge, playable flag.
-- [ ] `Apps/OmniPlayer/OmniPlayer/Library/GameDetailView.swift` — metadata, run mode and Play (shows the stub result).
+- [x] `Omni.xcworkspace/contents.xcworkspacedata` — reference `Packages/OmniLibrary` and `Apps/OmniPlayer/OmniPlayer.xcodeproj`. (Xcode-generated; commit as-is.) (Edited by hand: two `FileRef` entries. `xcodebuild -workspace Omni.xcworkspace -scheme OmniPlayer` builds for the iOS Simulator and macOS.)
+- [x] `Apps/OmniPlayer/OmniPlayer.xcodeproj/project.pbxproj` — multiplatform SwiftUI app (iOS 18 + macOS 15), one bundle id, links OmniLibrary and OmniCloud. (Hand-written like Studio's [provisional: needs-tien-review].) (One target, `SDKROOT = auto`, `com.omni.OmniPlayer` (an assumption: the human registers it), ad-hoc signing. Built for the iOS Simulator and macOS, Debug and Release, each with no warnings beyond the harmless "AppIntents metadata extraction skipped" line. Extra file `Apps/OmniPlayer/Info.plist`, merged with the generated one, carries `OmniCloudURL = $(OMNI_CLOUD_URL)` (build setting `OMNI_CLOUD_URL`, empty by default): a custom `INFOPLIST_KEY_` setting is not emitted, and an app launched from the home screen has no environment variables. `SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG` is set for Debug: a hand-written project does not define it, which hid the dev sign-in until the run check caught it. The entitlement is wired for iOS only (`CODE_SIGN_ENTITLEMENTS[sdk=iphone*]`): with ad-hoc signing it fails the macOS Release build ("requires a development certificate"), so Sign in with Apple on the Mac needs the human to pick a team and add `CODE_SIGN_ENTITLEMENTS[sdk=macosx*]`. No App Sandbox (Studio has none either); App Store distribution needs it plus `network.client`. `http://localhost` works from the simulator with no ATS entry; an `http://` LAN or public host on a device would be blocked, and Caddy's local CA on a bare IP is not trusted on a device, so a hosted backend needs a domain.)
+- [x] `Apps/OmniPlayer/OmniPlayer.entitlements` — `com.apple.developer.applesignin`. (`Default`; applied to iOS builds only, see the project item. Present in the simulator build's entitlements; macOS builds carry none.)
+- [x] `Apps/OmniPlayer/OmniPlayer/OmniPlayerApp.swift` — SwiftUI app entry. (A private `RootView` switches between a spinner, `AppleSignInView` and `LibraryView`; `start()` runs once per launch.)
+- [x] `Packages/OmniCloud/Sources/OmniCloud/CloudClient.swift` — follow-up to 9.2, needed before `PlayerModel.swift` can keep a player signed in: `currentSession()` returning the token and account, and `restoreSession(token:account:)`; plus a test in `Packages/OmniCloud/Tests/OmniCloudTests/LibraryAPITests.swift`. (Added at the 9.3 apply: `sessionToken` is private with no setter, so the stored session in `SessionStore` cannot be fed back into the client. Backend sessions are in memory, so a stored token stops working when the backend restarts and the client then clears it on the 401.) (Narrowed at the 9.4 stage: `signIn(token:)` already adopts a session token and checks it with `GET /api/accounts/me`, so it is the restore call. Only the read side was missing: `sessionToken` is now `public private(set)`, with the test `sessionTokenIsReadableAfterSignIn` (23 OmniCloud tests pass). No `currentSession()` or `restoreSession` was added.)
+- [x] `Apps/OmniPlayer/OmniPlayer/PlayerModel.swift` — the second composition root: `CloudClient` (base URL from env `OMNI_CLOUD_URL`), session store, `DeviceProfile`, `LibraryModel`, `StubGameLauncher`. (Base URL = env `OMNI_CLOUD_URL`, then Info.plist `OmniCloudURL`, then `http://localhost:8080`; unusable values (blank, not http / https, no host) fall through. Restore on launch: a rejected session is cleared, an offline or 5xx start keeps it and offers "Try again", a successful one refreshes the stored account. A failed Keychain save does not fail a sign-in. Sign-out clears the store and the library but does not call the backend's `/api/accounts/signout` (no `CloudClient` method); the server-side session lives until the backend restarts. FLAGGED: no app test target in the plan, so the logic was tested in a scratch SwiftPM package outside the repo, not committed: 14 tests, and a mutation check where offline clearing the store, no re-save, sign-out or rejection not clearing the store, a failed save failing the sign-in, any URL scheme accepted and `sessionExpired` without its guard each fail a named test. Offer an app test target later if wanted.)
+- [x] `Apps/OmniPlayer/OmniPlayer/Account/AppleSignInView.swift` — `SignInWithAppleButton` → `signInWithApple`, passing the name from the first authorization; `#if DEBUG` dev-token fallback for the simulator. (Requests only the full name; a cancelled sheet shows no message; the identity token and name are read out of the non-Sendable authorization before the task starts. The debug fallback is a name field calling `signInDev` (the server needs `OMNI_DEV_SIGNIN=1`; a 404 reads "Dev sign-in is off on this server."), and is absent from Release binaries (checked by string search). No nonce is sent; the backend does not check one. NOT exercised: tapping Apple sign-in (needs a team, a registered bundle id, entitled signing and `OMNI_APPLE_AUDIENCES=com.omni.OmniPlayer` on the server) or the dev sign-in button (no UI automation here).)
+- [x] `Apps/OmniPlayer/OmniPlayer/Library/LibraryView.swift` — grid / list, search, tier badge, playable flag. (Adaptive grid, one column on a phone; flag is a symbol plus words. Handles loading, empty, no-search-results and error states, and sends an expired session back to sign-in. Seen running only as far as the sign-in screen on the iOS Simulator and a macOS Debug launch that stayed alive 6 s: the library and detail screens were never rendered, because nothing here can tap through sign-in.)
+- [x] `Apps/OmniPlayer/OmniPlayer/Library/GameDetailView.swift` — metadata, run mode and Play (shows the stub result). (Play is disabled unless the game is playable; the result reads "Fetched version N: X client scripts, Y server scripts, Z assets. Running games on this device is not available yet." Shared helpers `Playability.summary`, `CatalogEntry.runModeLabel` and `runModeExplanation` live in `LibraryView.swift`.)
 
 Not file-bound: Apple Developer team, the Sign in with Apple capability and bundle id registration; the next round (runtime on the player, game-server WebSocket, Mac bridge input) needs `.iOS(.v18)` on OmniInput, OmniRuntime, OmniScript and OmniOutput first.
+
+---
+
+## Phase 10: Marketplace cloud follow-ups (after PR #161)
+
+Goal: move the plugin marketplace from the dev box (in-memory store, `OMNI_PLUGIN_SEED_DIR`, per-browser state, local model key) to hosted, per-account services. Nothing here is built; each item lists what it touches and when it is done. Source: WISHLIST and Debt in `docs/agents/progress/omni-marketplace.md`.
+
+### 10.1 Hosted registry on Vultr
+Goal: the plugins routes run against Postgres on the Vultr host, filled by a publish/seed job instead of `OMNI_PLUGIN_SEED_DIR`.
+- Touches: `Backend/src/api/marketplace.rs` (seed path, blocking `std::fs` at :89), `Backend/src/db.rs`, `Backend/migrations/0002_plugins.sql`, `Deploy/docker-compose.yml`, `Deploy/vultr-bootstrap.sh`.
+- Done when: the hosted backend lists and installs `langchain-deepagents` with `DATABASE_URL` set and no seed dir; the seed job is idempotent (a second run changes nothing) and applies the `[a-z0-9-]` id rule; a `Backend/tests` case runs against Postgres.
+
+### 10.2 Bundle object storage
+Goal: bundles are tarballs in Vultr Object Storage with content hashes and signatures, not JSON file maps in a JSONB column.
+- Touches: `Backend/src/api/marketplace.rs`, `Backend/src/db.rs`, a new migration (hash, signature, object key), `Web/studio/src/marketplace`, `Web/studio/src-tauri/src/plugins.rs` (verify before unpack).
+- Done when: install downloads the tarball, checks the SHA-256 and signature, and refuses a tampered bundle (test with one flipped byte); `uv.lock` and dotfiles are included, so the 256 KiB per-file rule no longer drops them.
+
+### 10.3 Authenticated publish API
+Goal: authors publish plugins with an account; versions are kept and installed plugins can update.
+- Touches: `Backend/src/api/marketplace.rs`, `Backend/src/api/accounts.rs`, `Backend/src/db.rs`, a new migration (author, version, status), `Web/studio/src/marketplace` (update button, version shown).
+- Done when: unauthenticated publish returns 401; a second publish of the same id needs a higher version; the Studio shows "update available" and updates in place; review/moderation state is stored and unreviewed plugins are not listed.
+
+### 10.4 Install telemetry
+Goal: installs are recorded per account, and uninstall lowers the count (today it only goes up and counts reinstalls).
+- Touches: `Backend/src/api/marketplace.rs`, `Backend/src/db.rs`, a new migration (install records per account and plugin), `Web/studio/src/marketplace`.
+- Done when: install, reinstall and uninstall leave the count equal to the number of accounts with the plugin installed; a test covers all three.
+
+### 10.5 Installed-plugin sync across devices
+Goal: installed plugins follow the account (cloud projects) instead of per-browser localStorage.
+- Touches: `Backend/src/api/marketplace.rs` (list my installs, built on 10.4 records), `Web/studio/src/marketplace`, `Web/studio/src-tauri/src/plugins.rs` (install on a second device).
+- Done when: installing on device A shows the plugin as installed on device B after sign-in, and uninstalling on A removes it on B after refresh.
+
+### 10.6 Hosted agent runtime for browser mode
+Goal: browser mode works without a local `uv` process on :9410.
+- Touches: `Plugins/langchain-deepagents/runtime`, `Deploy/` (run the runtime beside the backend), `Web/studio/src/marketplace` (runtime URL), `Backend/src/lib.rs` (proxy and auth).
+- Done when: a signed-in browser user with no local runtime gets an agent reply; the runtime accepts only authenticated requests; one runtime per project still holds.
+
+### 10.7 Per-account model API keys
+Goal: the model API key is stored per account on the server, not in a local env var.
+- Touches: `Backend/src/api/accounts.rs` or a new route, `Backend/src/db.rs`, a new migration (encrypted secret), `Plugins/langchain-deepagents/runtime` (read the key per request), `Web/studio/src/marketplace` (key form).
+- Done when: a key saved by one account is used only for that account's requests; it is encrypted at rest and never returned by any API; a test checks both.
+
+### 10.8 Live-model verification
+Goal: the live AI path is run once for real; today only `OMNI_AGENT_FAKE=1` is exercised.
+- Touches: `Plugins/langchain-deepagents/runtime` (default model ids), `docs/agents/progress/omni-marketplace.md` (record results).
+- Status: Anthropic and Google keys are untested; OpenAI is blocked on account credits; the Google default model id is unverified.
+- Done when: one prompt succeeds per provider (or is recorded as blocked with the reason), the Google default model id is confirmed against the provider's model list, and the demo notes say which providers were run live.
+
+### 10.9 Remaining marketplace fixes (open after PR #162)
+- [ ] Ship `uv.lock` in bundles: raise `MAX_FILE_BYTES` to 1 MiB in `Backend/src/api/marketplace.rs` (done and tested on branch `agent/tienvu-lol/omni-ws1-registry`; needs review and merge).
+- [ ] Seed-time plugin id rule `^[a-z0-9-]{1,64}$` in `read_plugin`; skip and log bad ids.
+- [ ] `src-tauri/src/plugins.rs`: key `Runtimes` by (project, plugin); `write_bundle` clears the old plugin dir after validation (no stale files on reinstall).
+- [ ] `Web/studio/src/marketplace/installer.ts`: browser start hint still mentions `OMNI_AGENT_FAKE=1`; remove it (fake mode is gone).
+- [ ] Runtime: sanitise provider exception text in `error` events (a provider could echo a key); do not hold the project lock while sending to a slow socket.
+- [ ] Non-Windows `stop_runtime` kills only the direct child; use process groups so `uv` leaves no orphaned python.
+- [ ] Postgres paths (0002 migrate guard, upsert, installs) have no CI run; add a `DATABASE_URL` job.
+- [ ] Live model run: OpenAI key has no credits; Anthropic and Google untested; Google default model id unverified.
 
 ---
 

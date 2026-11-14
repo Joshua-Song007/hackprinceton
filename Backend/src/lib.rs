@@ -49,10 +49,17 @@ pub fn app(db: Option<PgPool>) -> Router {
 /// Builds the router; with `studio_dir` the built Studio is served at `/` and unknown paths fall
 /// back to its index.html (single-page app routing).
 pub fn app_with_studio(db: Option<Db>, studio_dir: Option<PathBuf>) -> Router {
+    // Needs a Tokio runtime; main and the tests that build the app run inside one.
+    if let (Some(db), Ok(dir)) = (db.clone(), std::env::var("OMNI_PLUGIN_SEED_DIR")) {
+        tokio::spawn(async move { api::marketplace::seed(&db, std::path::Path::new(&dir)).await });
+    }
     let router = Router::new()
         .route("/health", get(health))
         .merge(api::accounts::routes())
         .merge(api::games::routes())
+        .merge(api::library::routes())
+        .merge(api::marketplace::routes())
+        .merge(api::apple::routes())
         .merge(game_server::session::routes())
         .merge(game_server::debug::routes());
     let router = match studio_dir {

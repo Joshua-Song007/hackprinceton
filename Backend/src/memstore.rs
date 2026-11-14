@@ -10,13 +10,16 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::db::{Account, Game, GameVersion, NewGameVersion};
+use serde_json::Value;
+
+use crate::db::{catalog_tier, Account, CatalogRow, Game, GameVersion, NewGameVersion, Plugin, PluginSummary};
 
 #[derive(Default)]
 struct Inner {
     accounts: Vec<Account>,
     games: Vec<Game>,
     versions: Vec<GameVersion>,
+    plugins: Vec<Plugin>,
 }
 
 /// Cheap to clone: clones share the same data.
@@ -159,6 +162,74 @@ impl MemStore {
             .max_by_key(|x| x.version)
             .cloned()
     }
+
+    /// Same rule as the SQL upsert: an existing plugin keeps its installs count.
+    pub fn upsert_plugin(&self, p: &Plugin) {
+        let mut s = self.lock();
+        match s.plugins.iter_mut().find(|x| x.id == p.id) {
+            Some(x) => *x = Plugin { installs: x.installs, ..p.clone() },
+            None => s.plugins.push(p.clone()),
+        }
+    }
+
+    /// Ordered by id, like the SQL `ORDER BY id`.
+    pub fn list_plugins(&self) -> Vec<PluginSummary> {
+        let mut out: Vec<PluginSummary> = self
+            .lock()
+            .plugins
+            .iter()
+            .map(|p| PluginSummary {
+                id: p.id.clone(),
+                name: p.name.clone(),
+                version: p.version.clone(),
+                author: p.author.clone(),
+                category: p.category.clone(),
+                description: p.description.clone(),
+                installs: p.installs,
+            })
+            .collect();
+        out.sort_by(|a, b| a.id.cmp(&b.id));
+        out
+    }
+
+    pub fn get_plugin_content(&self, id: &str) -> Option<(Value, Value)> {
+        let s = self.lock();
+        s.plugins.iter().find(|p| p.id == id).map(|p| (p.manifest.clone(), p.bundle.clone()))
+    }
+
+    pub fn add_plugin_install(&self, id: &str) -> Option<i64> {
+        let mut s = self.lock();
+        let p = s.plugins.iter_mut().find(|p| p.id == id)?;
+        p.installs += 1;
+        Some(p.installs)
+    }
+
+    /// Same result as the SQL in `db::list_catalog`: games with at least one version, newest-updated
+    /// first (then id). An owner with no account row gets an empty author (Postgres has a foreign key).
+    pub fn list_catalog(&self) -> Vec<CatalogRow> {
+        let s = self.lock();
+        let mut games: Vec<&Game> = s.games.iter().collect();
+        games.sort_by(|a, b| b.updated_at.cmp(&a.updated_at).then_with(|| a.id.cmp(&b.id)));
+        games
+            .into_iter()
+            .filter_map(|g| {
+                let latest = s.versions.iter().filter(|v| v.game_id == g.id).max_by_key(|v| v.version)?;
+                Some(CatalogRow {
+                    id: g.id.clone(),
+                    title: g.title.clone(),
+                    author: s
+                        .accounts
+                        .iter()
+                        .find(|a| a.id == g.owner_id)
+                        .map(|a| a.display_name.clone())
+                        .unwrap_or_default(),
+                    latest_version: latest.version,
+                    run_mode: latest.run_mode.clone(),
+                    required_tier: catalog_tier(&latest.scene["requiredTier"]),
+                })
+            })
+            .collect()
+    }
 }
 
 #[cfg(test)]
@@ -213,6 +284,62 @@ mod tests {
         assert!(m.fetch_game_version(&g1.id, Some(3)).is_none());
         assert!(m.insert_game_version("missing", &nv("x")).is_none());
         assert!(m.list_games_by_owner("o").iter().any(|g| g.id == g1.id && g.updated_at >= g1.created_at));
+    }
+
+    fn nvs(scene: serde_json::Value, run_mode: &str) -> NewGameVersion {
+        NewGameVersion { scene, run_mode: run_mode.into(), ..nv("x") }
+    }
+
+    #[test]
+    fn catalog_skips_unpublished_and_latest_version_wins() {
+        let m = MemStore::default();
+        let ann = m.upsert_account("dev", "s1", "Ann");
+        let g = m.create_game(&ann.id, "Mine");
+        m.create_game(&ann.id, "Draft");
+        assert!(m.list_catalog().is_empty());
+        m.insert_game_version(&g.id, &nvs(json!({"requiredTier": 1}), "screen")).unwrap();
+        m.insert_game_version(&g.id, &nvs(json!({"requiredTier": 2}), "device")).unwrap();
+        let rows = m.list_catalog();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(
+            rows[0],
+            CatalogRow {
+                id: g.id.clone(),
+                title: "Mine".into(),
+                author: "Ann".into(),
+                latest_version: 2,
+                run_mode: "device".into(),
+                required_tier: 2,
+            }
+        );
+    }
+
+    #[test]
+    fn catalog_author_tier_default_and_clamp() {
+        let m = MemStore::default();
+        let g1 = m.create_game("no-account", "A");
+        let g2 = m.create_game("no-account", "B");
+        m.insert_game_version(&g1.id, &nvs(json!({}), "screen")).unwrap();
+        m.insert_game_version(&g2.id, &nvs(json!({"requiredTier": 9}), "screen")).unwrap();
+        let rows = m.list_catalog();
+        let tier = |id: &str| rows.iter().find(|r| r.id == id).unwrap().required_tier;
+        assert_eq!((tier(&g1.id), tier(&g2.id)), (1, 3));
+        assert!(rows.iter().all(|r| r.author.is_empty()));
+    }
+
+    #[test]
+    fn catalog_orders_by_last_publish() {
+        let m = MemStore::default();
+        let g1 = m.create_game("o", "G1");
+        let g2 = m.create_game("o", "G2");
+        let ids = |m: &MemStore| m.list_catalog().into_iter().map(|r| r.id).collect::<Vec<_>>();
+        m.insert_game_version(&g1.id, &nv("a")).unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(2)); // timestamps are microseconds; keep them distinct
+        m.insert_game_version(&g2.id, &nv("b")).unwrap();
+        assert_eq!(ids(&m), vec![g2.id.clone(), g1.id.clone()]);
+        std::thread::sleep(std::time::Duration::from_millis(2));
+        m.insert_game_version(&g1.id, &nv("c")).unwrap();
+        assert_eq!(ids(&m), vec![g1.id.clone(), g2.id.clone()]);
     }
 
     #[test]
