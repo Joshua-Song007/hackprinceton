@@ -163,7 +163,7 @@ class Rules(unittest.TestCase):
                 executable.parent.mkdir(parents=True, exist_ok=True)
                 executable.touch()
             with patch.dict(os.environ, {'OMNI_BASH': ''}), patch.object(a.shutil, 'which', return_value=str(git)):
-                self.assertEqual(a.bash_executable(), str(bash))
+                self.assertEqual(Path(a.bash_executable()).resolve(), bash.resolve())
 
     def test_hung_command_has_wall_time_limit(self):
         start = a.time.monotonic()
