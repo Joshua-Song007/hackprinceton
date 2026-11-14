@@ -10,7 +10,7 @@ import { LayoutManager, type PanelSpec } from './layout';
 import { PreferenceStore, bindPreferences, inDesktopApp, openSettingsSheet } from './preferences';
 import { Project, TEMPLATES, attachAutosave, loadDraft, templateSnapshot, type ProjectSnapshot } from './project';
 import { RunController, ViewportHost, createDevicesPanel, createViewportPanel } from './run';
-import { announce, button, el, openMenu, promptSheet } from './ui';
+import { announce, button, el, openMenu, openSheet, promptSheet, rovingToolbar } from './ui';
 
 const params = new URLSearchParams(location.search);
 /** A test-player tab (opened by "Add test player"): its own dev account, no autosave, no stored session. */
@@ -71,9 +71,24 @@ const status = (text: string) => {
   announce(text);
 };
 
-const confirmDiscard = () => !project.dirty || confirm('This project has unsaved changes. Discard them?');
-const openSnapshot = (snapshot: ProjectSnapshot) => {
-  if (!confirmDiscard()) return;
+const confirmDiscard = (): Promise<boolean> => new Promise((resolve) => {
+  if (!project.dirty) return resolve(true);
+  let answer = false;
+  openSheet('Discard unsaved changes?', (body, close) => {
+    const keep = button('Keep editing', close);
+    const discard = button('Discard changes', () => {
+      answer = true;
+      close();
+    }, { variant: 'default' });
+    body.append(el('p', {}, [`${project.name} has changes you have not saved.`]), el('div', { class: 'sheet-actions' }, [keep, discard]));
+    // Escape and the backdrop also close the sheet, which keeps editing.
+    const dialog = body.parentElement as HTMLDialogElement;
+    dialog.addEventListener('close', () => resolve(answer), { once: true });
+    queueMicrotask(() => keep.focus());
+  });
+});
+const openSnapshot = async (snapshot: ProjectSnapshot) => {
+  if (!(await confirmDiscard())) return;
   run.stop();
   project.load(snapshot);
   status(`Opened ${project.name}`);
@@ -129,6 +144,7 @@ const accountButton = button('Sign in', () => openAccountSheet(account, prefs, {
 const settingsButton = button('Settings', () => openSettingsSheet(prefs), { variant: 'borderless' });
 const sep = () => el('span', { class: 'om-sep', 'aria-hidden': 'true' });
 toolbar.append(runLocal, runServer, stop, testPlayerButton, sep(), projectButton, activity, publishButton, windowButton, accountButton, settingsButton);
+rovingToolbar(toolbar);
 
 // Status bar
 const statusbar = document.getElementById('statusbar')!;

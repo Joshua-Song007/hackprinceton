@@ -3,7 +3,7 @@
 import type { DebugEvent } from '@omni/cloud';
 import type { UsisPacket } from '@omni/core';
 import type { PanelView } from './layout';
-import { button, clock, el, packetHtml } from './ui';
+import { announce, button, clock, el, packetHtml } from './ui';
 
 export type Level = 'log' | 'warn' | 'error';
 export interface OutputEntry { t: number; level: Level; text: string; script?: string }
@@ -242,9 +242,9 @@ export function createPacketsPanel(store: DebugStore): PanelView {
   }, { variant: 'small' });
   pause.setAttribute('aria-pressed', 'false');
   const count = el('span', { class: 'om-secondary om-num' });
-  root.append(el('div', { class: 'pn-bar' }, [pause, button('Clear', () => store.clear('packets'), { variant: 'small' }), el('label', { class: 'om-field om-filter', style: 'width:200px;height:20px' }, [filter]), count]));
+  root.append(el('div', { class: 'pn-bar' }, [pause, button('Clear', () => store.clear('packets'), { variant: 'small' }), el('label', { class: 'om-field om-filter', style: 'width:200px' }, [filter]), count]));
   const tbody = el('tbody');
-  const detail = el('pre', { 'aria-live': 'polite' });
+  const detail = el('pre');
   const table = el('table', { role: 'grid', 'aria-label': 'Packets' }, [
     el('thead', {}, [el('tr', {}, ['Device time', 'Device', 'Source', 'Slot'].map((h) => el('th', {}, [h])).concat(['Seq', 'Channels', 'Size'].map((h, i) => el('th', i === 1 ? {} : { class: 'r' }, [h]))))]),
     tbody,
@@ -255,16 +255,19 @@ export function createPacketsPanel(store: DebugStore): PanelView {
   const select = (row: PacketRow | undefined) => {
     selectedId = row?.id ?? null;
     detail.innerHTML = row ? packetHtml(row.packet) : '';
+    if (row) announce(`Packet seq ${row.packet.seq} from ${row.packet.deviceId} selected.`);
     tbody.querySelectorAll('tr').forEach((tr) => (tr.getAttribute('data-id') === String(selectedId) ? tr.setAttribute('aria-selected', 'true') : tr.removeAttribute('aria-selected')));
   };
   let source: PacketRow[] = [];
   let rovingId: number | null = null; // the one row in the tab order
+  let held: PacketRow[] | null = null; // while a row is focused or selected the view holds, so that row stays in the last-100 window
   const render = () => {
     const active = document.activeElement;
     const refocus = active instanceof HTMLElement && tbody.contains(active) ? active.getAttribute('data-id') : null;
+    held = refocus === null && selectedId === null ? null : held ?? [...store.packets];
     const q = filter.value.trim().toLowerCase();
-    source = (paused ? frozen : store.packets).filter((r) => !q || r.packet.deviceId.toLowerCase().includes(q) || Object.keys(r.packet.ch ?? {}).join(' ').toLowerCase().includes(q)).slice(-100);
-    count.textContent = `${store.packets.length} packets, ${source.length} shown`;
+    source = (paused ? frozen : held ?? store.packets).filter((r) => !q || r.packet.deviceId.toLowerCase().includes(q) || Object.keys(r.packet.ch ?? {}).join(' ').toLowerCase().includes(q)).slice(-100);
+    count.textContent = `${store.packets.length} packets, ${source.length} shown${held && !paused ? ', held while a row is selected (Escape resumes)' : ''}`;
     if (!source.some((r) => r.id === rovingId)) rovingId = source.find((r) => r.id === selectedId)?.id ?? source[source.length - 1]?.id ?? null;
     tbody.replaceChildren(...source.map((r) => {
       const p = r.packet;
@@ -273,6 +276,12 @@ export function createPacketsPanel(store: DebugStore): PanelView {
       ].map((c, i) => el('td', i === 4 || i === 6 ? { class: 'r' } : {}, [c])));
       tr.addEventListener('click', () => select(r));
       tr.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          select(undefined);
+          filter.focus();
+          return render();
+        }
         const key = packetRowKey(source.map((s) => s.id), r.id, e.key);
         if (!key) return;
         e.preventDefault();
@@ -287,7 +296,7 @@ export function createPacketsPanel(store: DebugStore): PanelView {
       return tr;
     }));
     if (refocus) tbody.querySelector<HTMLElement>(`tr[data-id="${refocus}"]`)?.focus();
-    if (!paused && selectedId === null) tableScroll.scrollTop = tableScroll.scrollHeight; // follow the newest packet until one is selected
+    if (!paused && !held) tableScroll.scrollTop = tableScroll.scrollHeight; // follow the newest packet until one is selected
   };
   // Packets arrive at 100+ per second; the table refreshes at 4 Hz.
   let timer: ReturnType<typeof setTimeout> | undefined;

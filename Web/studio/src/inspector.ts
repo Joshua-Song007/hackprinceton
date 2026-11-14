@@ -3,20 +3,28 @@
 import type { PanelView } from './layout';
 import type { Selection } from './explorer';
 import { walkEntities, type Project, type RawEntity } from './project';
-import { el, icon } from './ui';
+import { announce, el, icon } from './ui';
 
 type V3 = [number, number, number];
 const decimals = (step: number) => (String(step).split('.')[1] ?? '').length;
 
 /** Brand-kit Vector3Field: three fields with scrubbable axis letters. Shift scrubs finely; Up/Down step the focused field. */
-export function vector3Field(label: string, unit: string, value: readonly number[], step: number, resetTo: number, onChange: (v: V3) => void): HTMLElement {
+export function vector3Field(label: string, unit: string, value: readonly number[], step: number, resetTo: number, onChange: (v: V3) => boolean | void, fix = `Enter a number for ${label.toLowerCase()}.`): HTMLElement {
   const dp = decimals(step);
   const current: V3 = [value[0] ?? 0, value[1] ?? 0, value[2] ?? 0];
   const inputs: HTMLInputElement[] = [];
-  const commit = (axis: number, n: number) => {
-    current[axis] = Number(n.toFixed(dp));
+  const reject = (axis: number) => {
     inputs[axis]!.value = current[axis]!.toFixed(dp);
-    onChange([...current]);
+    inputs[axis]!.setAttribute('aria-invalid', 'true');
+    announce(fix);
+  };
+  const commit = (axis: number, n: number) => {
+    const prev = current[axis]!;
+    current[axis] = Number(n.toFixed(dp));
+    // a callback returning false rejects the value: put the previous one back
+    if (onChange([...current]) === false) return void ((current[axis] = prev), reject(axis));
+    inputs[axis]!.value = current[axis]!.toFixed(dp);
+    inputs[axis]!.removeAttribute('aria-invalid');
   };
   const fields = (['x', 'y', 'z'] as const).map((axisName, axis) => {
     const letter = axisName.toUpperCase();
@@ -39,7 +47,7 @@ export function vector3Field(label: string, unit: string, value: readonly number
     input.addEventListener('change', () => {
       const n = Number(input.value);
       if (Number.isFinite(n)) commit(axis, n);
-      else input.value = current[axis]!.toFixed(dp);
+      else reject(axis);
     });
     input.addEventListener('keydown', (e) => {
       if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
@@ -82,12 +90,14 @@ export function createInspectorPanel(project: Project, selection: Selection): Pa
     editing = false;
   };
 
-  const numberField = (label: string, value: number, onChange: (n: number) => void) => {
+  const numberField = (label: string, value: number, fix: string, onChange: (n: number) => boolean | void) => {
     const input = el('input', { type: 'text', value: String(value), 'aria-label': label, inputmode: 'decimal' });
     input.addEventListener('change', () => {
       const n = Number(input.value);
-      if (Number.isFinite(n)) onChange(n);
-      else input.value = String(value);
+      if (Number.isFinite(n) && onChange(n) !== false) return input.removeAttribute('aria-invalid');
+      input.value = String(value);
+      input.setAttribute('aria-invalid', 'true');
+      announce(fix);
     });
     return el('div', { class: 'om-field' }, [input]);
   };
@@ -97,8 +107,8 @@ export function createInspectorPanel(project: Project, selection: Selection): Pa
     switch (c.type) {
       case 'trigger': {
         const rows: HTMLElement[] = [prop('Shape', readout(String(c.shape))), prop('Probe slots', readout((c.probeSlots as string[] | undefined)?.join(', ') ?? 'head'))];
-        if (c.shape === 'sphere') rows.push(prop('Radius (m)', numberField('Trigger radius in meters', Number(c.radius), (n) => n > 0 && set({ radius: n }))));
-        else rows.push(vector3Field('Size', 'm', (c.size as number[]) ?? [1, 1, 1], 0.1, 1, (v) => v.every((n) => n > 0) && set({ size: v })));
+        if (c.shape === 'sphere') rows.push(prop('Radius (m)', numberField('Trigger radius in meters', Number(c.radius), 'Enter a number greater than 0 for radius.', (n) => n > 0 && set({ radius: n }))));
+        else rows.push(vector3Field('Size', 'm', (c.size as number[]) ?? [1, 1, 1], 0.1, 1, (v) => v.every((n) => n > 0) && set({ size: v }), 'Enter a number greater than 0 for size.'));
         return section('Trigger', 'onTriggerEnter', rows);
       }
       case 'audioEmitter': {
@@ -108,7 +118,7 @@ export function createInspectorPanel(project: Project, selection: Selection): Pa
         loops.addEventListener('change', () => set({ loops: loops.checked }));
         return section('Audio emitter', '', [
           prop('Sound', el('div', { class: 'om-field' }, [sound])),
-          prop('Gain (dB)', numberField('Gain in decibels', Number(c.gain ?? 0), (n) => set({ gain: n }))),
+          prop('Gain (dB)', numberField('Gain in decibels', Number(c.gain ?? 0), 'Enter a number for gain.', (n) => set({ gain: n }))),
           prop('Loops', loops),
         ]);
       }
