@@ -23,16 +23,16 @@ Spatial Audio
 RealityKit spatial audio
 Listener follows AirPods head pose.
 Scripting
-JavaScript via JavaScriptCore (built into Apple OSes); Lua as stretch
-Sandboxed creator scripts without shipping a VM.
+JavaScript. Client scripts run in JavaScriptCore (built into Apple OSes); server scripts run in an embedded JS engine on Omni's game server, and in JavaScriptCore inside Studio while testing. Lua as stretch
+Sandboxed creator scripts without shipping a VM; one script language on client and server.
 Collaboration (stretch)
 CRDT project document (e.g. Automerge for Swift) synced between Bonjour peers; relay server later
 Conflict-free shared editing of scenes and scripts.
-Game Hosting
-Cloud database (backend to be chosen)
-Published games (scene, scripts, assets, metadata) are stored in and served from the cloud, like Roblox. Only game content goes to the cloud; sensor data never does.
+Game Hosting & Accounts
+Rust backend on Vultr: axum (HTTP API + WebSockets), sqlx, TigerData (managed PostgreSQL), and an embedded JS engine (deno_core or rquickjs) for server scripts
+Accounts own games, like Roblox. Published games (scene, scripts, assets, metadata) are stored in and served from the cloud, and a game with server scripts gets a multiplayer game server. Only game content goes to the cloud; sensor data never does.
 Repo
-Xcode workspace + local Swift packages
+Xcode workspace + local Swift packages; the backend is a separate Rust (Cargo) project
 Module boundaries enforced by package dependencies, not by network services.
 Modular Workspace Architecture
 The platform is one Xcode workspace of local Swift packages, not a distributed system. Modularity is enforced by package dependencies and protocol seams. That way live ↔ simulated input, device transports and scripting backends can be swapped without touching game code. The one cloud-facing part is game hosting (Module 11); the input and runtime path stays entirely local.
@@ -49,7 +49,7 @@ OmniRuntime
 RealityKit scene runner, components and systems, triggers, derived input events
 OmniCore, OmniInput (protocols only)
 OmniScript
-JavaScriptCore sandbox and the creator scripting API
+JavaScriptCore sandbox and the creator scripting API: client scripts, server scripts and remote events
 OmniRuntime
 OmniOutput
 OutputSink protocol for haptics and audio cues sent back to devices
@@ -63,8 +63,11 @@ OmniCore, OmniInput, OmniOutput
 OmniCollab (stretch)
 Shared project document (CRDT), peer sync, presence
 OmniCore
+OmniCloud
+Studio's client for the Omni backend: sign-in, publish, fetch a published game. Carries game content only, never input
+nothing
 OmniStudio (app target)
-SwiftUI creator app: viewport, inspector, script editor, simulator panel, Sim / Live toggle
+SwiftUI creator app: viewport, inspector, script editor, simulator panel, Sim / Live toggle, multiplayer test, sign-in and publishing
 everything above
 OmniCompanion (iOS + watchOS targets)
 Streams phone and Watch sensors as USIS JSON; plays haptics
@@ -172,14 +175,28 @@ Module 2: Game Runtime Engine
 • Physics: RealityKit collision for triggers and raycasts; full physics simulation off by default in v1.
 Module 3: Scripting Layer
 • Package: OmniScript
-• Core Responsibility: The creator-facing API. Scripts attach to entities and react to events; they can change state, spawn entities, play sounds and send output commands.
+• Core Responsibility: The creator-facing API, modelled on Roblox. A game has two kinds of scripts:
+    ◦ Client scripts run on each player's machine. They attach to entities and react to input events (onLookAt, onGesture, onHeartRate, onRaycastHit); they can change state, spawn entities, play sounds and send output commands.
+    ◦ Server scripts run once per game session on Omni's game server. They own shared game state (scores, health, rounds) and never see input.
+    ◦ Remote events are the only link between them: a client fires an event to the server, and the server fires events to one player or to all.
 • Shape:
+// client script
 export default script({
   onLookAt(self, ctx) { self.audio.play("growl"); },
-  onGesture(self, ctx, g) { if (g.type === "flick") ctx.spawn("fireball", { dir: g.dir }); },
+  onGesture(self, ctx, g) { if (g.type === "flick") ctx.remote.fire("punch", { dir: g.dir }); },
   onHeartRate(self, ctx, bpm) { self.speed = 1 + 0.5 * ctx.intensity; },
+  onRemote(self, ctx, name, data) { if (name === "hit") ctx.haptic("thud", 0.8); },
 });
-• Sandbox: scripts run in JavaScriptCore and see only self and ctx (exposed through JSExport). No file, network or raw USIS access. Hot-reloaded from the Studio editor.
+// server script
+export default serverScript({
+  onPlayerJoin(ctx, player) { ctx.state.health[player.id] = 100; },
+  onRemote(ctx, player, name, data) { if (name === "punch") ctx.remote.fireAll("hit", { from: player.id }); },
+});
+• Sandbox: client scripts run in JavaScriptCore and see only self and ctx (exposed through JSExport); server scripts see only ctx. No file, network or raw USIS access in either; the network is reachable only through remote events. Hot-reloaded from the Studio editor.
+• Remote Channel: OmniScript declares a RemoteChannel protocol that carries remote events. Studio's local test session implements it in memory; a player's connection to the game server implements it over the network. Scripts can't tell which, the same way a game can't tell sim from live input.
+• Hardware-blind on the server: server scripts receive only what client scripts send in remote events, never an InputFrame.
+• No server scripts: a game with no server scripts runs entirely on the player's machine and needs no game server.
+• No automatic state replication (Roblox copies server state to clients for you): state moves only through remote events. Auto-replication is a later addition.
 • Stretch: a Lua backend behind the same event API.
 Module 4: 3D Device Simulator
 • Package: OmniSim
@@ -190,6 +207,7 @@ Module 4: 3D Device Simulator
     ◦ Mouse-driven gaze raycast from the head; click = pinch.
     ◦ Heart-rate slider and a "spike" button.
     ◦ Gesture presets: recorded .usis.jsonl timelines ("AirPods head pitch", "Watch double-tap", "Watch flick", "Pencil barrel roll") played with one click.
+    ◦ Multiple players: the simulator can run several simulated players, each with its own sensor rig and devices, for testing multiplayer games inside Studio.
 • Feedback Visualization: implements OutputSink, so haptic and audio commands show up on the virtual device (pulse ring, vibration icon, sound cone around the head).
 • Fidelity Rule: simulated sample rates and noise should roughly match real devices, so the jitter buffer is exercised in Sim mode too.
 Module 5: Hardware Bridge & Companion Apps
@@ -209,15 +227,21 @@ Module 6: Output & Feedback Layer
 • Spatial Audio: the RealityKit audio listener follows the head pose from the InputFrame, so turning your head changes what you hear.
 Module 7: Omni Studio (Creator App)
 • Package: OmniStudio (macOS app target)
-• Core Responsibility: The Roblox-Studio-style workspace: scene viewport, entity inspector, script editor, simulator panel, device status and the Sim / Live toggle.
+• Core Responsibility: The Roblox-Studio-style workspace: scene viewport, entity inspector, script editor (client and server scripts), simulator panel, device status, the Sim / Live toggle, account sign-in and publishing.
 • Debug Overlay: live view of raw USIS JSON per device (rate, latency, stale flags, source, schema errors).
+• Run Mode: each game declares how it is played, and Studio can test both:
+    ◦ screen: a separate screen shows the game, and the player's devices are controllers.
+    ◦ device: the game runs on the player's own device (iPhone), with no separate screen. Studio previews it at phone aspect ratio.
+• Multiplayer Test: Play can start a local test session: a test server on the Mac running the game's server scripts, plus several simulated players (or live devices), connected through the same RemoteChannel as the real game server. Creators test multiplayer without publishing, like Roblox Studio's local server test.
+• Accounts: creators sign in from Studio; a published game is owned by the signed-in account. Sign-in method not decided (Sign in with Apple preferred).
+• Publish: sends the game (scene, client scripts, server scripts, assets, metadata including run mode) to the Omni backend (Module 11) through OmniCloud.
 Module 8: Collaborative Coding Space (stretch)
 • Package: OmniCollab
 • Core Responsibility: Lets several creators edit the same project at once, like Roblox Team Create: scene, entity properties and scripts.
 • Data Model: the project is one CRDT document holding the scene graph and every script's source text. Each edit is a CRDT change, so simultaneous edits merge without conflicts.
 • Sync: peers find each other with Bonjour on the same network for the hackathon; a relay server for remote teams later.
 • Presence: collaborators' cursors in the script editor, selection highlights in the viewport, and "who's editing" badges on entities.
-• Play Testing: any collaborator can press Play locally. Game state is not synced (that would be multiplayer gameplay, which is out of scope).
+• Play Testing: any collaborator can press Play locally. Game state is not synced between collaborators; each playtest runs locally (multiplayer testing is Module 7's Multiplayer Test).
 • Boundary: OmniCollab syncs the project only and never touches input, so the hardware-blind property holds.
 Module 9: Flagship Game
 • Package: Games/<Flagship>
@@ -228,13 +252,15 @@ Module 10: Peripheral Adapters (stretch)
 • Contract: func parse(_ bytes: Data) -> USISChannels plus a device descriptor (kind, slot, sample rate), over CoreBluetooth. An adapter's only job is to emit standard USIS JSON, so nothing downstream changes when a device is added.
 • Not this weekend: shipping any third-party adapter. The protocol is documented so Joy-Cons, haptic gloves or ESP32 motion bands can be added later.
 Module 11: Cloud Game Hosting
-• Package: not yet assigned. The package boundary is decided before anything is built.
+• Package: OmniCloud on the Mac (used only by OmniStudio). The backend is a separate Rust project, not a Swift package: an axum HTTP API and WebSocket game server on Vultr, with sqlx over TigerData.
+• What the backend stores: accounts, games (each owned by an account), and each game's published versions (scene, scripts, assets, metadata).
+• Game server: each live session of a published game with server scripts runs them in an embedded JS engine with the same serverScript API as Studio's local test server, and relays remote events between players. Lobbies and matchmaking are game code, not platform features.
 • Core Responsibility: Stores and serves the games creators build, like Roblox. Publishing from Studio saves a game version to a cloud database; a game is loaded from there, not from the creator's machine.
 • What is hosted: a game is data only: its scene description, scripts, assets and metadata (title, author, version). This is the same shape Games/<Flagship> already has, so no Swift code or device-specific content is ever uploaded.
 • What is not hosted: live sensor data (USIS packets) and output commands. They stay on the local network, so the Network Rule in Module 5 is unchanged.
 • Flow: Studio publishes a game version to the cloud database. To play or edit, Studio fetches that version and hands the scene and script sources to OmniRuntime and OmniScript. From there the runtime reads input only through the InputBus, as usual.
 • Boundary: hosting carries game content only and never touches input, so the hardware-blind property holds and a hosted game runs the same on simulated or live input. OmniRuntime, OmniScript and games do not depend on the cloud client; Studio, the composition root, does the fetching.
-• Not decided yet: which cloud database or backend, accounts and permissions, version history, and moderation.
+• Not decided yet: sign-in method, where game files are stored (in TigerData or object storage), JS engine (deno_core vs rquickjs), permissions, version history, and moderation.
 Frame Loop & Event Processing
 Asynchronous ingest (as packets arrive):
 1.  A source (live bridge or simulator) emits a UsisPacket onto the InputBus.
@@ -242,7 +268,7 @@ Asynchronous ingest (as packets arrive):
 Per frame (RealityKit scene update):
 1.  The input layer samples every device at t_render = now − D, applies calibration, and builds one world-space InputFrame (with source removed).
 2.  The runtime derives game events (onLookAt, onGesture, onHeartRate, onRaycastHit) from the InputFrame.
-3.  Scripts run their handlers in JavaScriptCore and update entity state.
+3.  Client scripts run their handlers (input events, plus remote events received since the last frame) in JavaScriptCore and update entity state.
 4.  Triggers, raycasts and animations resolve.
 5.  RealityKit renders; the audio listener follows the head pose.
 6.  Output commands queued this frame are flushed to the active OutputSink (bridge or simulator).
@@ -256,6 +282,7 @@ Roadmap & Operational Phases
     ◦ Virtual sensor rig, gizmos, gaze raycast, heart-rate slider.
     ◦ JSON Lines recording and playback; gesture presets; simulator OutputSink visualization.
     ◦ Jitter buffer and derived events tested against simulated input before any live device is added.
+    ◦ Server scripts, remote events and a local multiplayer test session with several simulated players.
 3.  Phase 3: Live Hardware Bridge
     ◦ Bonjour service on the Mac + iOS companion streaming orientation and touch.
     ◦ Sim / Live toggle working with zero game-code changes.
@@ -263,6 +290,7 @@ Roadmap & Operational Phases
 4.  Phase 4: Flagship Game
     ◦ Build the game only through the public script API.
     ◦ Spend real effort on sound, visuals and feedback: no gray boxes.
+    ◦ Sign in and publish the game from Studio to the Omni backend (Rust on Vultr, TigerData), which hosts a game server for games with server scripts.
 5.  Phase 5: Demo Hardening
     ◦ Local hotspot, pre-paired devices, recorded fallback video.
     ◦ Five clean demo runs in a row.
@@ -270,4 +298,4 @@ Roadmap & Operational Phases
     ◦ OmniCollab: CRDT project document, Bonjour peer sync, presence in the editor and viewport.
 7.  Phase 7: After the Hackathon
     ◦ Lua scripting backend, third-party Bluetooth adapters, iPad / Pencil and Vision Pro input.
-    ◦ Player apps on iOS / visionOS, a relay server for remote collaboration, multiplayer gameplay, publishing games to the cloud host (Module 11).
+    ◦ Player apps on iOS / visionOS (which connect players to the game server), a relay server for remote collaboration.
