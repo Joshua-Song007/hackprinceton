@@ -15,7 +15,7 @@ jobs:
           fetch-depth: 0
       - name: tools
         run: |
-          python3 -c 'import yaml' 2>/dev/null || python3 -m pip install --quiet pyyaml
+          python3 -c 'import yaml' 2>/dev/null || python3 -m pip install --quiet pyyaml || { sudo apt-get update -qq; sudo apt-get install -y -qq python3-yaml; }
           command -v shellcheck >/dev/null || { sudo apt-get update -qq; sudo apt-get install -y -qq shellcheck; }
       - name: hygiene.sh
         env:

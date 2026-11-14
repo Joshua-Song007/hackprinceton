@@ -25,12 +25,17 @@ jobs:
         run: bash .agents/scripts/health.sh || true
       - name: open an issue when main is red
         run: |
-          if bash .agents/scripts/health.sh --only main >health-main.txt; then
-            cat health-main.txt
-            echo "main is green"
+          if [ ! -f .agents/scripts/health.sh ]; then
+            echo "health.sh not present, nothing checked"
             exit 0
           fi
+          bash .agents/scripts/health.sh --only main >health-main.txt || true
           cat health-main.txt
+          # only a red workflow run counts; a gh error or a missing tool must not open an issue
+          if ! grep -q '(main is red)' health-main.txt; then
+            echo "main is not red"
+            exit 0
+          fi
           title="[ci] main is red"
           open=$(gh issue list --state open --search "\"$title\" in:title" --json number --jq '.[0].number // empty')
           if [ -n "$open" ]; then

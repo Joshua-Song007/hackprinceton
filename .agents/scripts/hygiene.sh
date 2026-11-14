@@ -62,7 +62,7 @@ elif [ -n "${PR_BODY:-}" ]; then
 fi
 case "$branch" in
   agent/*)
-    if [ -z "$body_file" ] && [ -z "${PR_BODY:-}" ]; then missing "no PR body given"
+    if [ -z "$body_file" ] && [ -z "${PR_BODY:-}" ]; then missing "no PR body given (or it is empty; add a Refs #<n> line)"
     elif printf '%s\n' "$body" | tr -d '\r' | grep -qE '^[[:space:]]*Refs #[0-9]+'; then ok "PR body has a Refs #<n> line"
     else fail "PR body has no line starting 'Refs #<n>'"; fi ;;
   *) skip "not an agent branch" ;;
