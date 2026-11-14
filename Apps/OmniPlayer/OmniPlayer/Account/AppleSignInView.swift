@@ -44,7 +44,7 @@ struct AppleSignInView: View {
         switch result {
         case .failure(let error):
             if (error as? ASAuthorizationError)?.code == .canceled { return }
-            model.report("Sign in with Apple failed. Try again.")
+            model.report("Sign in with Apple failed (code \((error as NSError).code)). Try again.")
         case .success(let authorization):
             guard let credential = authorization.credential as? ASAuthorizationAppleIDCredential,
                   let tokenData = credential.identityToken,
