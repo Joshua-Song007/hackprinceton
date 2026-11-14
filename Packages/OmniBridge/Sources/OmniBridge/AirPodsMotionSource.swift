@@ -72,10 +72,9 @@ public final class AirPodsMotionSource: InputSource {
             s.bus = bus
         }
         box.delegate.onConnect = { [weak self] in self?.restartUpdates() }
-        box.delegate.onDisconnect = { [weak self] in
-            // Samples after a reconnect may be re-anchored; drop only the bud so the next sample is checked.
-            self?.state.withLock { $0.lastBud = nil }
-        }
+        // Disconnect keeps `lastBud` and `lastOut`, so the first sample after the gap is compared with the
+        // bud that streamed before it and re-anchored if the bud changed.
+        box.delegate.onDisconnect = nil
         box.manager.delegate = box.delegate
         beginUpdates()
     }
