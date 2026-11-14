@@ -32,6 +32,8 @@ final class AppModel {
     /// Simulated head that carries a position, so it can enter the trigger volume.
     let headDevice: VirtualDevice
     let sink = RecordingOutputSink()
+    /// Chooses the active source/sink pair (Sim / Live).
+    let modeController: ModeController
 
     private(set) var headInsideTrigger = false
     private(set) var framesRun = 0
@@ -51,6 +53,7 @@ final class AppModel {
             seed: 1
         )
         headDevice.targetPosition = Vector3(-2, 0, 0)
+        modeController = ModeController(bus: pipeline, simSources: [headDevice], simSink: sink)
         buildScene()
     }
 
@@ -86,7 +89,7 @@ final class AppModel {
     func start() {
         guard loopTask == nil else { return }
         startMs = HostClock.nowMs()
-        headDevice.start(bus: pipeline)
+        modeController.start()
         loopTask = Task { [weak self] in
             while !Task.isCancelled {
                 self?.tick()
@@ -98,7 +101,7 @@ final class AppModel {
     func stop() {
         loopTask?.cancel()
         loopTask = nil
-        headDevice.stop()
+        modeController.stop()
     }
 
     /// One frame: move the hard-coded head path, sample the pipeline, step the runtime, drain output to the sink.
@@ -107,7 +110,7 @@ final class AppModel {
         // Hard-coded path: the head sweeps along x from -2 m to 0 m (the trigger centre) and back every 6 s.
         let phase = ((now - startMs) / 1000).truncatingRemainder(dividingBy: 6) / 6
         let x = -2 + 2 * (1 - abs(2 * phase - 1))
-        headDevice.targetPosition = Vector3(x, 0, 0)
+        if modeController.mode == .sim { headDevice.targetPosition = Vector3(x, 0, 0) }
 
         let frame = pipeline.frame(at: now)
         runner.step(frame: frame, deltaTime: 1.0 / 60.0)
@@ -115,7 +118,7 @@ final class AppModel {
 
         if !runner.outputQueue.isEmpty {
             let commands = runner.outputQueue.drain()
-            sink.send(commands)
+            modeController.activeSink.send(commands)
             commandsSent = sink.count
         }
     }
