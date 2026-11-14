@@ -103,3 +103,4 @@ DEMO-TIMED: pending - human step. No browser automation on this machine and no m
 - Fake mode (OMNI_AGENT_FAKE) is gone; demo rehearsal needs a real key.
 - 2026-11-14 10.8 Anthropic: PASSED on the hosted Vultr runtime with an account key (real reply). OpenAI, Google still to run.
 - 2026-11-14 Plugin 0.7.39: the agent may edit /scene.json (entities, shapes); the panel validates with parseScene and applies it as one undo step.
+- 2026-11-14 Scene editing verified live on Vultr: the Deep Agent added a sphere to the scene (plugin 0.7.39).
