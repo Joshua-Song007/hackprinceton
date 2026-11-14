@@ -296,6 +296,7 @@ Apps/
       OmniPlayerApp.swift  PlayerModel.swift                                          [P9]
       Account/     AppleSignInView.swift                                              [P9]
       Library/     LibraryView.swift  GameDetailView.swift                            [P9]
+      Theme/       OmniTheme.swift  OmniGizmoMark.swift                                [P9, extra]
 
 Tools/                                              (plan decision: hardware probes, no Omni deps, no graph edges)
   AirPodsProbe/

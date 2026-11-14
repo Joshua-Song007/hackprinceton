@@ -19,23 +19,30 @@ struct GameDetailView: View {
         let playability = model.playability(of: entry)
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                Text(entry.title.isEmpty ? "Untitled game" : entry.title).font(.largeTitle.bold())
+                Text(entry.title.isEmpty ? "Untitled game" : entry.title)
+                    .font(.title2.weight(.semibold))
+                    .foregroundStyle(OmniTheme.text)
                 Text(entry.author.isEmpty ? "Unknown author" : entry.author)
-                    .font(.title3)
-                    .foregroundStyle(.secondary)
+                    .font(.callout)
+                    .foregroundStyle(OmniTheme.textSecondary)
 
-                Divider()
+                Rectangle().fill(OmniTheme.line).frame(height: 1)
                 LabeledContent("Version", value: "v\(entry.latestVersion)")
                 LabeledContent("Plays", value: entry.runModeLabel)
                 if entry.tierLabel != nil {
                     LabeledContent("Sensors", value: entry.tierDetail)
                 }
-                Text(entry.runModeExplanation).font(.callout).foregroundStyle(.secondary)
+                Text(entry.runModeExplanation).font(.callout).foregroundStyle(OmniTheme.textSecondary)
 
-                Label(playability.summary, systemImage: playability.symbol)
-                    .foregroundStyle(playability.isPlayable ? Color.green : Color.secondary)
+                Label {
+                    Text(playability.summary)
+                        .foregroundStyle(playability.isPlayable ? OmniTheme.ok : OmniTheme.text)
+                } icon: {
+                    Image(systemName: playability.symbol)
+                        .foregroundStyle(playability.isPlayable ? OmniTheme.ok : OmniTheme.textSecondary)
+                }
                 if let why = playability.explanation {
-                    Text(why).font(.callout)
+                    Text(why).font(.callout).foregroundStyle(OmniTheme.text)
                 }
 
                 if playability.isPlayable {
@@ -43,18 +50,16 @@ struct GameDetailView: View {
                         Task { await playTapped() }
                     } label: {
                         if case .working = play {
-                            ProgressView()
+                            ProgressView().tint(OmniTheme.onAccent)
                         } else {
                             Text("Play").frame(maxWidth: 240)
                         }
                     }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.large)
+                    .buttonStyle(OmniPrimaryButtonStyle())
                     .disabled(isWorking)
                 } else {
                     Button("Not playable on this device") {}
-                        .buttonStyle(.bordered)
-                        .controlSize(.large)
+                        .buttonStyle(OmniSecondaryButtonStyle())
                         .disabled(true)
                 }
 
@@ -64,9 +69,15 @@ struct GameDetailView: View {
             .padding()
             .frame(maxWidth: 640, alignment: .leading)
         }
+        .background(OmniTheme.bgField)
         .navigationTitle(entry.title.isEmpty ? "Game" : entry.title)
-        #if os(iOS)
+        #if os(macOS)
+        .toolbarBackground(OmniTheme.bgWindow, for: .windowToolbar)
+        .toolbarBackground(.visible, for: .windowToolbar)
+        #else
         .navigationBarTitleDisplayMode(.inline)
+        .toolbarBackground(OmniTheme.bgWindow, for: .navigationBar)
+        .toolbarBackground(.visible, for: .navigationBar)
         #endif
     }
 
@@ -83,8 +94,9 @@ struct GameDetailView: View {
             let game = launch.game
             Text("Fetched version \(game.version): \(game.bundle.clientScripts.count) client scripts, \(game.bundle.serverScripts.count) server scripts, \(game.bundle.assets.count) assets. Running games on this device is not available yet.")
                 .font(.callout)
+                .foregroundStyle(OmniTheme.text)
         case .failed(let text):
-            Text(text).font(.callout).foregroundStyle(.red)
+            Text(text).font(.callout).foregroundStyle(OmniTheme.error)
         }
     }
 
@@ -107,9 +119,10 @@ private struct ColumnLabeledContentStyle: LabeledContentStyle {
     func makeBody(configuration: Configuration) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 16) {
             configuration.label
-                .foregroundStyle(.secondary)
+                .foregroundStyle(OmniTheme.textSecondary)
                 .frame(minWidth: 100, alignment: .leading)
             configuration.content
+                .foregroundStyle(OmniTheme.text)
         }
     }
 }

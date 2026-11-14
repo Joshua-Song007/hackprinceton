@@ -23,6 +23,9 @@ private struct RootView: View {
             case .signedIn: LibraryView(model: model)
             }
         }
+        .tint(OmniTheme.accent)
+        .foregroundStyle(OmniTheme.text)
+        .background(OmniTheme.bgField.ignoresSafeArea())
         #if os(macOS)
         .frame(minWidth: 480, minHeight: 520)
         #endif

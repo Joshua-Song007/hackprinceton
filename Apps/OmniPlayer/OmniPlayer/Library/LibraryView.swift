@@ -29,8 +29,11 @@ struct LibraryView: View {
         } detail: {
             NavigationStack(path: $path) {
                 content
+                    .background(OmniTheme.bgField)
                     .navigationTitle(playableOnly ? "Playable on this device" : "All games")
                     .navigationDestination(for: CatalogEntry.self) { GameDetailView(entry: $0, model: model) }
+                    .toolbarBackground(OmniTheme.bgWindow, for: .windowToolbar)
+                    .toolbarBackground(.visible, for: .windowToolbar)
                     .toolbar {
                         ToolbarItem(placement: .primaryAction) {
                             Button {
@@ -52,18 +55,28 @@ struct LibraryView: View {
 
     @ViewBuilder private var sidebar: some View {
         @Bindable var library = model.library
-        List(selection: $filter) {
-            Section("Library") {
-                Label("All games", systemImage: "square.grid.2x2")
-                    .badge(Text("\(library.entries.count)"))
-                    .tag(LibraryFilter.all)
-                Label("Playable here", systemImage: "checkmark.circle")
-                    .badge(Text("\(playableCount)"))
-                    .help("Playable on this device")
-                    .tag(LibraryFilter.playable)
+        ScrollView {
+            VStack(alignment: .leading, spacing: OmniTheme.Space.s1) {
+                Text("Library")
+                    .font(.headline)
+                    .foregroundStyle(OmniTheme.text)
+                    .padding(.horizontal, OmniTheme.Space.s2)
+                    .padding(.vertical, OmniTheme.Space.s2)
+                    .accessibilityAddTraits(.isHeader)
+                SidebarRow(
+                    title: "All games", symbol: "square.grid.2x2", count: library.entries.count,
+                    selected: filter != .playable
+                ) { filter = .all }
+                SidebarRow(
+                    title: "Playable here", symbol: "checkmark.circle", count: playableCount,
+                    selected: playableOnly
+                ) { filter = .playable }
+                .help("Playable on this device")
             }
+            .padding(OmniTheme.Space.s2)
+            .accessibilityElement(children: .contain)
         }
-        .listStyle(.sidebar)
+        .background(OmniTheme.bgPanel)
         .searchable(text: $library.query, placement: .sidebar, prompt: "Search games")
         .navigationSplitViewColumnWidth(min: 220, ideal: 240, max: 300)
         .safeAreaInset(edge: .bottom, spacing: 0) { accountRow }
@@ -81,7 +94,7 @@ struct LibraryView: View {
 
     private var accountRow: some View {
         VStack(spacing: 0) {
-            Divider()
+            Rectangle().fill(OmniTheme.line).frame(height: 1)
             Menu {
                 Text(accountName)
                 Button("Sign out", role: .destructive) { Task { await model.signOut() } }
@@ -89,14 +102,15 @@ struct LibraryView: View {
                 HStack(spacing: 10) {
                     Text(String(accountName.prefix(1)).uppercased())
                         .font(.caption.bold())
+                        .foregroundStyle(OmniTheme.onAccent)
                         .frame(width: 24, height: 24)
-                        .background(Color.accentColor.opacity(0.2), in: Circle())
+                        .background(OmniTheme.accent, in: RoundedRectangle(cornerRadius: OmniTheme.radiusControl))
                         .accessibilityHidden(true)
-                    Text(accountName).lineLimit(1)
+                    Text(accountName).foregroundStyle(OmniTheme.text).lineLimit(1)
                     Spacer()
                     Image(systemName: "chevron.up.chevron.down")
                         .font(.caption2)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(OmniTheme.textSecondary)
                         .accessibilityHidden(true)
                 }
                 .contentShape(Rectangle())
@@ -108,16 +122,19 @@ struct LibraryView: View {
             .padding(.vertical, 8)
             .accessibilityLabel("Account, \(accountName)")
         }
-        .background(.bar)
+        .background(OmniTheme.bgPanel)
     }
     #else
     @ViewBuilder private var screen: some View {
         @Bindable var library = model.library
         NavigationStack {
             content
+                .background(OmniTheme.bgField)
                 .navigationTitle("Library")
                 .navigationDestination(for: CatalogEntry.self) { GameDetailView(entry: $0, model: model) }
                 .searchable(text: $library.query, prompt: "Search games")
+                .toolbarBackground(OmniTheme.bgWindow, for: .navigationBar)
+                .toolbarBackground(.visible, for: .navigationBar)
                 .toolbar {
                     ToolbarItem(placement: .primaryAction) {
                         Button {
@@ -135,7 +152,7 @@ struct LibraryView: View {
                                 ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle",
                             isOn: Binding(get: { playableOnly }, set: { filter = $0 ? .playable : .all })
                         )
-                        .toggleStyle(.button)
+                        .toggleStyle(OmniFilterToggleStyle())
                         .labelStyle(.titleAndIcon)
                         .help("Playable on this device")
                     }
@@ -172,8 +189,9 @@ struct LibraryView: View {
                 ProgressView("Loading games…").frame(maxWidth: .infinity, maxHeight: .infinity)
             case .failed(.message(let text)):
                 VStack(spacing: 12) {
-                    Text(text).multilineTextAlignment(.center)
+                    Text(text).foregroundStyle(OmniTheme.error).multilineTextAlignment(.center)
                     Button("Retry") { Task { await library.refresh() } }
+                        .buttonStyle(OmniSecondaryButtonStyle())
                 }
                 .padding()
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -197,14 +215,16 @@ struct LibraryView: View {
                     : "No playable game matches “\(query)”.")
             } actions: {
                 Button("Show all games") { filter = .all }
+                    .buttonStyle(OmniSecondaryButtonStyle())
             }
         } else {
             ScrollView {
                 if case .failed(.message(let text)) = library.state {
                     HStack {
-                        Text(text).font(.callout)
+                        Text(text).font(.callout).foregroundStyle(OmniTheme.error)
                         Spacer()
                         Button("Retry") { Task { await library.refresh() } }
+                            .buttonStyle(OmniSecondaryButtonStyle())
                     }
                     .padding(.horizontal)
                     .padding(.top, 8)
@@ -224,6 +244,45 @@ struct LibraryView: View {
     }
 }
 
+#if os(macOS)
+/// A sidebar row drawn from the theme tokens: the system selection fill is the tint, which puts white text on
+/// light-green in dark mode.
+private struct SidebarRow: View {
+    let title: String
+    let symbol: String
+    let count: Int
+    let selected: Bool
+    let action: () -> Void
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: OmniTheme.Space.s2) {
+                Image(systemName: symbol)
+                    .foregroundStyle(selected ? OmniTheme.text : OmniTheme.textSecondary)
+                    .frame(width: 20)
+                Text(title).foregroundStyle(OmniTheme.text)
+                Spacer()
+                Text("\(count)")
+                    .monospacedDigit()
+                    .foregroundStyle(selected ? OmniTheme.text : OmniTheme.textSecondary)
+            }
+            .padding(.horizontal, OmniTheme.Space.s2)
+            .frame(minHeight: OmniTheme.rowHeight)
+            .background(
+                selected ? OmniTheme.bgSelected : (hovering ? OmniTheme.bgHover : Color.clear),
+                in: RoundedRectangle(cornerRadius: OmniTheme.radiusControl)
+            )
+            .contentShape(RoundedRectangle(cornerRadius: OmniTheme.radiusControl))
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering = $0 }
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(selected ? .isSelected : [])
+    }
+}
+#endif
+
 private struct GameCard: View {
     let entry: CatalogEntry
     let playability: Playability
@@ -240,49 +299,59 @@ private struct GameCard: View {
             HStack(alignment: .firstTextBaseline) {
                 Text(entry.title.isEmpty ? "Untitled game" : entry.title)
                     .font(.headline)
+                    .foregroundStyle(OmniTheme.text)
                     .lineLimit(2)
                 Spacer()
                 Image(systemName: "chevron.right")
                     .font(.caption.bold())
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(OmniTheme.textSecondary)
                     .accessibilityHidden(true)
             }
             Text(entry.author.isEmpty ? "Unknown author" : entry.author)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .font(OmniTheme.small)
+                .foregroundStyle(OmniTheme.textSecondary)
                 .lineLimit(1)
                 .help(entry.author)
             HStack {
-                Label(entry.runModeLabel, systemImage: entry.runMode == "device" ? "iphone" : "tv")
+                Label {
+                    Text(entry.runModeLabel).foregroundStyle(OmniTheme.text)
+                } icon: {
+                    Image(systemName: entry.runMode == "device" ? "iphone" : "tv")
+                        .foregroundStyle(OmniTheme.textSecondary)
+                }
                 Spacer()
                 if let tier = tierBadge {
                     Text(tier)
-                        .font(.caption.bold())
-                        .padding(.horizontal, 8)
+                        .font(OmniTheme.small.bold())
+                        .foregroundStyle(OmniTheme.text)
+                        .padding(.horizontal, OmniTheme.Space.s2)
                         .padding(.vertical, 2)
-                        .background(Color.secondary.opacity(0.2), in: Capsule())
+                        .background(OmniTheme.warnSoft, in: RoundedRectangle(cornerRadius: OmniTheme.radiusControl))
                 }
             }
-            .font(.caption)
+            .font(OmniTheme.small)
             .frame(minHeight: 22)
             Label {
                 Text(playability.summary)
                     .fontWeight(.medium)
-                    .foregroundStyle(playability.isPlayable ? Color.green : Color.primary)
+                    .foregroundStyle(playability.isPlayable ? OmniTheme.ok : OmniTheme.text)
             } icon: {
                 Image(systemName: playability.symbol)
-                    .foregroundStyle(playability.isPlayable ? Color.green : Color.secondary)
+                    .foregroundStyle(playability.isPlayable ? OmniTheme.ok : OmniTheme.textSecondary)
             }
-            .font(.caption)
+            .font(OmniTheme.small)
         }
-        .padding(12)
+        .padding(OmniTheme.Space.s3)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.secondary.opacity(hovering ? 0.2 : 0.12), in: RoundedRectangle(cornerRadius: 12))
+        .background(
+            hovering ? OmniTheme.bgHover : OmniTheme.bgPanel,
+            in: RoundedRectangle(cornerRadius: OmniTheme.radiusWindow)
+        )
         .overlay {
-            RoundedRectangle(cornerRadius: 12)
-                .strokeBorder(Color.secondary.opacity(hovering ? 0.5 : 0), lineWidth: 1)
+            RoundedRectangle(cornerRadius: OmniTheme.radiusWindow)
+                .strokeBorder(hovering ? OmniTheme.lineControl : OmniTheme.line, lineWidth: 1)
         }
-        .contentShape(RoundedRectangle(cornerRadius: 12))
+        .contentShape(RoundedRectangle(cornerRadius: OmniTheme.radiusWindow))
         .onHover { hovering = $0 }
         #if os(macOS)
         .pointerStyle(.link)
