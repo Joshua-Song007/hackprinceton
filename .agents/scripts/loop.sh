@@ -28,7 +28,7 @@ takes() {   # who picks up this loop's duties while it is OUT (ORCHESTRATOR.md 1
   case "$laptop" in tienvu-lol|jacob-e-lee) t="$t; lead duties (maintain.sh, even+odd split) -> other lead";; esac
   echo "$t"
 }
-cap_error() { [ -s "$logs/$slug.json" ] && jq -r '(.result // "") + " " + (.subtype // "")' "$logs/$slug.json" 2>/dev/null | grep -qiE 'usage limit|limit reached|credit balance|out of credits|insufficient credit|rate limit|quota|exceeded your'; }   # credits or rate limit, not a bug
+cap_error() { [ -s "$logs/$slug.json" ] && jq -r '(.result // "") + " " + (.subtype // "")' "$logs/$slug.json" 2>/dev/null | grep -qiE 'usage limit|limit reached|credit balance|out of credits|insufficient credit|rate limit|quota|exceeded your|hit your [^ ]* ?limit'; }   # credits or rate limit, not a bug
 post_capacity() {   # OUT|BACK: tell the other laptops through GitHub; gh needs no model credits
   local n; n=$(gh issue list --search 'Loop capacity in:title' --state open --json number --jq '.[0].number' 2>/dev/null)
   [ -n "$n" ] || n=$(gh issue create --title "Loop capacity" --body "Each loop posts one line when it runs out of credits (OUT) and when it is back (BACK): OUT laptop=<l> role=<r> t=<epoch> reason=<text>. Orchestrators read this in ORCHESTRATOR.md step 1c and take over the lane of a laptop that is OUT." 2>/dev/null | grep -oE '[0-9]+$')
