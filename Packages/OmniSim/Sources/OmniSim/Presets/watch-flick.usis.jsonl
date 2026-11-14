@@ -1,0 +1,5 @@
+{"v":1,"deviceId":"watch-1","kind":"watch","slot":"leftWrist","source":"sim","t":1000,"seq":0,"ch":{"orientation":[0,0,0,1],"accel":[0,-9.81,0]}}
+{"v":1,"deviceId":"watch-1","kind":"watch","slot":"leftWrist","source":"sim","t":1100,"seq":1,"ch":{"orientation":[0,0,0.1305,0.9914],"accel":[6,-9.5,0]}}
+{"v":1,"deviceId":"watch-1","kind":"watch","slot":"leftWrist","source":"sim","t":1200,"seq":2,"ch":{"orientation":[0,0,0.3827,0.9239],"accel":[14,-8,0],"gesture":{"type":"flick","dir":[1,0,0]}}}
+{"v":1,"deviceId":"watch-1","kind":"watch","slot":"leftWrist","source":"sim","t":1300,"seq":3,"ch":{"orientation":[0,0,0.1305,0.9914],"accel":[-4,-9.5,0]}}
+{"v":1,"deviceId":"watch-1","kind":"watch","slot":"leftWrist","source":"sim","t":1400,"seq":4,"ch":{"orientation":[0,0,0,1],"accel":[0,-9.81,0]}}
