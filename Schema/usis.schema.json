@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://omni.local/schema/usis.schema.json",
+  "title": "USIS v1 packet",
+  "description": "Universal Spatial Input Schema v1. One packet per device sample; only changed channels are present.",
+  "type": "object",
+  "required": ["v", "deviceId", "kind", "slot", "source", "t", "seq"],
+  "properties": {
+    "v": { "const": 1 },
+    "deviceId": { "type": "string", "minLength": 1 },
+    "kind": { "enum": ["phone", "tablet", "airpods", "watch", "pencil", "headset", "custom"] },
+    "slot": { "enum": ["head", "leftWrist", "rightWrist", "hand", "pocket", "stylus"] },
+    "source": { "enum": ["live", "sim"] },
+    "t": { "type": "integer", "minimum": 0, "description": "Device timestamp, ms." },
+    "seq": { "type": "integer", "minimum": 0, "description": "Per-device counter for gap detection." },
+    "ch": {
+      "type": "object",
+      "description": "Channels. All optional; unknown channels are ignored.",
+      "additionalProperties": true,
+      "properties": {
+        "orientation": { "$ref": "#/$defs/quaternion" },
+        "position": { "$ref": "#/$defs/vec3" },
+        "accel": { "$ref": "#/$defs/vec3" },
+        "touch": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "x", "y", "phase"],
+            "properties": {
+              "id": { "type": "integer" },
+              "x": { "type": "number", "minimum": 0, "maximum": 1 },
+              "y": { "type": "number", "minimum": 0, "maximum": 1 },
+              "phase": { "enum": ["began", "moved", "ended"] }
+            }
+          }
+        },
+        "gesture": {
+          "type": "object",
+          "required": ["type"],
+          "properties": {
+            "type": { "enum": ["tap", "doubleTap", "flick", "squeeze", "pinch"] },
+            "dir": { "$ref": "#/$defs/vec3" }
+          }
+        },
+        "heartRate": { "type": "number", "minimum": 0, "description": "bpm" },
+        "pencil": {
+          "type": "object",
+          "required": ["tip", "pressure", "roll", "hover"],
+          "properties": {
+            "tip": { "$ref": "#/$defs/vec3", "description": "Meters." },
+            "pressure": { "type": "number", "minimum": 0, "maximum": 1 },
+            "roll": { "type": "number", "description": "Radians." },
+            "hover": { "type": "number", "description": "Meters." }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "vec3": {
+      "type": "array",
+      "items": { "type": "number" },
+      "minItems": 3,
+      "maxItems": 3
+    },
+    "quaternion": {
+      "type": "array",
+      "items": { "type": "number" },
+      "minItems": 4,
+      "maxItems": 4,
+      "description": "[x, y, z, w] unit quaternion, right-handed, +Y up. Unit norm is checked by the validator."
+    }
+  }
+}

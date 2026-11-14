@@ -1,0 +1,89 @@
+{
+  "" : {
+    "diagnostics" : "/Users/joshuasong/Downloads/hackprinceton/Packages/OmniCore/.build/out/Intermediates.noindex/OmniCore.build/Debug/OmniCore-t.build/Objects-normal/arm64/OmniCore-primary.dia",
+    "emit-module-dependencies" : "/Users/joshuasong/Downloads/hackprinceton/Packages/OmniCore/.build/out/Intermediates.noindex/OmniCore.build/Debug/OmniCore-t.build/Objects-normal/arm64/OmniCore-primary-emit-module.d",
+    "emit-module-diagnostics" : "/Users/joshuasong/Downloads/hackprinceton/Packages/OmniCore/.build/out/Intermediates.noindex/OmniCore.build/Debug/OmniCore-t.build/Objects-normal/arm64/OmniCore-primary-emit-module.dia",
+    "pch" : "/Users/joshuasong/Downloads/hackprinceton/Packages/OmniCore/.build/out/Intermediates.noindex/OmniCore.build/Debug/OmniCore-t.build/Objects-normal/arm64/OmniCore-primary-Bridging-header.pch",
+    "swift-dependencies" : "/Users/joshuasong/Downloads/hackprinceton/Packages/OmniCore/.build/out/Intermediates.noindex/OmniCore.build/Debug/OmniCore-t.build/Objects-normal/arm64/OmniCore-primary.swiftdeps"
+  },
+  "/Users/joshuasong/Downloads/hackprinceton/Packages/OmniCore/Sources/OmniCore/Frame/InputFrame.swift" : {
+    "const-values" : "/Users/joshuasong/Downloads/hackprinceton/Packages/OmniCore/.build/out/Intermediates.noindex/OmniCore.build/Debug/OmniCore-t.build/Objects-normal/arm64/InputFrame.swiftconstvalues",
+    "dependencies" : "/Users/joshuasong/Downloads/hackprinceton/Packages/OmniCore/.build/out/Intermediates.noindex/OmniCore.build/Debug/OmniCore-t.build/Objects-normal/arm64/InputFrame.d",
+    "diagnostics" : "/Users/joshuasong/Downloads/hackprinceton/Packages/OmniCore/.build/out/Intermediates.noindex/OmniCore.build/Debug/OmniCore-t.build/Objects-normal/arm64/InputFrame.dia",
+    "index-unit-output-path" : "/OmniCore.build/Debug/OmniCore-t.build/Objects-normal/arm64/InputFrame.o",
+    "llvm-bc" : "/Users/joshuasong/Downloads/hackprinceton/Packages/OmniCore/.build/out/Intermediates.noindex/OmniCore.build/Debug/OmniCore-t.build/Objects-normal/arm64/InputFrame.bc",
+    "object" : "/Users/joshuasong/Downloads/hackprinceton/Packages/OmniCore/.build/out/Intermediates.noindex/OmniCore.build/Debug/OmniCore-t.build/Objects-normal/arm64/InputFrame.o",
+    "swift-dependencies" : "/Users/joshuasong/Downloads/hackprinceton/Packages/OmniCore/.build/out/Intermediates.noindex/OmniCore.build/Debug/OmniCore-t.build/Objects-normal/arm64/InputFrame.swiftdeps",
+    "swiftmodule" : "/Users/joshuasong/Downloads/hackprinceton/Packages/OmniCore/.build/out/Intermediates.noindex/OmniCore.build/Debug/OmniCore-t.build/Objects-normal/arm64/InputFrame~partial.swiftmodule"
+  },
+  "/Users/joshuasong/Downloads/hackprinceton/Packages/OmniCore/Sources/OmniCore/Math/Pose.swift" : {
+    "const-values" : "/Users/joshuasong/Downloads/hackprinceton/Packages/OmniCore/.build/out/Intermediates.noindex/OmniCore.build/Debug/OmniCore-t.build/Objects-normal/arm64/Pose.swiftconstvalues",
+    "dependencies" : "/Users/joshuasong/Downloads/hackprinceton/Packages/OmniCore/.build/out/Intermediates.noindex/OmniCore.build/Debug/OmniCore-t.build/Objects-normal/arm64/Pose.d",
+    "diagnostics" : "/Users/joshuasong/Downloads/hackprinceton/Packages/OmniCore/.build/out/Intermediates.noindex/OmniCore.build/Debug/OmniCore-t.build/Objects-normal/arm64/Pose.dia",
+    "index-unit-output-path" : "/OmniCore.build/Debug/OmniCore-t.build/Objects-normal/arm64/Pose.o",
+    "llvm-bc" : "/Users/joshuasong/Downloads/hackprinceton/Packages/OmniCore/.build/out/Intermediates.noindex/OmniCore.build/Debug/OmniCore-t.build/Objects-normal/arm64/Pose.bc",
+    "object" : "/Users/joshuasong/Downloads/hackprinceton/Packages/OmniCore/.build/out/Intermediates.noindex/OmniCore.build/Debug/OmniCore-t.build/Objects-normal/arm64/Pose.o",
+    "swift-dependencies" : "/Users/joshuasong/Downloads/hackprinceton/Packages/OmniCore/.build/out/Intermediates.noindex/OmniCore.build/Debug/OmniCore-t.build/Objects-normal/arm64/Pose.swiftdeps",
+    "swiftmodule" : "/Users/joshuasong/Downloads/hackprinceton/Packages/OmniCore/.build/out/Intermediates.noindex/OmniCore.build/Debug/OmniCore-t.build/Objects-normal/arm64/Pose~partial.swiftmodule"
+  },
+  "/Users/joshuasong/Downloads/hackprinceton/Packages/OmniCore/Sources/OmniCore/Math/Quaternion.swift" : {
+    "const-values" : "/Users/joshuasong/Downloads/hackprinceton/Packages/OmniCore/.build/out/Intermediates.noindex/OmniCore.build/Debug/OmniCore-t.build/Objects-normal/arm64/Quaternion.swiftconstvalues",
+    "dependencies" : "/Users/joshuasong/Downloads/hackprinceton/Packages/OmniCore/.build/out/Intermediates.noindex/OmniCore.build/Debug/OmniCore-t.build/Objects-normal/arm64/Quaternion.d",
+    "diagnostics" : "/Users/joshuasong/Downloads/hackprinceton/Packages/OmniCore/.build/out/Intermediates.noindex/OmniCore.build/Debug/OmniCore-t.build/Objects-normal/arm64/Quaternion.dia",
+    "index-unit-output-path" : "/OmniCore.build/Debug/OmniCore-t.build/Objects-normal/arm64/Quaternion.o",
+    "llvm-bc" : "/Users/joshuasong/Downloads/hackprinceton/Packages/OmniCore/.build/out/Intermediates.noindex/OmniCore.build/Debug/OmniCore-t.build/Objects-normal/arm64/Quaternion.bc",
+    "object" : "/Users/joshuasong/Downloads/hackprinceton/Packages/OmniCore/.build/out/Intermediates.noindex/OmniCore.build/Debug/OmniCore-t.build/Objects-normal/arm64/Quaternion.o",
+    "swift-dependencies" : "/Users/joshuasong/Downloads/hackprinceton/Packages/OmniCore/.build/out/Intermediates.noindex/OmniCore.build/Debug/OmniCore-t.build/Objects-normal/arm64/Quaternion.swiftdeps",
+    "swiftmodule" : "/Users/joshuasong/Downloads/hackprinceton/Packages/OmniCore/.build/out/Intermediates.noindex/OmniCore.build/Debug/OmniCore-t.build/Objects-normal/arm64/Quaternion~partial.swiftmodule"
+  },
+  "/Users/joshuasong/Downloads/hackprinceton/Packages/OmniCore/Sources/OmniCore/Math/Vector3.swift" : {
+    "const-values" : "/Users/joshuasong/Downloads/hackprinceton/Packages/OmniCore/.build/out/Intermediates.noindex/OmniCore.build/Debug/OmniCore-t.build/Objects-normal/arm64/Vector3.swiftconstvalues",
+    "dependencies" : "/Users/joshuasong/Downloads/hackprinceton/Packages/OmniCore/.build/out/Intermediates.noindex/OmniCore.build/Debug/OmniCore-t.build/Objects-normal/arm64/Vector3.d",
+    "diagnostics" : "/Users/joshuasong/Downloads/hackprinceton/Packages/OmniCore/.build/out/Intermediates.noindex/OmniCore.build/Debug/OmniCore-t.build/Objects-normal/arm64/Vector3.dia",
+    "index-unit-output-path" : "/OmniCore.build/Debug/OmniCore-t.build/Objects-normal/arm64/Vector3.o",
+    "llvm-bc" : "/Users/joshuasong/Downloads/hackprinceton/Packages/OmniCore/.build/out/Intermediates.noindex/OmniCore.build/Debug/OmniCore-t.build/Objects-normal/arm64/Vector3.bc",
+    "object" : "/Users/joshuasong/Downloads/hackprinceton/Packages/OmniCore/.build/out/Intermediates.noindex/OmniCore.build/Debug/OmniCore-t.build/Objects-normal/arm64/Vector3.o",
+    "swift-dependencies" : "/Users/joshuasong/Downloads/hackprinceton/Packages/OmniCore/.build/out/Intermediates.noindex/OmniCore.build/Debug/OmniCore-t.build/Objects-normal/arm64/Vector3.swiftdeps",
+    "swiftmodule" : "/Users/joshuasong/Downloads/hackprinceton/Packages/OmniCore/.build/out/Intermediates.noindex/OmniCore.build/Debug/OmniCore-t.build/Objects-normal/arm64/Vector3~partial.swiftmodule"
+  },
+  "/Users/joshuasong/Downloads/hackprinceton/Packages/OmniCore/Sources/OmniCore/Output/OutputCommand.swift" : {
+    "const-values" : "/Users/joshuasong/Downloads/hackprinceton/Packages/OmniCore/.build/out/Intermediates.noindex/OmniCore.build/Debug/OmniCore-t.build/Objects-normal/arm64/OutputCommand.swiftconstvalues",
+    "dependencies" : "/Users/joshuasong/Downloads/hackprinceton/Packages/OmniCore/.build/out/Intermediates.noindex/OmniCore.build/Debug/OmniCore-t.build/Objects-normal/arm64/OutputCommand.d",
+    "diagnostics" : "/Users/joshuasong/Downloads/hackprinceton/Packages/OmniCore/.build/out/Intermediates.noindex/OmniCore.build/Debug/OmniCore-t.build/Objects-normal/arm64/OutputCommand.dia",
+    "index-unit-output-path" : "/OmniCore.build/Debug/OmniCore-t.build/Objects-normal/arm64/OutputCommand.o",
+    "llvm-bc" : "/Users/joshuasong/Downloads/hackprinceton/Packages/OmniCore/.build/out/Intermediates.noindex/OmniCore.build/Debug/OmniCore-t.build/Objects-normal/arm64/OutputCommand.bc",
+    "object" : "/Users/joshuasong/Downloads/hackprinceton/Packages/OmniCore/.build/out/Intermediates.noindex/OmniCore.build/Debug/OmniCore-t.build/Objects-normal/arm64/OutputCommand.o",
+    "swift-dependencies" : "/Users/joshuasong/Downloads/hackprinceton/Packages/OmniCore/.build/out/Intermediates.noindex/OmniCore.build/Debug/OmniCore-t.build/Objects-normal/arm64/OutputCommand.swiftdeps",
+    "swiftmodule" : "/Users/joshuasong/Downloads/hackprinceton/Packages/OmniCore/.build/out/Intermediates.noindex/OmniCore.build/Debug/OmniCore-t.build/Objects-normal/arm64/OutputCommand~partial.swiftmodule"
+  },
+  "/Users/joshuasong/Downloads/hackprinceton/Packages/OmniCore/Sources/OmniCore/USIS/UsisChannels.swift" : {
+    "const-values" : "/Users/joshuasong/Downloads/hackprinceton/Packages/OmniCore/.build/out/Intermediates.noindex/OmniCore.build/Debug/OmniCore-t.build/Objects-normal/arm64/UsisChannels.swiftconstvalues",
+    "dependencies" : "/Users/joshuasong/Downloads/hackprinceton/Packages/OmniCore/.build/out/Intermediates.noindex/OmniCore.build/Debug/OmniCore-t.build/Objects-normal/arm64/UsisChannels.d",
+    "diagnostics" : "/Users/joshuasong/Downloads/hackprinceton/Packages/OmniCore/.build/out/Intermediates.noindex/OmniCore.build/Debug/OmniCore-t.build/Objects-normal/arm64/UsisChannels.dia",
+    "index-unit-output-path" : "/OmniCore.build/Debug/OmniCore-t.build/Objects-normal/arm64/UsisChannels.o",
+    "llvm-bc" : "/Users/joshuasong/Downloads/hackprinceton/Packages/OmniCore/.build/out/Intermediates.noindex/OmniCore.build/Debug/OmniCore-t.build/Objects-normal/arm64/UsisChannels.bc",
+    "object" : "/Users/joshuasong/Downloads/hackprinceton/Packages/OmniCore/.build/out/Intermediates.noindex/OmniCore.build/Debug/OmniCore-t.build/Objects-normal/arm64/UsisChannels.o",
+    "swift-dependencies" : "/Users/joshuasong/Downloads/hackprinceton/Packages/OmniCore/.build/out/Intermediates.noindex/OmniCore.build/Debug/OmniCore-t.build/Objects-normal/arm64/UsisChannels.swiftdeps",
+    "swiftmodule" : "/Users/joshuasong/Downloads/hackprinceton/Packages/OmniCore/.build/out/Intermediates.noindex/OmniCore.build/Debug/OmniCore-t.build/Objects-normal/arm64/UsisChannels~partial.swiftmodule"
+  },
+  "/Users/joshuasong/Downloads/hackprinceton/Packages/OmniCore/Sources/OmniCore/USIS/UsisEnums.swift" : {
+    "const-values" : "/Users/joshuasong/Downloads/hackprinceton/Packages/OmniCore/.build/out/Intermediates.noindex/OmniCore.build/Debug/OmniCore-t.build/Objects-normal/arm64/UsisEnums.swiftconstvalues",
+    "dependencies" : "/Users/joshuasong/Downloads/hackprinceton/Packages/OmniCore/.build/out/Intermediates.noindex/OmniCore.build/Debug/OmniCore-t.build/Objects-normal/arm64/UsisEnums.d",
+    "diagnostics" : "/Users/joshuasong/Downloads/hackprinceton/Packages/OmniCore/.build/out/Intermediates.noindex/OmniCore.build/Debug/OmniCore-t.build/Objects-normal/arm64/UsisEnums.dia",
+    "index-unit-output-path" : "/OmniCore.build/Debug/OmniCore-t.build/Objects-normal/arm64/UsisEnums.o",
+    "llvm-bc" : "/Users/joshuasong/Downloads/hackprinceton/Packages/OmniCore/.build/out/Intermediates.noindex/OmniCore.build/Debug/OmniCore-t.build/Objects-normal/arm64/UsisEnums.bc",
+    "object" : "/Users/joshuasong/Downloads/hackprinceton/Packages/OmniCore/.build/out/Intermediates.noindex/OmniCore.build/Debug/OmniCore-t.build/Objects-normal/arm64/UsisEnums.o",
+    "swift-dependencies" : "/Users/joshuasong/Downloads/hackprinceton/Packages/OmniCore/.build/out/Intermediates.noindex/OmniCore.build/Debug/OmniCore-t.build/Objects-normal/arm64/UsisEnums.swiftdeps",
+    "swiftmodule" : "/Users/joshuasong/Downloads/hackprinceton/Packages/OmniCore/.build/out/Intermediates.noindex/OmniCore.build/Debug/OmniCore-t.build/Objects-normal/arm64/UsisEnums~partial.swiftmodule"
+  },
+  "/Users/joshuasong/Downloads/hackprinceton/Packages/OmniCore/Sources/OmniCore/USIS/UsisPacket.swift" : {
+    "const-values" : "/Users/joshuasong/Downloads/hackprinceton/Packages/OmniCore/.build/out/Intermediates.noindex/OmniCore.build/Debug/OmniCore-t.build/Objects-normal/arm64/UsisPacket.swiftconstvalues",
+    "dependencies" : "/Users/joshuasong/Downloads/hackprinceton/Packages/OmniCore/.build/out/Intermediates.noindex/OmniCore.build/Debug/OmniCore-t.build/Objects-normal/arm64/UsisPacket.d",
+    "diagnostics" : "/Users/joshuasong/Downloads/hackprinceton/Packages/OmniCore/.build/out/Intermediates.noindex/OmniCore.build/Debug/OmniCore-t.build/Objects-normal/arm64/UsisPacket.dia",
+    "index-unit-output-path" : "/OmniCore.build/Debug/OmniCore-t.build/Objects-normal/arm64/UsisPacket.o",
+    "llvm-bc" : "/Users/joshuasong/Downloads/hackprinceton/Packages/OmniCore/.build/out/Intermediates.noindex/OmniCore.build/Debug/OmniCore-t.build/Objects-normal/arm64/UsisPacket.bc",
+    "object" : "/Users/joshuasong/Downloads/hackprinceton/Packages/OmniCore/.build/out/Intermediates.noindex/OmniCore.build/Debug/OmniCore-t.build/Objects-normal/arm64/UsisPacket.o",
+    "swift-dependencies" : "/Users/joshuasong/Downloads/hackprinceton/Packages/OmniCore/.build/out/Intermediates.noindex/OmniCore.build/Debug/OmniCore-t.build/Objects-normal/arm64/UsisPacket.swiftdeps",
+    "swiftmodule" : "/Users/joshuasong/Downloads/hackprinceton/Packages/OmniCore/.build/out/Intermediates.noindex/OmniCore.build/Debug/OmniCore-t.build/Objects-normal/arm64/UsisPacket~partial.swiftmodule"
+  }
+}

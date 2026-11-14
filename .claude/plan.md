@@ -12,7 +12,7 @@ Goal: every package exists with its dependency boundary enforced, USIS v1 is def
 
 ### 1.1 Workspace & package scaffold
 - [x] `Omni.xcworkspace/contents.xcworkspacedata` — workspace referencing every local package and both app projects (Xcode-generated; commit as-is).
-- [x] `Packages/OmniCore/Package.swift` — OmniCore manifest, no dependencies.
+- [x] `Packages/OmniCore/Package.swift` — OmniCore manifest, no dependencies. (testTarget `OmniCoreTests` added in Phase 1.2 so `swift test` can run; no other package has a testTarget yet.)
 - [x] `Packages/OmniInput/Package.swift` — OmniInput manifest, depends on OmniCore.
 - [x] `Packages/OmniOutput/Package.swift` — OmniOutput manifest, depends on OmniCore.
 - [x] `Packages/OmniRuntime/Package.swift` — OmniRuntime manifest, depends on OmniCore and OmniInput only.
@@ -28,17 +28,17 @@ Goal: every package exists with its dependency boundary enforced, USIS v1 is def
 - [x] `Packages/OmniAdapters/Sources/OmniAdapters/Module.swift` — empty module marker; stays until Phase 7.
 
 ### 1.2 OmniCore — math and USIS types (pure, no I/O)
-- [ ] `Schema/usis.schema.json` — USIS v1 JSON Schema: envelope (`v`, `deviceId`, `kind`, `slot`, `source`, `t`, `seq`) and channels (orientation, position, accel, touch, gesture, heartRate, pencil). Source of truth for companions, sim and adapters.
-- [ ] `Packages/OmniCore/Sources/OmniCore/Math/Vector3.swift` — 3-vector value type with lerp, dot, normalize, length.
-- [ ] `Packages/OmniCore/Sources/OmniCore/Math/Quaternion.swift` — unit quaternion `[x,y,z,w]` with multiply, inverse, slerp, yaw-only extraction, angle-between.
-- [ ] `Packages/OmniCore/Sources/OmniCore/Math/Pose.swift` — position + orientation value type.
-- [ ] `Packages/OmniCore/Sources/OmniCore/USIS/UsisEnums.swift` — `DeviceKind`, `Slot`, `PacketSource`, `GestureType`, `TouchPhase` string-backed enums matching the schema.
-- [ ] `Packages/OmniCore/Sources/OmniCore/USIS/UsisChannels.swift` — optional-per-channel Codable struct (a packet carries only changed channels; unknown channels ignored on decode).
-- [ ] `Packages/OmniCore/Sources/OmniCore/USIS/UsisPacket.swift` — Codable envelope + channels, `v` field versioning.
-- [ ] `Packages/OmniCore/Sources/OmniCore/Frame/InputFrame.swift` — world-space per-frame snapshot, no `source` field (InputFrame lives in OmniCore, not OmniInput, so OmniRuntime can consume it without depending on more than OmniInput's protocols — overview.md names the type but not its package; no revisit scheduled).
-- [ ] `Packages/OmniCore/Sources/OmniCore/Output/OutputCommand.swift` — `{ target, type: haptic|audio, pattern, intensity, durationMs }` Codable (lives in OmniCore so OmniRuntime can queue commands without depending on OmniOutput; the `OutputSink` protocol stays in OmniOutput per overview.md).
-- [ ] `Packages/OmniCore/Tests/OmniCoreTests/QuaternionTests.swift` — slerp, inverse, yaw-only extraction against known values.
-- [ ] `Packages/OmniCore/Tests/OmniCoreTests/UsisPacketTests.swift` — encode/decode round-trip of the overview.md example packet; unknown channels ignored; partial channels.
+- [x] `Schema/usis.schema.json` — USIS v1 JSON Schema: envelope (`v`, `deviceId`, `kind`, `slot`, `source`, `t`, `seq`) and channels (orientation, position, accel, touch, gesture, heartRate, pencil). Source of truth for companions, sim and adapters.
+- [x] `Packages/OmniCore/Sources/OmniCore/Math/Vector3.swift` — 3-vector value type with lerp, dot, normalize, length. (Double precision, no `simd`, to keep OmniCore Foundation-only; OmniRuntime converts to Float at the RealityKit edge; no direct Vector3 tests scheduled.)
+- [x] `Packages/OmniCore/Sources/OmniCore/Math/Quaternion.swift` — unit quaternion `[x,y,z,w]` with multiply, inverse, slerp, yaw-only extraction, angle-between. (Up axis is +Y — a plan decision, not stated in overview.md; CoreMotion reference frames are Z-up, so companions and `AirPodsMotionSource` must convert; yaw-only reads the +Z axis heading, exact for Ry·Rx·Rz with |pitch| < 90°, yaw 0 when +Z is vertical; revisit when Phase 3 sources land.)
+- [x] `Packages/OmniCore/Sources/OmniCore/Math/Pose.swift` — position + orientation value type.
+- [x] `Packages/OmniCore/Sources/OmniCore/USIS/UsisEnums.swift` — `DeviceKind`, `Slot`, `PacketSource`, `GestureType`, `TouchPhase` string-backed enums matching the schema.
+- [x] `Packages/OmniCore/Sources/OmniCore/USIS/UsisChannels.swift` — optional-per-channel Codable struct (a packet carries only changed channels; unknown channels ignored on decode). (`pencil.tip` modelled as Vector3 meters and `hover` as scalar meters — overview.md says only "Meters"; no revisit scheduled.)
+- [x] `Packages/OmniCore/Sources/OmniCore/USIS/UsisPacket.swift` — Codable envelope + channels, `v` field versioning. (Decode does not reject `v != 1`; version policy is `PacketValidator` in 1.3.)
+- [x] `Packages/OmniCore/Sources/OmniCore/Frame/InputFrame.swift` — world-space per-frame snapshot, no `source` field (InputFrame lives in OmniCore, not OmniInput, so OmniRuntime can consume it without depending on more than OmniInput's protocols — overview.md names the type but not its package; no revisit scheduled). (Shape is `InputFrame { timestamp, devices: [DeviceSample] }` with per-device world-space channels and a `stale` flag — overview.md does not specify it; no revisit scheduled.)
+- [x] `Packages/OmniCore/Sources/OmniCore/Output/OutputCommand.swift` — `{ target, type: haptic|audio, pattern, intensity, durationMs }` Codable (lives in OmniCore so OmniRuntime can queue commands without depending on OmniOutput; the `OutputSink` protocol stays in OmniOutput per overview.md). (No envelope fields (`v`/`t`/`seq`) — overview.md says "same envelope rules as USIS" without listing them; intensity clamped to 0–1 and durationMs floored at 0 on init and decode; revisit if the wire protocol in 3.1 needs sequencing.)
+- [x] `Packages/OmniCore/Tests/OmniCoreTests/QuaternionTests.swift` — slerp, inverse, yaw-only extraction against known values.
+- [x] `Packages/OmniCore/Tests/OmniCoreTests/UsisPacketTests.swift` — encode/decode round-trip of the overview.md example packet; unknown channels ignored; partial channels. (Also covers `OutputCommand` round-trip and clamping, since no separate test item exists for it.)
 
 ### 1.3 OmniInput — protocols, validation, pipeline
 - [ ] `Packages/OmniInput/Sources/OmniInput/InputSource.swift` — `InputSource` protocol: emits `UsisPacket`s, declares device descriptor (kind, slot, sample rate).

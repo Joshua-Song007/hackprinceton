@@ -74,6 +74,9 @@ Where one package is swapped for another without the consumer changing. Studio's
 | `Vector3`, `Quaternion`, `Pose` | OmniCore | |
 | `InputFrame` | OmniCore | **(plan decision)** lets OmniRuntime avoid more than OmniInput's protocols |
 | `OutputCommand` | OmniCore | **(plan decision)** lets OmniRuntime queue commands without OmniOutput |
+| `TouchPoint`, `GestureEvent`, `PencilState` | OmniCore | **(plan decision)** channel payload types, shared by `UsisChannels` and `InputFrame` |
+| `DeviceSample` | OmniCore | **(plan decision)** one device's entry in an `InputFrame`; carries no `source` |
+| `OutputType` | OmniCore | **(plan decision)** `haptic` / `audio` for `OutputCommand` |
 | `WireMessage`, `LineFraming` | OmniCore | **(plan decision)** companions depend only on OmniCore |
 | `InputSource`, `InputBus`, `CapabilityTier`, `DeviceStats` | OmniInput | `DeviceStats` is the only place `source` survives |
 | `OutputSink` | OmniOutput | |

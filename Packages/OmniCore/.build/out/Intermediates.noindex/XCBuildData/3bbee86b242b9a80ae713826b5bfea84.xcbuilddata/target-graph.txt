@@ -1,0 +1,7 @@
+Target dependency graph (3 targets)
+Target 'AllExcludingTests' in project 'Aggregate'
+➜ Explicit dependency on target 'OmniCore-product' in project 'OmniCore'
+➜ Explicit dependency on target 'OmniCore' in project 'OmniCore'
+Target 'OmniCore-product' in project 'OmniCore'
+➜ Explicit dependency on target 'OmniCore' in project 'OmniCore'
+Target 'OmniCore' in project 'OmniCore' (no dependencies)
