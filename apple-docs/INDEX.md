@@ -42,3 +42,6 @@ Source type is official-doc unless noted. Forum threads failed to download (see 
 | raw/watchconnectivity.md | official-doc | WatchConnectivity framework overview. |
 | raw/watchconnectivity__wcsession.md | official-doc | WCSession class: iPhone-Watch messaging and data transfer. |
 | raw/wwdc2023_10179.html | wwdc | WWDC23 'What's new in Core Motion': headphone motion on macOS 14, water submersion, CMBatchedSensorManager (watchOS 10), with transcript. |
+| raw/updates__coremotion.md | official-doc | Core Motion change log (June 2023 - Sept 2024). |
+| raw/coremotion__getting-processed-device-motion-data.md | official-doc | Article on processed device motion, reference frames, update frequency. |
+| raw/coremotion__getting-raw-accelerometer-events.md | official-doc | Article on raw accelerometer updates and intervals. |

@@ -648,5 +648,38 @@
     "source_type": "official-doc",
     "http_status": 404,
     "status": "FAILED: wrong path; correct path is .../cmdevicemotion/SensorLocation-swift.enum (saved)"
+  },
+  {
+    "file": "raw/updates__coremotion.md",
+    "url": "https://developer.apple.com/documentation/updates/coremotion.md",
+    "retrieved_at": "2026-11-14T03:26:26.977841+00:00",
+    "http_status": 200,
+    "sha256": "2f9c7c5714d36825a27213209afa2c211a0a82f4f711af43b0982460396d255d",
+    "source_type": "official-doc",
+    "method": "md",
+    "availability": [],
+    "note": "added in follow-up pass"
+  },
+  {
+    "file": "raw/coremotion__getting-processed-device-motion-data.md",
+    "url": "https://developer.apple.com/documentation/coremotion/getting-processed-device-motion-data.md",
+    "retrieved_at": "2026-11-14T03:26:27.894415+00:00",
+    "http_status": 200,
+    "sha256": "5d6a55370b9a61a35169ede252d3c315ad2f35fb83343c340787e9390d909251",
+    "source_type": "official-doc",
+    "method": "md",
+    "availability": [],
+    "note": "added in follow-up pass"
+  },
+  {
+    "file": "raw/coremotion__getting-raw-accelerometer-events.md",
+    "url": "https://developer.apple.com/documentation/coremotion/getting-raw-accelerometer-events.md",
+    "retrieved_at": "2026-11-14T03:26:28.817557+00:00",
+    "http_status": 200,
+    "sha256": "a677eaf6f7166b753075eb202c33db7a11043e1ffdc63f9e56aa1533d3a3da2c",
+    "source_type": "official-doc",
+    "method": "md",
+    "availability": [],
+    "note": "added in follow-up pass"
   }
 ]
