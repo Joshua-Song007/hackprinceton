@@ -1,15 +1,15 @@
 [
   {
     "contents" : {
-      "guid" : "Workspace:/Users/joshuasong/Downloads/hackprinceton/Packages/OmniCore",
+      "guid" : "Workspace:/Users/michaelchung/Documents/Hackathons_and_projects/hackprinceton/Packages/OmniCore",
       "name" : "OmniCore",
-      "path" : "/Users/joshuasong/Downloads/hackprinceton/Packages/OmniCore",
+      "path" : "/Users/michaelchung/Documents/Hackathons_and_projects/hackprinceton/Packages/OmniCore",
       "projects" : [
-        "f6b54cc60fe1a2a7c03c7e93822a5828f9abeea4d634b7addd4007bc343ed507",
-        "eb09c5a688beea03bb30a1e60c1915b395c6db5c5219b34106b1ef30e582dc95"
+        "bda013db6b182bfcbc7567461c18856d4cf7ca9b2eaab6f1734aae014f1c1a40",
+        "80ab3a1c17edfaafe5bdb98a6269ade46b85363f77442047f2a219d81ba8a539"
       ]
     },
-    "signature" : "fcde05f45d794a9419ebf68701432060a375b859668e6de60c9a72f5884839e3",
+    "signature" : "3986553c74f43776777ba566c8c5246d486194a2cbc970e1c15fd8161d9f0e9c",
     "type" : "workspace"
   },
   {
@@ -228,8 +228,8 @@
               }
             ],
             "guid" : "PACKAGE:omnicore::MAINGROUP::REF_2",
-            "name" : "/Users/joshuasong/Downloads/hackprinceton/Packages/OmniCore/Tests/OmniCoreTests",
-            "path" : "/Users/joshuasong/Downloads/hackprinceton/Packages/OmniCore/Tests/OmniCoreTests",
+            "name" : "/Users/michaelchung/Documents/Hackathons_and_projects/hackprinceton/Packages/OmniCore/Tests/OmniCoreTests",
+            "path" : "/Users/michaelchung/Documents/Hackathons_and_projects/hackprinceton/Packages/OmniCore/Tests/OmniCoreTests",
             "sourceTree" : "<absolute>",
             "type" : "group"
           },
@@ -301,8 +301,8 @@
               }
             ],
             "guid" : "PACKAGE:omnicore::MAINGROUP::REF_3",
-            "name" : "/Users/joshuasong/Downloads/hackprinceton/Packages/OmniCore/Sources/OmniCore",
-            "path" : "/Users/joshuasong/Downloads/hackprinceton/Packages/OmniCore/Sources/OmniCore",
+            "name" : "/Users/michaelchung/Documents/Hackathons_and_projects/hackprinceton/Packages/OmniCore/Sources/OmniCore",
+            "path" : "/Users/michaelchung/Documents/Hackathons_and_projects/hackprinceton/Packages/OmniCore/Sources/OmniCore",
             "sourceTree" : "<absolute>",
             "type" : "group"
           },
@@ -374,8 +374,8 @@
               }
             ],
             "guid" : "PACKAGE:omnicore::MAINGROUP::REF_4",
-            "name" : "/Users/joshuasong/Downloads/hackprinceton/Packages/OmniCore/Sources/OmniCore",
-            "path" : "/Users/joshuasong/Downloads/hackprinceton/Packages/OmniCore/Sources/OmniCore",
+            "name" : "/Users/michaelchung/Documents/Hackathons_and_projects/hackprinceton/Packages/OmniCore/Sources/OmniCore",
+            "path" : "/Users/michaelchung/Documents/Hackathons_and_projects/hackprinceton/Packages/OmniCore/Sources/OmniCore",
             "sourceTree" : "<absolute>",
             "type" : "group"
           }
@@ -387,8 +387,8 @@
         "type" : "group"
       },
       "guid" : "PACKAGE:omnicore",
-      "path" : "/Users/joshuasong/Downloads/hackprinceton/Packages/OmniCore/Package.swift",
-      "projectDirectory" : "/Users/joshuasong/Downloads/hackprinceton/Packages/OmniCore",
+      "path" : "/Users/michaelchung/Documents/Hackathons_and_projects/hackprinceton/Packages/OmniCore/Package.swift",
+      "projectDirectory" : "/Users/michaelchung/Documents/Hackathons_and_projects/hackprinceton/Packages/OmniCore",
       "projectIsPackage" : "true",
       "projectName" : "OmniCore",
       "targets" : [
@@ -400,7 +400,7 @@
         "a1e865cfa414764a2184259ad3d6ca93af6cdccfe9835cbe3fb2076c3d4a3636"
       ]
     },
-    "signature" : "f6b54cc60fe1a2a7c03c7e93822a5828f9abeea4d634b7addd4007bc343ed507",
+    "signature" : "bda013db6b182bfcbc7567461c18856d4cf7ca9b2eaab6f1734aae014f1c1a40",
     "type" : "project"
   },
   {
@@ -1382,8 +1382,8 @@
         "type" : "group"
       },
       "guid" : "AGGREGATE",
-      "path" : "/Users/joshuasong/Downloads/hackprinceton/Packages/OmniCore/Package.swift",
-      "projectDirectory" : "/Users/joshuasong/Downloads/hackprinceton/Packages/OmniCore",
+      "path" : "/Users/michaelchung/Documents/Hackathons_and_projects/hackprinceton/Packages/OmniCore/Package.swift",
+      "projectDirectory" : "/Users/michaelchung/Documents/Hackathons_and_projects/hackprinceton/Packages/OmniCore",
       "projectIsPackage" : "true",
       "projectName" : "Aggregate",
       "targets" : [
@@ -1391,7 +1391,7 @@
         "15f114d7f035a23bb6a3b24db8df94c200f95d1732e8a224bdccf9ab93598ce9"
       ]
     },
-    "signature" : "eb09c5a688beea03bb30a1e60c1915b395c6db5c5219b34106b1ef30e582dc95",
+    "signature" : "80ab3a1c17edfaafe5bdb98a6269ade46b85363f77442047f2a219d81ba8a539",
     "type" : "project"
   },
   {

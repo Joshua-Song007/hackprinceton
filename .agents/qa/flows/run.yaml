@@ -1,0 +1,14 @@
+# One whole activity in a single Maestro run, used by .agents/scripts/sim-run.sh, which starts the GPS walk once this
+# flow is running. Maestro's driver stops the simulator's location playback whenever a maestro command starts or ends,
+# so a walk only survives inside one flow. (Maestro's own travel command ignores its speed, so runs fail the speed gate.)
+# Starts on the map, ends on the summary screen.
+# env: MODE = Run | Bike | Car, UNTIL = regex of the recording-screen label to wait for
+appId: dev.bound.HexGame
+---
+- tapOn: "Start activity"
+- tapOn: ${MODE}
+- extendedWaitUntil:
+    visible: ${UNTIL}
+    timeout: 540000
+- tapOn: "Pause"   # finish only shows while paused
+- longPressOn: "(?s).*Hold to finish.*"

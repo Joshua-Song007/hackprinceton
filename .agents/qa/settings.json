@@ -1,0 +1,53 @@
+{
+  "permissions": {
+    "defaultMode": "dontAsk",
+    "allow": [
+      "Read",
+      "Write(ios/.qa-reports/**)",
+      "Edit(ios/.qa-reports/**)",
+      "Bash(maestro --device * hierarchy)",
+      "Bash(maestro --device * test *)",
+      "Bash(xcrun simctl io * screenshot *)",
+      "Bash(xcrun simctl launch *)",
+      "Bash(xcrun simctl terminate *)",
+      "Bash(xcrun simctl location *)",
+      "Bash(.agents/scripts/qa-dev.sh *)",
+      "Bash(.agents/scripts/sim-walk.sh *)",
+      "Bash(.agents/scripts/sim-run.sh *)",
+      "Bash(*/.agents/scripts/qa-dev.sh *)",
+      "Bash(*/.agents/scripts/sim-walk.sh *)",
+      "Bash(*/.agents/scripts/sim-run.sh *)"
+    ],
+    "deny": [
+      "Edit(crates/**)",
+      "Edit(ios/HexGame/**)",
+      "Edit(ios/HexGameTests/**)",
+      "Edit(ios/HexGameWidgets/**)",
+      "Edit(ios/maestro/**)",
+      "Edit(ios/project.yml)",
+      "Edit(**/.claude/**)",
+      "Edit(**/.agents/**)",
+      "Edit(**/.github/**)",
+      "Edit(config/**)",
+      "Edit(migrations/**)",
+      "Edit(infra/**)",
+      "Read(**/.env)",
+      "Read(**/.env.*)",
+      "Read(**/*.pem)",
+      "Read(**/*.key)",
+      "Read(~/.aws/**)",
+      "Read(~/.ssh/**)",
+      "Read(~/.gnupg/**)",
+      "Read(~/.config/**)",
+      "Read(~/.claude/**)",
+      "Read(~/.netrc)",
+      "Read(**/.agents/HUMAN.md)",
+      "Bash(git push*)",
+      "Bash(rm -rf*)",
+      "Bash(sudo*)",
+      "Bash(xcrun simctl spawn*)",
+      "Bash(curl*)",
+      "Bash(wget*)"
+    ]
+  }
+}

@@ -1,0 +1,11 @@
+Target dependency graph (4 targets)
+Target 'AllIncludingTests' in project 'Aggregate'
+➜ Explicit dependency on target 'OmniCoreTests-product' in project 'OmniCore'
+➜ Dependency on target 'OmniCoreTests-product' in project 'OmniCore' via transitive dependency through 'OmniCoreTests-test-runner'
+➜ Explicit dependency on target 'OmniCore-product' in project 'OmniCore'
+➜ Explicit dependency on target 'OmniCore' in project 'OmniCore'
+Target 'OmniCore-product' in project 'OmniCore'
+➜ Explicit dependency on target 'OmniCore' in project 'OmniCore'
+Target 'OmniCoreTests-product' in project 'OmniCore'
+➜ Explicit dependency on target 'OmniCore' in project 'OmniCore'
+Target 'OmniCore' in project 'OmniCore' (no dependencies)

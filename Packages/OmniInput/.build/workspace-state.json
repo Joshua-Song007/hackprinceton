@@ -1,0 +1,27 @@
+{
+  "object" : {
+    "artifacts" : [
+
+    ],
+    "dependencies" : [
+      {
+        "basedOn" : null,
+        "packageRef" : {
+          "identity" : "omnicore",
+          "kind" : "fileSystem",
+          "location" : "/Users/michaelchung/Documents/Hackathons_and_projects/hackprinceton/Packages/OmniCore",
+          "name" : "OmniCore"
+        },
+        "state" : {
+          "name" : "fileSystem",
+          "path" : "/Users/michaelchung/Documents/Hackathons_and_projects/hackprinceton/Packages/OmniCore"
+        },
+        "subpath" : "omnicore"
+      }
+    ],
+    "prebuilts" : [
+
+    ]
+  },
+  "version" : 7
+}
