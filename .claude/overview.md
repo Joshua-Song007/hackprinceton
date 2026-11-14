@@ -145,7 +145,7 @@ number
 bpm
 pencil
 { tip, pressure, roll, hover }
-Meters, 0–1, radians, meters
+Meters, 0–1, radians, meters (FLAGGED: measured on iPad, tip is a 2D screen point and hover is normalized 0–1, not meters; tilt has no field; unresolved)
 • Coordinate Frame: every USIS vector and quaternion uses one right-handed frame: +X right, +Y up, −Z forward (RealityKit's convention). Each source converts from its native frame before emitting. CoreMotion frames are Z-up; the AirPods frame was measured as X right, Y forward, Z up, so AirPods map vectors (x, y, z) → (x, z, −y) and quaternions [x, y, z, w] → [x, z, −y, w]. The iPhone frame was measured as X right edge, Y top edge, Z out of the screen, so the phone uses the same mapping, and pointing the phone's top edge is Omni forward. The Watch frame is converted the same way once measured.
 • Format Rules: a packet carries only the channels that changed. Unknown channels are ignored, so newer devices don't break older apps. A breaking change bumps v.
 • Recording: input sessions save as .usis.jsonl (one packet per line). Simulator gesture presets are just recorded files, and a bug report can attach a recording to replay.

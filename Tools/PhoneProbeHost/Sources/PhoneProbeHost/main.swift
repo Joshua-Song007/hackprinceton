@@ -36,6 +36,24 @@ struct Bucket {
     var motionLatencies: [Double] = []
     var touches = 0
     var hapticRtts: [Double] = []
+    // Pencil (iPad). Ranges are [min, max]; empty means no samples.
+    var pencilIntervals: [Double] = []
+    var pencilSamples = 0
+    var force: [Double] = [], alt: [Double] = [], roll: [Double] = [], hoverZ: [Double] = []
+    var squeezes = 0, taps = 0
+
+    var hasPencil: Bool { pencilSamples > 0 || !hoverZ.isEmpty || squeezes > 0 || taps > 0 }
+
+    func describePencil() -> String {
+        func range(_ v: [Double], _ scale: Double = 1) -> String {
+            guard let lo = v.min(), let hi = v.max() else { return "—" }
+            return String(format: "[%.2f, %.2f]", lo * scale, hi * scale)
+        }
+        let iv = pencilIntervals.sorted(), deg = 180 / Double.pi
+        return String(format: "    pencil n=%d %.1f Hz  interval p50 %.2f / p95 %.2f ms  force %@  alt %@°  roll %@°  hover n=%d z %@  squeeze %d  tap %d",
+                      pencilSamples, hz(pencilIntervals), percentile(iv, 0.5), percentile(iv, 0.95),
+                      range(force), range(alt, deg), range(roll, deg), hoverZ.count, range(hoverZ), squeezes, taps)
+    }
 
     func describe(seconds: Double) -> String {
         let iv = intervals.sorted(), rt = rtts.sorted(), off = offsets.sorted(), ml = motionLatencies.sorted(), hp = hapticRtts.sorted()
@@ -63,6 +81,10 @@ func selftest() {
     let iv = Array(repeating: 10.0, count: 99) + [600]
     assert(abs(hz(iv) - 100 / 1.59) < 1e-9)
     assert(percentile(iv.sorted(), 0.5) == 10 && percentile([], 0.5) == 0)
+    var b = Bucket()
+    assert(!b.hasPencil)
+    b.pencilSamples = 1; b.force = [0.2, 0.9]
+    assert(b.hasPencil && b.describePencil().contains("force [0.20, 0.90]"))
     print("selftest ok")
 }
 
@@ -97,6 +119,7 @@ var window = Bucket(), session = Bucket()
 var hapticSentAt: [Int: Double] = [:]
 var nextHaptic = 1
 var lastPhase = "?"
+var lastPencilT: Double?
 
 func record(_ update: (inout Bucket) -> Void) { update(&window); update(&session) }
 
@@ -118,11 +141,29 @@ func handle(_ line: String, recv: Double) {
         let rtt = recv - hostT
         let offset = (dev - (hostT + rtt / 2)) * 1000
         record { $0.rtts.append(rtt * 1000); $0.offsets.append(offset) }
+    } else if let p = obj["pencil"] as? [String: Any], let t = obj["t"] as? Double {
+        record { b in
+            b.pencilSamples += 1
+            if let f = p["force"] as? Double { b.force.append(f) }
+            if let a = p["alt"] as? Double { b.alt.append(a) }
+            if let r = p["roll"] as? Double { b.roll.append(r) }
+        }
+        // a new stroke starts a new interval chain, so pen-up time isn't counted as a sample gap
+        if (p["phase"] as? String) != "began", let lastPencilT { let iv = (t - lastPencilT) * 1000; record { $0.pencilIntervals.append(iv) } }
+        lastPencilT = (p["phase"] as? String) == "ended" ? nil : t
+    } else if let h = obj["hover"] as? [String: Any] {
+        if let z = h["z"] as? Double { record { $0.hoverZ.append(z) } }
+    } else if let g = obj["pencilGesture"] as? String {
+        if g == "tap" { record { $0.taps += 1 } }
+        if g == "squeeze", (obj["phase"] as? String) == "ended" { record { $0.squeezes += 1 } }
+        print(">>> pencil \(g)\((obj["phase"] as? String).map { " \($0)" } ?? "") via \(obj["via"] as? String ?? "?")")
     } else if obj["touch"] != nil {
         record { $0.touches += 1 }
     } else if let id = obj["hapticAck"] as? Int, let sent = hapticSentAt.removeValue(forKey: id) {
         let rtt = (recv - sent) * 1000
         record { $0.hapticRtts.append(rtt) }
+    } else if let model = obj["hello"] as? String {
+        print(">>> hello from \(model) (\(obj["idiom"] as? String ?? "?"))")
     } else if let phase = obj["phase"] as? String {
         lastPhase = phase
         print(">>> phone phase: \(phase)")
@@ -198,12 +239,12 @@ let haptics = every(3) {
     nextHaptic += 1
 }
 let reporter = every(2) {
-    print((current?.state == .ready ? "" : "(no phone connected)  ") + "phase=\(lastPhase)\n" + window.describe(seconds: 2))
+    print((current?.state == .ready ? "" : "(no phone connected)  ") + "phase=\(lastPhase)\n" + window.describe(seconds: 2) + (window.hasPencil ? "\n" + window.describePencil() : ""))
     window = Bucket()
 }
 
 func finish() {
-    print("\n=== session ===\n" + session.describe(seconds: now() - started))
+    print("\n=== session ===\n" + session.describe(seconds: now() - started) + (session.hasPencil ? "\n" + session.describePencil() : ""))
     try? file.close()
     print("saved \(outPath)")
     exit(0)

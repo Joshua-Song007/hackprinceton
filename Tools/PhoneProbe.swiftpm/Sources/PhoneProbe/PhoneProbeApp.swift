@@ -74,6 +74,7 @@ final class Probe: ObservableObject {
             switch state {
             case .ready:
                 setStatus("connected")
+                send("{\"hello\":\"\(UIDevice.current.model)\",\"idiom\":\"\(UIDevice.current.userInterfaceIdiom == .pad ? "pad" : "phone")\"}")
                 DispatchQueue.main.async { self.host = "\(result.endpoint)" }
                 receive(on: c)
             case .waiting(let error):
@@ -146,6 +147,11 @@ final class Probe: ObservableObject {
         queue.async { self.send("{\"touch\":{\"x\":\(x),\"y\":\(y),\"phase\":\"\(phase)\"},\"t\":\(t)}") }
     }
 
+    /// For callers on other threads (the UIKit touch surface); sends on `queue`.
+    func sendRaw(_ line: String) {
+        queue.async { self.send(line) }
+    }
+
     func phase(_ name: String) {
         queue.async { self.send("{\"phase\":\"\(name)\"}") }
     }
@@ -155,39 +161,134 @@ final class Probe: ObservableObject {
     }
 }
 
+/// UIKit touch view: SwiftUI gestures don't expose Pencil force, tilt, roll, hover or squeeze.
+struct TouchSurface: UIViewRepresentable {
+    let probe: Probe
+    func makeUIView(context: Context) -> SurfaceView { SurfaceView(probe: probe) }
+    func updateUIView(_ view: SurfaceView, context: Context) {}
+}
+
+final class SurfaceView: UIView, UIPencilInteractionDelegate {
+    private let probe: Probe
+    private let counter = UILabel()
+    private var fingerEvents = 0, pencilEvents = 0, hoverEvents = 0
+
+    init(probe: Probe) {
+        self.probe = probe
+        super.init(frame: .zero)
+        isMultipleTouchEnabled = true
+        backgroundColor = .systemBackground
+        // diagnostic: proves touches reach this view, independent of the network
+        counter.font = .monospacedDigitSystemFont(ofSize: 15, weight: .medium)
+        counter.textColor = .secondaryLabel
+        counter.text = "surface: finger 0  pencil 0  hover 0"
+        counter.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(counter)
+        NSLayoutConstraint.activate([
+            counter.centerXAnchor.constraint(equalTo: centerXAnchor),
+            counter.bottomAnchor.constraint(equalTo: safeAreaLayoutGuide.bottomAnchor, constant: -16),
+        ])
+        addGestureRecognizer(UIHoverGestureRecognizer(target: self, action: #selector(hover(_:))))
+        let pencil = UIPencilInteraction()
+        pencil.delegate = self
+        addInteraction(pencil)
+    }
+
+    required init?(coder: NSCoder) { fatalError("not used") }
+
+    override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) { report(touches, event) }
+    override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent?) { report(touches, event) }
+    override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) { report(touches, event) }
+    override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent?) { report(touches, event) }
+
+    private func phaseName(_ p: UITouch.Phase) -> String {
+        switch p {
+        case .began: "began"
+        case .ended, .cancelled: "ended"
+        default: "moved"
+        }
+    }
+
+    /// Every coalesced sample (iPadOS batches up to ~240 Hz Pencil samples per display frame).
+    private func updateCounter() {
+        counter.text = "surface: finger \(fingerEvents)  pencil \(pencilEvents)  hover \(hoverEvents)"
+    }
+
+    private func report(_ touches: Set<UITouch>, _ event: UIEvent?) {
+        defer { updateCounter() }
+        let w = max(bounds.width, 1), h = max(bounds.height, 1)
+        for touch in touches {
+            if touch.type == .pencil { pencilEvents += 1 } else { fingerEvents += 1 }
+            for c in event?.coalescedTouches(for: touch) ?? [touch] {
+                let p = c.location(in: self)
+                if c.type == .pencil {
+                    let force = c.maximumPossibleForce > 0 ? c.force / c.maximumPossibleForce : 0
+                    var roll = "null"
+                    if #available(iOS 17.5, *) { roll = "\(c.rollAngle)" }
+                    probe.sendRaw("{\"pencil\":{\"x\":\(p.x / w),\"y\":\(p.y / h),\"force\":\(force),\"alt\":\(c.altitudeAngle),\"azi\":\(c.azimuthAngle(in: self)),\"roll\":\(roll),\"phase\":\"\(phaseName(c.phase))\"},\"t\":\(c.timestamp)}")
+                } else {
+                    probe.touch(x: p.x / w, y: p.y / h, phase: phaseName(c.phase))
+                }
+            }
+        }
+    }
+
+    @objc private func hover(_ g: UIHoverGestureRecognizer) {
+        hoverEvents += 1
+        updateCounter()
+        switch g.state {
+        case .began, .changed:
+            let p = g.location(in: self)
+            let w = max(bounds.width, 1), h = max(bounds.height, 1)
+            probe.sendRaw("{\"hover\":{\"x\":\(p.x / w),\"y\":\(p.y / h),\"z\":\(g.zOffset),\"alt\":\(g.altitudeAngle),\"azi\":\(g.azimuthAngle(in: self))},\"t\":\(ProcessInfo.processInfo.systemUptime)}")
+        default:
+            probe.sendRaw("{\"hover\":null}")
+        }
+    }
+
+    @available(iOS 17.5, *)
+    func pencilInteraction(_ interaction: UIPencilInteraction, didReceiveTap tap: UIPencilInteraction.Tap) {
+        probe.sendRaw("{\"pencilGesture\":\"tap\",\"via\":\"uikit\"}")
+    }
+
+    @available(iOS 17.5, *)
+    func pencilInteraction(_ interaction: UIPencilInteraction, didReceiveSqueeze squeeze: UIPencilInteraction.Squeeze) {
+        let phase: String = switch squeeze.phase {
+        case .began: "began"
+        case .changed: "changed"
+        case .ended: "ended"
+        case .cancelled: "cancelled"
+        @unknown default: "unknown"
+        }
+        probe.sendRaw("{\"pencilGesture\":\"squeeze\",\"phase\":\"\(phase)\",\"via\":\"uikit\"}")
+    }
+
+    // Pre-17.5 fallback; iPadOS 17.5+ calls didReceiveTap instead.
+    func pencilInteractionDidTap(_ interaction: UIPencilInteraction) {
+        probe.sendRaw("{\"pencilGesture\":\"tap\",\"via\":\"uikit\"}")
+    }
+}
+
 @main
 struct PhoneProbeApp: App {
     @StateObject private var probe = Probe()
     @Environment(\.scenePhase) private var scenePhase
-    @State private var touching = false
+    private let isPad = UIDevice.current.userInterfaceIdiom == .pad
 
     var body: some Scene {
         WindowGroup {
-            GeometryReader { geo in
-                VStack(spacing: 8) {
-                    Text("Omni phone probe").font(.headline)
-                    Text(probe.status).font(.subheadline).multilineTextAlignment(.center)
-                    Text("host: \(probe.host)").font(.caption).lineLimit(1)
-                    Text("\(probe.sentPerSecond) msgs/s").font(.title2.monospacedDigit())
-                    Text("Drag anywhere to send touches").font(.caption).foregroundStyle(.secondary)
-                    Spacer()
-                }
-                .padding()
-                .frame(width: geo.size.width, height: geo.size.height)
-                .contentShape(Rectangle())
-                .gesture(
-                    DragGesture(minimumDistance: 0)
-                        .onChanged { v in
-                            probe.touch(x: v.location.x / geo.size.width, y: v.location.y / geo.size.height,
-                                        phase: touching ? "moved" : "began")
-                            touching = true
-                        }
-                        .onEnded { v in
-                            probe.touch(x: v.location.x / geo.size.width, y: v.location.y / geo.size.height, phase: "ended")
-                            touching = false
-                        }
-                )
+            VStack(spacing: 8) {
+                Text(isPad ? "Omni pencil probe" : "Omni phone probe").font(.headline)
+                Text(probe.status).font(.subheadline).multilineTextAlignment(.center)
+                Text("host: \(probe.host)").font(.caption).lineLimit(1)
+                Text("\(probe.sentPerSecond) msgs/s").font(.title2.monospacedDigit())
+                Text(isPad ? "Draw anywhere with the Pencil" : "Drag anywhere to send touches").font(.caption).foregroundStyle(.secondary)
+                Spacer()
             }
+            .padding()
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .allowsHitTesting(false) // labels must not swallow touches meant for the surface below
+            .background(TouchSurface(probe: probe).ignoresSafeArea())
             .onAppear {
                 UIApplication.shared.isIdleTimerDisabled = true
                 probe.start()

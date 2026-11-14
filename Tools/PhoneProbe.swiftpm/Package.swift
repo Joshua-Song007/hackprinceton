@@ -21,10 +21,14 @@ let package = Package(
             displayVersion: "1.0",
             bundleVersion: "1",
             supportedDeviceFamilies: [
-                .phone
+                .phone,
+                .pad
             ],
             supportedInterfaceOrientations: [
-                .portrait
+                .portrait,
+                .portraitUpsideDown(.when(deviceFamilies: [.pad])),
+                .landscapeLeft(.when(deviceFamilies: [.pad])),
+                .landscapeRight(.when(deviceFamilies: [.pad]))
             ],
             capabilities: [
                 .localNetwork(purposeString: "Finds the Omni probe host on your Mac.", bonjourServiceTypes: ["_omniprobe._tcp"]),
