@@ -54,7 +54,10 @@ elif [ "$role" = integrator ]; then
 else settings=.agents/settings.json; model=claude-sonnet-5-5; budget=5; extra=""; rules=(.agents/AGENTS.md); fi
 # The rules are loaded into the system prompt itself: "follow AGENTS.md" alone left workers that never opened the file chaining denied commands. A file, not an argument, keeps Windows under its command-line length limit.
 prompt="$root/logs/$slug.prompt.md"
-{ printf 'You are an autonomous agent on branch agent/%s/%s.%s Your rules follow; they are binding. One command per Bash call: never chain with && || ; | or heredocs, and write files with the Write tool.\n\n' "$laptop" "$slug" "$extra"; cat "${rules[@]}"; } > "$prompt"
+{ printf 'You are an autonomous agent on branch agent/%s/%s.%s Your rules follow; they are binding. One command per Bash call: never chain with && || ; | or heredocs, and write files with the Write tool.\n\n' "$laptop" "$slug" "$extra"
+  for r in "${rules[@]}"; do   # the orchestrator re-reads its prompt every turn: leave out AGENTS.md sections only a worker acts on
+    if [ "$role" = orch ] && [ "$r" = .agents/AGENTS.md ]; then awk '/^## /{skip = /^## (Code|Subagents|Notes you write stay fresh)$/} !skip' "$r"; else cat "$r"; fi
+  done; } > "$prompt"
 args=(
   --settings "$settings"
   --setting-sources project          # ignore personal user settings: same rules for every teammate

@@ -1,0 +1,17 @@
+{"v":1,"deviceId":"airpods-1","kind":"airpods","slot":"head","source":"sim","t":1000,"seq":0,"ch":{"orientation":[0,0,0,1]}}
+{"v":1,"deviceId":"airpods-1","kind":"airpods","slot":"head","source":"sim","t":1020,"seq":1,"ch":{"orientation":[0.0436,0,0,0.999]}}
+{"v":1,"deviceId":"airpods-1","kind":"airpods","slot":"head","source":"sim","t":1040,"seq":2,"ch":{"orientation":[0.0872,0,0,0.9962]}}
+{"v":1,"deviceId":"airpods-1","kind":"airpods","slot":"head","source":"sim","t":1060,"seq":3,"ch":{"orientation":[0.1305,0,0,0.9914]}}
+{"v":1,"deviceId":"airpods-1","kind":"airpods","slot":"head","source":"sim","t":1080,"seq":4,"ch":{"orientation":[0.1736,0,0,0.9848]}}
+{"v":1,"deviceId":"airpods-1","kind":"airpods","slot":"head","source":"sim","t":1100,"seq":5,"ch":{"orientation":[0.1305,0,0,0.9914]}}
+{"v":1,"deviceId":"airpods-1","kind":"airpods","slot":"head","source":"sim","t":1120,"seq":6,"ch":{"orientation":[0.0872,0,0,0.9962]}}
+{"v":1,"deviceId":"airpods-1","kind":"airpods","slot":"head","source":"sim","t":1140,"seq":7,"ch":{"orientation":[0.0436,0,0,0.999]}}
+{"v":1,"deviceId":"airpods-1","kind":"airpods","slot":"head","source":"sim","t":1160,"seq":8,"ch":{"orientation":[0,0,0,1]}}
+{"v":1,"deviceId":"airpods-1","kind":"airpods","slot":"head","source":"sim","t":1180,"seq":9,"ch":{"orientation":[-0.0436,0,0,0.999]}}
+{"v":1,"deviceId":"airpods-1","kind":"airpods","slot":"head","source":"sim","t":1200,"seq":10,"ch":{"orientation":[-0.0872,0,0,0.9962]}}
+{"v":1,"deviceId":"airpods-1","kind":"airpods","slot":"head","source":"sim","t":1220,"seq":11,"ch":{"orientation":[-0.1305,0,0,0.9914]}}
+{"v":1,"deviceId":"airpods-1","kind":"airpods","slot":"head","source":"sim","t":1240,"seq":12,"ch":{"orientation":[-0.1736,0,0,0.9848]}}
+{"v":1,"deviceId":"airpods-1","kind":"airpods","slot":"head","source":"sim","t":1260,"seq":13,"ch":{"orientation":[-0.1305,0,0,0.9914]}}
+{"v":1,"deviceId":"airpods-1","kind":"airpods","slot":"head","source":"sim","t":1280,"seq":14,"ch":{"orientation":[-0.0872,0,0,0.9962]}}
+{"v":1,"deviceId":"airpods-1","kind":"airpods","slot":"head","source":"sim","t":1300,"seq":15,"ch":{"orientation":[-0.0436,0,0,0.999]}}
+{"v":1,"deviceId":"airpods-1","kind":"airpods","slot":"head","source":"sim","t":1320,"seq":16,"ch":{"orientation":[0,0,0,1]}}

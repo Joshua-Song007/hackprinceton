@@ -1,0 +1,24 @@
+name: hygiene
+# PR hygiene: agent branch name, Refs #<issue> line, no build output or secret-looking files,
+# JSON / YAML parse, bash -n + shellcheck on .agents/scripts, check-docs. Logic lives in .agents/scripts/hygiene.sh.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
+permissions:
+  contents: read
+jobs:
+  hygiene:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: tools
+        run: |
+          python3 -c 'import yaml' 2>/dev/null || python3 -m pip install --quiet pyyaml || { sudo apt-get update -qq; sudo apt-get install -y -qq python3-yaml; }
+          command -v shellcheck >/dev/null || { sudo apt-get update -qq; sudo apt-get install -y -qq shellcheck; }
+      - name: hygiene.sh
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+          BASE_REF: ${{ github.base_ref }}
+        run: bash .agents/scripts/hygiene.sh --strict --base "origin/$BASE_REF"
