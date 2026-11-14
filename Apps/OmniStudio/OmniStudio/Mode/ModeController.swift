@@ -34,6 +34,7 @@ final class ModeController {
     @ObservationIgnored private let airPods: (any InputSource)?
     @ObservationIgnored private var listener: BonjourListener?
     @ObservationIgnored private var running = false
+    @ObservationIgnored private var inputOverride: (any InputSource)?
 
     init(
         bus: any InputBus,
@@ -75,6 +76,15 @@ final class ModeController {
         running = false
     }
 
+    /// Replaces the mode's input sources with `source` on the same bus (Demo mode replay); nil restores them.
+    /// The mode's sink stays active. While stopped it only records the override, applied by the next `start()`.
+    func setInputOverride(_ source: (any InputSource)?) {
+        if running { stopSources(for: mode) }
+        inputOverride?.stop()
+        inputOverride = source
+        if running { startSources(for: mode) }
+    }
+
     /// Swaps the active pair. While stopped it only records the mode, applied by the next `start()`.
     func switchTo(_ newMode: InputMode) {
         guard newMode != mode else { return }
@@ -84,6 +94,10 @@ final class ModeController {
     }
 
     private func startSources(for mode: InputMode) {
+        if let inputOverride {
+            inputOverride.start(bus: bus)
+            return
+        }
         switch mode {
         case .sim:
             simSources.forEach { $0.start(bus: bus) }
@@ -105,6 +119,10 @@ final class ModeController {
     }
 
     private func stopSources(for mode: InputMode) {
+        if let inputOverride {
+            inputOverride.stop()
+            return
+        }
         switch mode {
         case .sim:
             simSources.forEach { $0.stop() }
