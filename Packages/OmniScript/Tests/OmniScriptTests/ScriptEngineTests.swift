@@ -173,4 +173,54 @@ private func makeEntity(_ script: String, name: String = "e") -> Entity {
         engine.dispatch(.lookAt(entity: entity.id), to: entity)
         #expect(engine.errors.isEmpty)
     }
+
+    @Test func reloaderSwapsScriptForLiveEntity() throws {
+        let engine = try engine()
+        let reloader = ScriptReloader(engine: engine)
+        let entity = makeEntity("a")
+        let v1 = #"export default script({ onLookAt(self, ctx) { ctx.remote.fire("v1", null); } });"#
+        let v2 = #"export default script({ onLookAt(self, ctx) { ctx.remote.fire("v2", null); } });"#
+        #expect(reloader.update(name: "a", source: v1) == .loaded)
+        engine.dispatch(.lookAt(entity: entity.id), to: entity)
+        #expect(reloader.update(name: "a", source: v1) == .unchanged)
+        #expect(reloader.update(name: "a", source: v2) == .reloaded)
+        engine.dispatch(.lookAt(entity: entity.id), to: entity)
+        #expect(channel.events.map(\.name) == ["v1", "v2"])
+        #expect(reloader.source(of: "a") == v2)
+    }
+
+    @Test func reloaderKeepsOldVersionOnBadSourceAndRecovers() throws {
+        let engine = try engine()
+        let reloader = ScriptReloader(engine: engine)
+        let entity = makeEntity("a")
+        let good = #"export default script({ onLookAt(self, ctx) { ctx.remote.fire("ok", null); } });"#
+        reloader.update(name: "a", source: good)
+        let bad = "export default script({"
+        guard case .failed = reloader.update(name: "a", source: bad) else {
+            Issue.record("expected failure")
+            return
+        }
+        #expect(reloader.failures["a"] != nil)
+        #expect(reloader.source(of: "a") == good)
+        engine.dispatch(.lookAt(entity: entity.id), to: entity)
+        #expect(channel.events.map(\.name) == ["ok"])
+        // retrying the same bad source reports the failure again; the good source clears it
+        guard case .failed = reloader.update(name: "a", source: bad) else {
+            Issue.record("expected failure")
+            return
+        }
+        #expect(reloader.update(name: "a", source: good) == .reloaded)
+        #expect(reloader.failures.isEmpty)
+    }
+
+    @Test func reloaderBatchAndRemove() throws {
+        let engine = try engine()
+        let reloader = ScriptReloader(engine: engine)
+        let src = #"export default script({ onLookAt() {} });"#
+        let result = reloader.update(["a": src, "b": src])
+        #expect(result == ["a": .loaded, "b": .loaded])
+        reloader.remove(name: "a")
+        #expect(engine.loadedScriptNames == ["b"])
+        #expect(reloader.source(of: "a") == nil)
+    }
 }
