@@ -12,11 +12,19 @@ logs="$(dirname "$PWD")/$(basename "$PWD").worktrees/logs"; flag="$logs/.loop-fa
 mkdir -p "$logs"
 if [ -s "$pidfile" ] && kill -0 "$(cat "$pidfile")" 2>/dev/null; then echo "loop.sh: a $slug loop for $laptop is already running (pid $(cat "$pidfile"))" >&2; exit 1; fi
 echo $$ > "$pidfile"; trap 'rm -f "$pidfile"' EXIT   # start.sh's Windows keep-awake helper watches this file
+[ "$role" = integrator ] && [ "${OMNI_FORCE_PHASE:-}" = maintain ] && echo maintain > "$phasefile"   # a fallback integrator started by an orchestrator must not redo the build
 phase() { cat "$phasefile" 2>/dev/null || echo build; }
 if [ "$role" = integrator ] && [ "$(phase)" = build ]; then base=${BUILD_DELAY:-60}; else base=${LOOP_DELAY:-300}; fi
 [ "$role" = integrator ] && [ "$(phase)" = maintain ] && base=${MAINT_DELAY:-1800}
 fails=0; delay=$base
 notify() { echo "NOTIFY: $1"; osascript -e 'on run a' -e 'display notification (item 1 of a) with title (item 2 of a)' -e 'end run' -- "$1" "Omni $slug loop $laptop" 2>/dev/null || true; }   # args, not string interpolation: $1 can hold model-written text
+cap_fails=0; out_posted=0
+cap_error() { [ -s "$logs/$slug.json" ] && jq -r '(.result // "") + " " + (.subtype // "")' "$logs/$slug.json" 2>/dev/null | grep -qiE 'usage limit|limit reached|credit balance|out of credits|insufficient credit|rate limit|quota|exceeded your'; }   # credits or rate limit, not a bug
+post_capacity() {   # OUT|BACK: tell the other laptops through GitHub; gh needs no model credits
+  local n; n=$(gh issue list --search 'Loop capacity in:title' --state open --json number --jq '.[0].number' 2>/dev/null)
+  [ -n "$n" ] || n=$(gh issue create --title "Loop capacity" --body "Each loop posts one line when it runs out of credits (OUT) and when it is back (BACK): OUT laptop=<l> role=<r> t=<epoch> reason=<text>. Orchestrators read this in ORCHESTRATOR.md step 1c and take over the lane of a laptop that is OUT." 2>/dev/null | grep -oE '[0-9]+$')
+  [ -n "$n" ] && gh issue comment "$n" --body "$1 laptop=$laptop role=$role t=$(date +%s) reason=$2 $([ "$1" = OUT ] && echo @tienvu-lol)" >/dev/null 2>&1 || true
+}
 fix() { notify "preflight failed: $1"; exit 1; }   # an unattended loop with broken permissions would only fail all night
 command -v jq >/dev/null 2>&1 || fix "jq missing (run .agents/scripts/setup.sh $laptop)"
 command -v claude >/dev/null 2>&1 || fix "claude CLI missing (run .agents/scripts/setup.sh $laptop)"
@@ -38,7 +46,8 @@ while true; do
     gh issue create --title "[permission] $cmd" --label needs-human --body "@tienvu-lol the **$laptop** $slug was denied \`$cmd\` by dontAsk. If it is legitimate, add a matching rule to the allow list in .agents/settings.orch.json (or settings.integrator.json / settings.json)." >/dev/null 2>&1 && touch "$f"
   done
   if jq -e '.is_error == false' "$logs/$slug.json" >/dev/null 2>&1; then
-    fails=0; rm -f "$flag"
+    fails=0; rm -f "$flag"; cap_fails=0
+    if [ "$out_posted" = 1 ]; then post_capacity BACK ""; out_posted=0; notify "credits are back; told the Loop capacity issue"; fi
     st=$(jq -r '.result // ""' "$logs/$slug.json" | grep -oE '^[*]*STATUS: (worked|idle|blocked|done)' | tail -1 | sed 's/.*STATUS: //')   # every cycle ends with one STATUS line, alone on its line
     if [ "$role" = integrator ]; then
       if [ "$(phase)" = build ]; then
@@ -53,6 +62,10 @@ while true; do
         done) notify "lane complete: nothing left for $laptop"; exit 0;;
       esac
     fi
+  elif cap_error; then   # out of credits or rate limited: say so on GitHub, wait, keep trying; not a failure to file issues about
+    cap_fails=$((cap_fails+1))
+    if [ "$cap_fails" -ge 2 ] && [ "$out_posted" = 0 ]; then post_capacity OUT "$(jq -r '.result // ""' "$logs/$slug.json" | tr '\n' ' ' | cut -c1-80)"; out_posted=1; notify "out of credits or rate limited; posted OUT to the Loop capacity issue"; fi
+    delay=${CREDIT_WAIT:-1800}; [ "$cap_fails" -ge 4 ] && delay=3600
   else
     fails=$((fails+1)); delay=$(( delay * 2 > 1800 ? 1800 : delay * 2 ))   # exponential backoff, capped at 30 min
     if [ "$fails" -ge 5 ] && [ ! -e "$flag" ]; then
