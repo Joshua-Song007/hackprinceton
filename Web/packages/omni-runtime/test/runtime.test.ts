@@ -30,7 +30,7 @@ function makeRig() {
 describe('scene.ts', () => {
   it('loads Games/Flagship/scene.json', () => {
     expect(scene.name).toBe('Hollow Choir');
-    expect(scene.requiredTier).toBe(3);
+    expect(scene.requiredTier).toBe(1); // lowered in 43b5dd1: heart rate only scales aggression
     expect(scene.runMode).toBe('screen');
     expect(scene.clientScripts).toEqual(['enemy', 'player']);
     expect(scene.serverScripts).toEqual(['game']);

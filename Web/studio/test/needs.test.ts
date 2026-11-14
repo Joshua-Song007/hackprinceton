@@ -26,7 +26,7 @@ describe('inferInputs', () => {
 describe('rigFor', () => {
   it('maps inputs to devices', () => {
     expect(rigFor(none)).toEqual([]);
-    expect(rigFor({ ...none, position: true })).toEqual(['airpods']);
+    expect(rigFor({ ...none, position: true })).toEqual(['phone']); // position = phone GPS; AirPods have none
     expect(rigFor({ ...none, head: true, heartRate: true, gestures: ['tap'] })).toEqual(['airpods', 'phone', 'watch']);
   });
 });
