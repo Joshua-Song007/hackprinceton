@@ -35,7 +35,7 @@ GitHub is the shared workspace: the issue is the unit of work, the PR is the del
 - Do only the task in your prompt (usually specific `plan.md` items). No drive-by refactors, no unrelated files. Other agents are working in parallel worktrees.
 - Never build Phase 7 or anything the plan does not list.
 - No agent, orchestrator included, writes to `.claude/`, `.agents/`, `.github/` or `CLAUDE.md`. Do not tick `plan.md` boxes or touch `currentDev.md`; a human ticks boxes after merge.
-- Items under `Apps/**` (OmniStudio, OmniCompanion) and any `.xcodeproj` have no automated build check yet: workers do not take them. If your task names one, stop and say so in your report.
+- Items under `Apps/**` (OmniStudio, OmniCompanion) and any `.xcodeproj` are Mac-only. Their check is `xcodebuild -workspace Omni.xcworkspace -scheme <scheme> -destination 'platform=macOS' build` (iOS targets: `-destination 'generic/platform=iOS Simulator'`); paste its output in your Verification section. On a non-Mac laptop, stop and say so in your report.
 - New `.md` files are allowed anywhere except the repo root and the protected places above, for notes other agents will read (put them in `docs/agents/`). Never create or edit `overview.md`, `CLAUDE.md` or `.agents/HUMAN.md`.
 - No new third-party dependencies. If a task needs one, take no action on it and put the need in your report.
 - If the plan contradicts `overview.md` or `architecture.md`, stop that item and report it. Do not guess.

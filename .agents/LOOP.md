@@ -70,7 +70,7 @@ Verified here means checked against the installed CLI (2.1.322) or the Claude Co
 | VER-02/05: evidence, separate judge | **Adopted.** Reviewer is a different context from the worker; same model family, which is weaker than the playbook's ideal |
 | VER-03: near-perfect verifier | **Partly met.** Only OmniCore has tests today; the grader improves as tests land. Watch for green-but-wrong |
 | REV-03/04/05/08: review against the spec, skip style, tag findings, 3-round cap | **Adopted** in the reviewer prompt and the round cap |
-| REV-10/11: risk tiers, agent approval never fills a human slot | **Adapted, provisional.** Auto-merge is allowed (Tien's call), except PRs touching `Package.swift` dependency edges, `Schema/usis.schema.json`, `.github/`, or any `.xcodeproj`: those get `human-hold` and wait |
+| REV-10/11: risk tiers, agent approval never fills a human slot | **Adapted.** All merges are automatic (Tien's call, 2026-11-14). PRs touching `Package.swift` dependency edges, `Schema/usis.schema.json` or `.github/` merge after the same checks and are listed for a later review; only a `human-hold` that a human adds by hand stops a merge |
 | SEC-01/05: deterministic boundaries, deny rules not prompts | **Adopted** |
 | SEC-02/03: sandbox/VM, credentials outside | **Not met.** Laptops, real `gh` tokens. See limits |
 | SEC-15: protect `main` | **Not verified** (see limits) |
@@ -137,7 +137,7 @@ The orchestrator's launch prompt is fixed (`Run one orchestrator cycle.`). Do no
 - No branch protection could be read (the API returned 404 for a non-admin token). If `main` is unprotected, a bad merge lands immediately. Repo auto-merge setting is off, so only direct `gh pr merge` works.
 - Reviewer and worker are the same model family and `review-pr.sh` is mechanical. Green CI plus APPROVE does not prove the logic is right. Few tests exist yet, so the grader is weak early.
 - Static ownership: a stalled laptop stalls its packages; nobody takes over. OmniCore blocks everything, so the first hours are close to serial. Only the two Macs can do Swift work; the Windows lanes are the Flagship scripts (they mostly wait on the runtime) and the Rust backend (independent of Swift, so it can run from the first hour).
-- `Apps/**` items (OmniStudio, OmniCompanion) and `.xcodeproj` files have no automated build check, so workers skip them and the orchestrator labels them `needs-human`. Adding an `xcodebuild` check is the open improvement.
+- `Apps/**` items (OmniStudio, OmniCompanion) and `.xcodeproj` files go to Mac workers only, checked with `xcodebuild ... build` (`AGENTS.md` Scope). Wiring that check into `verify-swift.sh` and CI is the open improvement.
 - A detached worker (`run.sh --detach`) survives the orchestrator's exit only if the OS lets a `nohup` child outlive its parent; this is untested on both platforms. If workers vanish between cycles, their `../logs/<slug>.state` stays `running` until the 3 h dead rule fires.
 - Idle cycles cost Opus tokens. `loop.sh` sleeps `LOOP_DELAY` seconds (default 300) between cycles; raise it when the queue is empty.
 - Notifications are GitHub issues plus a local macOS banner. If Tien is not watching the repo with mobile notifications on, nothing pushes to the phone.
