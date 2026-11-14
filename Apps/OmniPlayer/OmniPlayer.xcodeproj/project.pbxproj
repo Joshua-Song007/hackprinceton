@@ -203,10 +203,6 @@
 			buildSettings = {
 				"CODE_SIGN_ENTITLEMENTS[sdk=iphone*]" = OmniPlayer.entitlements;
 				CODE_SIGN_IDENTITY = "-";
-<<<<<<< HEAD
-				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "Apple Development";
-=======
->>>>>>> 2ce9934 (one)
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 273VUSUL9H;
