@@ -7,7 +7,7 @@ import OmniInput
 /// Heart rate is held between packets (noisy, never negative); `spike` adds a bump that decays packet by packet.
 /// Gestures are queued and each is sent in exactly one packet, oldest first.
 // @unchecked Sendable: all mutable state lives behind a Mutex; the justification in VirtualDevice.swift applies.
-public final class VirtualWatch:VirtualDevice, @unchecked Sendable {
+public final class VirtualWatch: VirtualDevice, @unchecked Sendable {
     private struct WatchState {
         var baseBpm: Double
         var spikeBpm = 0.0
