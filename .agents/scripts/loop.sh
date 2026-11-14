@@ -78,6 +78,7 @@ while true; do
   if [ "${AUTO_UPDATE:-1}" = 1 ] && [ "$(git rev-parse HEAD)" != "$(git rev-parse origin/main)" ]; then   # keep the clone's own scripts current, so a merged tooling fix needs no manual restart
     if [ "$(git branch --show-current)" = main ] && [ -z "$(git status --porcelain --untracked-files=no)" ] && old=$(git rev-parse HEAD) && git merge -q --ff-only origin/main; then
       if ! git diff --quiet "$old" HEAD -- .agents/; then
+        bash -n "$self" || { notify "self-update: the new loop.sh has a syntax error; staying on the old one, fix forward"; continue; }   # a bad script on main must not kill every loop
         notify "scripts updated to $(git rev-parse --short HEAD); restarting the $slug loop"
         rm -f "$pidfile"; exec "$self"   # same pid, same env (OMNI_LAPTOP, delays) and same tee; bash parsed this whole loop before running it, so the pull cannot corrupt it
       fi
