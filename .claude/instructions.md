@@ -54,4 +54,4 @@
 - `overview.md` is read-only for every agent and stays the source of truth. An agent that needs a change opens an issue labeled `needs-tien`; only the user edits `overview.md`.
 - Progress is tracked in GitHub (issues closed or labeled `done`, merged PRs). The orchestrator keeps a `Plan sync` issue listing the `plan.md` ticks and divergence notes a human should apply.
 - Platform: laptops without macOS (Windows) never create or edit Swift; a Swift change from one is merged only after an agent on a Mac verifies it (see `.agents/AGENTS.md` Platform).
-- Models, same for every teammate: orchestrator = `claude-opus-5-5`; every subagent (workers, reviewer) = `claude-sonnet-5-5`. Pinned in `.agents/` launch config and `agents.json`, never taken from personal user settings.
+- Models, same for every teammate: orchestrator = `claude-opus-5-5`; every subagent (workers, reviewer) = `claude-sonnet-5-5`; the integrator = `claude-opus-5-5` while building tooling, `claude-sonnet-5-5` while maintaining it. Pinned in `.agents/` launch config and `agents.json`, never taken from personal user settings.

@@ -4,6 +4,7 @@ Applies to agents launched via `.agents/scripts/run.sh` (the laptop orchestrator
 
 ## Roles and models
 - Orchestrator (`run.sh --orch`): `claude-opus-5-5`. Follows `.agents/ORCHESTRATOR.md` on top of this file. The only role that uses `gh`, with full GitHub access (PRs, reviews, comments, issues, merges), and it may push any branch including `main` and force-push, locally from its own laptop (Tien's decision, see `ORCHESTRATOR.md` Permissions).
+- Integrator (`run.sh --integrator`): `claude-opus-5-5` with a big budget while building tooling, `claude-sonnet-5-5` with a small one while maintaining it. Follows `.agents/INTEGRATOR.md`. Edits only `.agents/scripts/**`, `.agents/README.md`, `.github/workflows/**` and `docs/agents/`; pushes only its own `agent/*` branches.
 - Worker (`run.sh`) and every subagent (`reviewer`, `swift-package-worker`): `claude-sonnet-5-5`. Workers commit and push their own `agent/<laptop>/<slug>` branch and nothing else; no `gh`.
 - Same for every teammate. Models are pinned in `run.sh` and `agents.json`, never taken from personal settings.
 
@@ -23,8 +24,9 @@ Applies to agents launched via `.agents/scripts/run.sh` (the laptop orchestrator
 ## Scope
 - Do only the task in your prompt (usually specific `plan.md` items). No drive-by refactors, no unrelated files. Other agents are working in parallel worktrees.
 - Never build Phase 7 or anything the plan does not list.
-- No agent writes to `.claude/`. Workers also never write to `.agents/`, `.github/` or `CLAUDE.md`. Do not tick `plan.md` boxes or touch `currentDev.md`; a human ticks boxes after merge.
-- New `.md` files are allowed anywhere except the repo root and `.claude/`, for notes other agents will read (put them in `docs/agents/`). Never create or edit `overview.md`, `CLAUDE.md` or `.agents/HUMAN.md`.
+- No agent, orchestrator included, writes to `.claude/`, `.agents/`, `.github/` or `CLAUDE.md`. Do not tick `plan.md` boxes or touch `currentDev.md`; a human ticks boxes after merge.
+- Items under `Apps/**` (OmniStudio, OmniCompanion) and any `.xcodeproj` have no automated build check yet: workers do not take them. If your task names one, stop and say so in your report.
+- New `.md` files are allowed anywhere except the repo root and the protected places above, for notes other agents will read (put them in `docs/agents/`). Never create or edit `overview.md`, `CLAUDE.md` or `.agents/HUMAN.md`.
 - No new third-party dependencies. If a task needs one, take no action on it and put the need in your report.
 - If the plan contradicts `overview.md` or `architecture.md`, stop that item and report it. Do not guess.
 - If a requirement is merely ambiguous, take the smallest reversible default, keep going, and list it in your report as `[provisional: needs-tien-review]`.
@@ -38,7 +40,9 @@ Applies to agents launched via `.agents/scripts/run.sh` (the laptop orchestrator
 - Tests live in `Packages/<Pkg>/Tests/<Pkg>Tests/` as named in `plan.md`; match the framework that package's existing tests use. Non-trivial logic ships with tests. Add the `testTarget` to the package's `Package.swift` if it has none; make no other manifest change.
 
 ## Git
-- You work in your own worktree on branch `agent/<laptop>/<slug>`. Commit there freely, in small commits.
+- You work in your own worktree on branch `agent/<laptop>/<slug>`; the name is in your system prompt (or `git branch --show-current`). Commit there freely, in small commits.
+- Commit all your work (`git add -A`, then `git commit`) before running the reviewer or the verify scripts: the reviewer diffs against `origin/main` and sees only committed files. Use plain `git commit -m "short message"`, one `-m` per paragraph; no `$(...)`, heredoc or `-F`.
+- Push after the first green verify and again after the review, so a turn or budget cap cannot lose finished work. On a merge conflict, fix the files with Edit, `git add`, `git commit`; if stuck, `git merge --abort` and report it.
 - Workers: when `verify-swift.sh` (or `verify-nonswift.sh`) is green and the reviewer has approved, push your own branch yourself: `git push -u origin agent/<laptop>/<slug>`. Push again after every fix round. Never push any other branch, never push `main`, never force-push or delete remote branches, never use `gh` (the orchestrator opens and merges PRs from your pushed branch). If the branch is behind, `git fetch` then `git merge origin/main`.
 - Orchestrator: the normal flow is PRs from `agent/<laptop>/*` branches. Pushing to `main` and force-pushing are permitted but exceptional; the rules for them are in `.agents/ORCHESTRATOR.md` Permissions. Merge only your own PRs, under the conditions in step 2 there.
 - PR body: never put a line starting with `#` inside the `gh pr create --body "..."` command. The permission check denies it. Use bold labels (`**Completed**`) instead of Markdown headings. The body can still be multi-line.
@@ -53,7 +57,7 @@ Applies to agents launched via `.agents/scripts/run.sh` (the laptop orchestrator
 - Read, search and list files with the Read, Grep and Glob tools, not shell text tools (`cat`, `wc`, `head`, `find`). The shell allow-list is narrow on purpose.
 - One command per Bash call: no `&&`, `||`, `;` or `|`, because every part is checked on its own and one unlisted part denies the whole call. Write files with the Write tool, never `echo >` or `mkdir && ...`. A denied call does not mean all of Bash is denied: split it and retry the allowed parts.
 - A denied command is not a broken shell. Other allowed commands (`.agents/scripts/*`, `swift`, `git`) still work. Try another tool. If the task truly can't proceed, report the exact denied command in your final message and continue with whatever you can still do.
-- Run scripts by relative path from the repo root, exactly `.agents/scripts/verify-swift.sh`. The allow-list matches the relative form only: an absolute path or `cd ... && ...` is denied. Also denied: heredocs that write files (use Write/Edit), brace expansion. When you brief a subagent, tell it to use the relative form too.
+- Run scripts by relative path from the repo root, exactly `.agents/scripts/verify-swift.sh`. The allow-list matches the relative form only: an absolute path is denied, and `cd ... && ...` breaks the one-command-per-call rule. Also denied: heredocs that write files (use Write/Edit), brace expansion. When you brief a subagent, tell it to use the relative form too.
 - Before assuming work is already done, check the checklist item's file contents against `plan.md` and run the verify script. Do not stop on the assumption.
 
 ## Subagents
@@ -62,7 +66,8 @@ Applies to agents launched via `.agents/scripts/run.sh` (the laptop orchestrator
 - `swift-package-worker`: delegate to it only for large multi-item tasks inside one package. For a single checklist item, do the work yourself. (The orchestrator delegates by launching workers with `run.sh`.)
 
 ## Done means verified
-- On a Mac run `.agents/scripts/verify-swift.sh`; on any laptop run `.agents/scripts/verify-nonswift.sh` for non-Swift work; see it pass. Do not claim success without running it. A stop-hook enforces this for the packages you changed and everything that depends on them.
+- On a Mac run `.agents/scripts/verify-swift.sh`; on any laptop run `.agents/scripts/verify-nonswift.sh` for non-Swift work; see it pass. Do not claim success without running it. On a Mac a stop-hook enforces this for the packages you changed and everything that depends on them; on Windows it checks only JSON and JS. After 5 blocks the hook lets you stop, so your report must state the real result.
+- `verify-swift.sh` can take several minutes in a cold worktree. Call it with the Bash tool's `timeout` set to 600000 (the 120000 default kills it midway, as happened on the first Mac run). If it still does not finish, say so in your report: never describe a push as verified without a green run.
 - If a check fails and you cannot fix it, say so with the failing output. Never report success on a red check.
 - Same failure three times: stop retrying, write what you tried in your report, and move to the next item (the orchestrator labels the issue `needs-human`).
 
@@ -74,4 +79,4 @@ Last step before every push: re-read each `.md` you created or edited (your note
 - Items not completed, and why.
 - Any simplification or divergence from `overview.md` — write the parenthetical note a human should append to that `plan.md` line.
 - Provisional defaults you took, each marked `[provisional: needs-tien-review]`.
-- Verification commands run and their result, and the reviewer's final verdict line.
+- Verification commands run and their result, and the reviewer's final line copied verbatim (`VERDICT: APPROVE` or `VERDICT: CHANGES NEEDED`).

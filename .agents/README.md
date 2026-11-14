@@ -7,16 +7,20 @@ Instructions and tooling for autonomous agents. `.claude/` is human-only: agents
 - `LOOP.md` — the whole unattended loop, bottom to top: layers, escalation table, adopted/rejected playbook rules, how to prompt it, limits.
 - `ORCHESTRATOR.md` — the per-laptop orchestrator cycle: pick work, launch workers, open PRs, review and merge, Mac verification, permissions, escalation.
 - `settings.json` — worker permissions + stop-hook (commit, push own `agent/*` branch only, no `gh`).
-- `settings.orch.json` — orchestrator permissions + stop-hook (full `gh`, any `git push` including `main` and force; still no `.claude/` edits, no `gh repo delete` / `auth` / `secret`).
+- `settings.orch.json` — orchestrator permissions + stop-hook (full `gh`, any `git push` including `main` and force; still no `.claude/` edits, no `gh repo delete` / `secret` / key commands; `gh auth` and `git clean` are allowed).
+- `INTEGRATOR.md` — the integrator role: builds the PR, worktree and CI tooling while the orchestrators work (Opus, big budget), then maintains it from their signals (Sonnet, small budget).
+- `settings.integrator.json` — integrator permissions + stop-hook: edits only `.agents/scripts/**`, `.agents/README.md`, `.github/workflows/**`, `docs/agents/`; pushes only `agent/*` branches; full `gh` except destructive account commands.
 - `agents.json` — subagents: `reviewer` and `swift-package-worker`.
 - `BOOTSTRAP.md` — runbook for a manual Claude session on any of the four laptops: identify the laptop, clean clone, setup, verify, start `loop.sh` detached, confirm the first cycle. Prompt: "follow .agents/BOOTSTRAP.md".
 - `HUMAN.md` — human cheat sheet, hidden from agents (never materialized in an agent worktree).
-- `scripts/run.sh` — launcher: new worktree + `agent/<laptop>/<slug>` branch, then `claude -p`. Worker = Sonnet 5.5; `--orch` = Opus 5.5.
-- `scripts/loop.sh` — per-laptop overnight loop: orchestrator cycle, backoff, STOP check, failure issue + local notification.
+- `scripts/run.sh` — launcher: new worktree + `agent/<laptop>/<slug>` branch, then `claude -p`. Worker = Sonnet 5.5; `--orch` = Opus 5.5; `--detach` starts it in the background and writes `logs/<slug>.state`.
+- `scripts/start.sh <laptop> [--integrator] [--dry-run]` — one command per laptop: setup, verify, then start the loop (Mac: detached tmux under `caffeinate -i`; Windows: its own Git Bash window plus a keep-awake helper).
+- `scripts/loop.sh` — per-laptop overnight loop (`OMNI_ROLE=orch|integrator`): agent cycle, backoff, STOP check, build-to-maintain phase switch for the integrator, failure issue + local notification.
 - `scripts/setup.sh <laptop> [--check]` — installs and checks the tools the loop needs (Homebrew on macOS, winget on Windows); lists what only a human can do.
 - `scripts/verify-nonswift.sh` — JSON / JSONL validity and JS syntax; runs on macOS and Windows (the Windows lanes' check, also run in CI).
 - `scripts/verify-swift.sh` — the checks (`swift build` + `swift test` per package). Same script runs in CI, the stop-hook, and by hand.
 - `scripts/stop-gate.sh` — stop-hook: agent can't finish while checks fail for the packages it changed and their dependents.
+- `scripts/verify-pr.sh <n>` — macOS: verifies a PR's exact head commit in a throwaway worktree; last line `MAC-VERIFIED <sha>` or `VERIFY-FAILED <sha>`.
 - `scripts/review-pr.sh <n>` — mechanical first-pass review of an agent PR (scope, deps vs graph, purity, hardware-blind rule, comments, tests, CI). Read-only.
 - `scripts/cleanup.sh [--dry-run] [--closed]` — remove worktrees and branches of merged agent PRs (skips dirty or unmerged work).
 - `scripts/check-docs.sh` — last step before a push: fails when `.agents/*.md` or `docs/agents/` notes point at missing files, a script is not listed here, or retired wording is still there.

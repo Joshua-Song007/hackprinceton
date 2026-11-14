@@ -14,6 +14,16 @@ First time on a laptop (installs missing tools, reports what only you can do; --
 
 .agents/scripts/setup.sh <laptop>
 
+Overnight launch (paste into a Claude Code session opened on each laptop, after the Mission issue exists; Macs first)
+
+follow .agents/BOOTSTRAP.md
+Laptop: <github handle, lowercase>       # must be a row in the ORCHESTRATOR.md table
+OS: <mac | windows>                      # must match uname -s
+Clone: <~/hack/omni>                     # outside OneDrive / iCloud / Dropbox
+Night settings: LOOP_DELAY=<300> IDLE_DELAY=<1800>      # add these to the loop.sh start command
+If a step fails: <stop and report | fix what is listed as fixable, retry once, then report>
+Report back: laptop, OS, lane, setup and verify results, where the loop runs, and the first cycle's STATUS line
+
 Running agents (one clone per laptop, outside OneDrive; Swift work needs a Mac, Windows laptops run the non-Swift lane only)
 
 export OMNI_LAPTOP=<name>                                               # lowercase letters, digits, dashes
@@ -22,11 +32,18 @@ export OMNI_LAPTOP=<name>                                               # lowerc
 AGENT_BUDGET=10 .agents/scripts/run.sh <slug> "<task>"                  # change the cap
 .agents/scripts/run.sh -i <slug> "<task>"                               # interactive instead
 tail -f ../omni.worktrees/logs/<slug>.log                               # watch a headless run
-Worktrees land at ../omni.worktrees/<slug> on branch agent/<laptop>/<slug>. The orchestrator's is ../omni.worktrees/orch.
+Worktrees land at ../omni.worktrees/<slug> on branch agent/<laptop>/<slug>. The orchestrator's is ../omni.worktrees/orch. (For a clone named omni; in general it is <clone folder name>.worktrees. Start loop.sh from the clone's root folder.)
+Workers started by the orchestrator use run.sh --detach: they return at once, and ../omni.worktrees/logs/<slug>.state says running / done / failed.
 
-Overnight loop (one tmux window per laptop; untested, watch the first few cycles)
+Overnight loop (watch the first few cycles; start.sh does setup, verify and the detached start for you)
 
-caffeinate -i .agents/scripts/loop.sh      # Mac, inside tmux (Windows: run it without caffeinate in Git Bash, sleep set to Never). backoff, STOP check, failure issue after 5 bad cycles; LOOP_DELAY=<secs> sets the idle gap (default 300). Full design: .agents/LOOP.md
+.agents/scripts/start.sh <laptop>                  # orchestrator: Mac = tmux "omni-loop" under caffeinate -i; Windows = its own Git Bash window + keep-awake helper
+.agents/scripts/start.sh <laptop> --integrator     # then the integrator (INTEGRATOR.md): builds PR / worktree / CI tooling, then maintains it; STOP-integrator stops only it
+.agents/scripts/start.sh <laptop> --dry-run        # show the steps without doing them
+Env vars set before the command are passed on: LOOP_DELAY IDLE_DELAY BUILD_DELAY MAINT_DELAY BUILD_MAX_CYCLES AGENT_BUDGET AGENT_TURNS.
+Underneath, start.sh runs loop.sh:
+
+caffeinate -i .agents/scripts/loop.sh      # Mac, inside tmux (Windows: run it without caffeinate in Git Bash, sleep set to Never). backoff, STOP check, failure issue after 5 bad cycles; LOOP_DELAY=<secs> sets the gap between cycles (default 300), IDLE_DELAY the gap after an idle or blocked cycle (default 1800); a STATUS: done cycle ends the loop. Full design: .agents/LOOP.md
 
 loop.sh refuses to start (and says why) if jq, claude, the gh login, write access or the orchestrator settings are not in order: fix what it names, rerun. Permissions the agents report as denied show up as "[permission] ..." issues: add the rule to .agents/settings.orch.json (or settings.json for workers).
 To stop: add a file named STOP (everyone) or STOP-<laptop> to main (the GitHub web UI works from a phone). Only you do this.

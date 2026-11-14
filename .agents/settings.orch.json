@@ -16,6 +16,7 @@
       "Bash(git fetch*)",
       "Bash(git switch -c agent/*)",
       "Bash(git merge*)",
+      "Bash(git clean*)",
       "Bash(git worktree *)",
       "Bash(git push*)",
       "Bash(git -C * status*)",
@@ -25,6 +26,7 @@
       "Bash(git ls-remote*)",
       "Bash(git rev-parse*)",
       "Bash(uname*)",
+      "Bash(date*)",
       "Bash(git -C * push*)",
       "Bash(gh *)",
       "Bash(ls*)",
@@ -38,14 +40,12 @@
       "Edit(**/.github/**)",
       "Read(**/.env)",
       "Bash(gh repo delete*)",
-      "Bash(gh auth*)",
       "Bash(gh secret*)",
       "Bash(gh ssh-key*)",
       "Bash(gh gpg-key*)",
       "Bash(git reset*)",
       "Bash(git rebase*)",
       "Bash(git checkout*)",
-      "Bash(git clean*)",
       "Bash(git restore*)",
       "Bash(rm -rf*)",
       "Bash(sudo*)",
@@ -58,7 +58,7 @@
     "Stop": [
       {
         "hooks": [
-          { "type": "command", "command": "\"$CLAUDE_PROJECT_DIR\"/.agents/scripts/stop-gate.sh" }
+          { "type": "command", "command": "\"$CLAUDE_PROJECT_DIR\"/.agents/scripts/stop-gate.sh", "timeout": 900 }
         ]
       }
     ]
