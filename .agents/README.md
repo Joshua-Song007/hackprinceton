@@ -7,6 +7,7 @@ Instructions and tooling for autonomous agents. `.claude/` is human-only: agents
 - `LOOP.md` — the whole unattended loop, bottom to top: layers, escalation table, adopted/rejected playbook rules, how to prompt it, limits.
 - `ORCHESTRATOR.md` — the per-laptop orchestrator cycle: pick work, launch workers, open PRs, review and merge, Mac verification, permissions, escalation.
 - `settings.json` — worker permissions + stop-hook (commit, push own `agent/*` branch only, no `gh`).
+- `settings.worker.json` — slim V2 worker permissions, without the legacy Stop hook; runtime stays inactive until the dependent launch/setup PR.
 - `settings.orch.json` — orchestrator permissions + stop-hook (full `gh`, `git push` of any branch except `main`, force-push of own branches, `cargo`; still no `.claude/` edits, no `gh repo delete` / `secret` / key commands; `gh auth` and `git clean` are allowed).
 - `INTEGRATOR.md` — the integrator role: builds the PR, worktree and CI tooling while the orchestrators work (Opus, big budget), then maintains it from their signals (Sonnet, small budget).
 - `settings.integrator.json` — integrator permissions + stop-hook: edits only `.agents/scripts/**`, `.agents/README.md`, `.github/workflows/**`, `docs/agents/`; pushes only `agent/*` branches; full `gh` except destructive account commands.
