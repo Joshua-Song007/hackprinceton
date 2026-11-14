@@ -31,8 +31,8 @@ prot=$(grep -E '^(\.claude|\.agents|\.github)/' <<<"$files" || true)
 [ -n "$prot" ] && out "  ✗ touches protected paths: $(tr '\n' ' ' <<<"$prot")" || out "  ✓ no protected paths touched"
 npk=$(grep -c . <<<"$pkgs" || true)
 [ "$npk" -le 1 ] && out "  ✓ packages touched: ${pkgs:-none}" || out "  ✗ touches $npk packages: $(tr '\n' ' ' <<<"$pkgs")"
-extra=$(grep -v -E '^(Packages|Schema|Games|Apps|Recordings|Backend|docs/agents)/' <<<"$files" || true)
-[ -n "$extra" ] && out "  ✗ files outside Packages/, Schema/, Games/, Apps/, Recordings/, Backend/, docs/agents/: $(tr '\n' ' ' <<<"$extra")"
+extra=$(grep -v -E '^(Packages|Schema|Games|Apps|Recordings|Backend|docs/agents|Omni\.xcworkspace)/' <<<"$files" || true)   # the workspace file is a plan.md item (1.1, 4.1)
+[ -n "$extra" ] && out "  ✗ files outside Packages/, Schema/, Games/, Apps/, Recordings/, Backend/, docs/agents/, Omni.xcworkspace/: $(tr '\n' ' ' <<<"$extra")"
 grep -q '^Backend/target/' <<<"$files" && out "  ✗ Rust build output (Backend/target/) committed"
 
 section "Dependencies vs architecture.md graph"
@@ -72,7 +72,7 @@ blind=$(git grep -n -E 'import (OmniSim|OmniBridge)' "$ref" -- Packages/OmniRunt
 [ -n "$blind" ] && out "  ✗ hardware-blind rule broken: $(tr '\n' ';' <<<"$blind")" || out "  ✓ OmniRuntime, OmniScript, Games import neither OmniSim nor OmniBridge"
 
 section "Comments"
-rm_c=$(git diff "$base" "$ref" -- '*.swift' | grep -E '^-[[:space:]]*//' || true)
+rm_c=$(git diff --diff-filter=d "$base" "$ref" -- '*.swift' | grep -E '^-[[:space:]]*//' || true)   # a file the plan deletes (Module.swift markers) takes its comments with it
 if [ -n "$rm_c" ]; then out "  ✗ $(grep -c . <<<"$rm_c") comment line(s) removed:"; head -5 <<<"$rm_c" | sed 's/^/      /'; else out "  ✓ no comment lines removed"; fi
 
 section "Safety (added lines only)"

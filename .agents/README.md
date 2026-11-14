@@ -7,7 +7,7 @@ Instructions and tooling for autonomous agents. `.claude/` is human-only: agents
 - `LOOP.md` — the whole unattended loop, bottom to top: layers, escalation table, adopted/rejected playbook rules, how to prompt it, limits.
 - `ORCHESTRATOR.md` — the per-laptop orchestrator cycle: pick work, launch workers, open PRs, review and merge, Mac verification, permissions, escalation.
 - `settings.json` — worker permissions + stop-hook (commit, push own `agent/*` branch only, no `gh`).
-- `settings.orch.json` — orchestrator permissions + stop-hook (full `gh`, any `git push` including `main` and force; still no `.claude/` edits, no `gh repo delete` / `secret` / key commands; `gh auth` and `git clean` are allowed).
+- `settings.orch.json` — orchestrator permissions + stop-hook (full `gh`, `git push` of any branch except `main`, force-push of own branches, `cargo`; still no `.claude/` edits, no `gh repo delete` / `secret` / key commands; `gh auth` and `git clean` are allowed).
 - `INTEGRATOR.md` — the integrator role: builds the PR, worktree and CI tooling while the orchestrators work (Opus, big budget), then maintains it from their signals (Sonnet, small budget).
 - `settings.integrator.json` — integrator permissions + stop-hook: edits only `.agents/scripts/**`, `.agents/README.md`, `.github/workflows/**`, `docs/agents/`; pushes only `agent/*` branches; full `gh` except destructive account commands.
 - `agents.json` — subagents: `reviewer` and `swift-package-worker`.
@@ -23,6 +23,7 @@ Instructions and tooling for autonomous agents. `.claude/` is human-only: agents
 - `scripts/stop-gate.sh` — stop-hook: agent can't finish while checks fail for the packages it changed and their dependents.
 - `scripts/verify-pr.sh <n>` — verifies a PR's exact head commit in a throwaway worktree (Mac: Swift + non-Swift checks; Windows: non-Swift only); last line `MAC-VERIFIED <sha>`, `VERIFIED <sha>` or `VERIFY-FAILED <sha>`.
 - `scripts/review-pr.sh <n>` — mechanical first-pass review of an agent PR (scope, deps vs graph, purity, hardware-blind rule, comments, tests, CI). Read-only.
+- `scripts/maintain.sh [--apply] [--idle-min N]` — deterministic GitHub hygiene, run by the lead orchestrator every cycle (ORCHESTRATOR.md step 2f): squash-merges agent PRs that pass every mechanical gate, closes superseded PRs, done and duplicate issues, deletes merged `agent/*` branches, creates missing labels. Dry run by default.
 - `scripts/cleanup.sh [--dry-run] [--closed]` — remove worktrees and branches of merged agent PRs (skips dirty or unmerged work).
 - `scripts/check-docs.sh` — last step before a push: fails when `.agents/*.md` or `docs/agents/` notes point at missing files, a script is not listed here, or retired wording is still there.
 - `../.github/workflows/verify.yml` — on macOS for every PR and push to `main`: `verify-swift.sh`, `verify-nonswift.sh`, `check-docs.sh`; on Linux: `verify-backend.sh`.
