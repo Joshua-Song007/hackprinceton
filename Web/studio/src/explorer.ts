@@ -2,7 +2,7 @@
 import type { EditorBus } from './editor';
 import type { PanelView } from './layout';
 import { walkEntities, type Project, type ScriptKind } from './project';
-import { button, el, icon, openSheet, promptSheet } from './ui';
+import { announce, button, el, icon, openMenu, openSheet, promptSheet } from './ui';
 
 /** The selected entity id (a `flattenScene` id), shared by Explorer, Inspector and Viewport. */
 export class Selection {
@@ -51,6 +51,52 @@ export function createExplorerPanel(project: Project, selection: Selection, edit
       );
     });
 
+  const addEntity = (parent: string | null, kind: 'box' | 'sphere' | 'trigger' | 'empty') => {
+    const id = project.addEntity(parent, kind);
+    if (id) {
+      selection.set(id);
+      focusKey = `e:${id}`;
+      announce(`Added ${id.split('/').pop()}.`);
+    }
+  };
+  const renameEntity = (id: string) =>
+    promptSheet(`Rename ${id.split('/').pop()}`, 'New name', project.entity(id)?.name ?? '', 'Rename', (to) => {
+      const r = project.renameEntity(id, to);
+      if ('error' in r) return r.error;
+      selection.set(r.id);
+      focusKey = `e:${r.id}`;
+    });
+  const duplicateEntity = (id: string) => {
+    const copy = project.duplicateEntity(id);
+    if (copy) {
+      selection.set(copy);
+      focusKey = `e:${copy}`;
+      announce(`Duplicated as ${copy.split('/').pop()}.`);
+    }
+  };
+  const deleteEntity = (id: string) => {
+    if (project.deleteEntity(id)) {
+      selection.set(null);
+      announce(`Deleted ${id.split('/').pop()}. Undo brings it back.`);
+    }
+  };
+  const addItems = (parent: string | null, withChild: boolean) => [
+    { label: 'Box', run: () => addEntity(parent, 'box') },
+    { label: 'Sphere', run: () => addEntity(parent, 'sphere') },
+    { label: 'Trigger zone', run: () => addEntity(parent, 'trigger') },
+    { label: 'Empty', run: () => addEntity(parent, 'empty') },
+    ...(withChild ? [{ separator: true }, { label: 'Child of selection (box)', disabled: !selection.entityId, run: () => addEntity(selection.entityId, 'box') }] : []),
+  ];
+  const entityMenu = (anchor: HTMLElement, id: string) =>
+    openMenu(anchor, [
+      { label: 'Rename', shortcut: 'F2', run: () => renameEntity(id) },
+      { label: 'Duplicate', shortcut: 'Ctrl+D', run: () => duplicateEntity(id) },
+      { label: 'Delete', shortcut: 'Delete', run: () => deleteEntity(id) },
+      { separator: true },
+      { heading: true, label: 'Add child' },
+      ...addItems(id, false),
+    ]);
+
   const render = () => {
     const items: Item[] = [];
     const list = el('ul', { class: 'om-list', role: 'listbox', 'aria-label': 'Scene entities' });
@@ -70,11 +116,17 @@ export function createExplorerPanel(project: Project, selection: Selection, edit
       }
       return ul;
     };
-    const group = (title: string, kind?: ScriptKind) =>
-      el('div', { class: 'pn-group' }, [title, ...(kind ? [button('Add', () => add(kind), { variant: 'small', ariaLabel: `Add ${kind} script` })] : [])]);
+    const group = (title: string, kind?: ScriptKind) => {
+      const addBtn: HTMLButtonElement | null = kind
+        ? button('Add', () => add(kind), { variant: 'small', ariaLabel: `Add ${kind} script` })
+        : title === 'Scene'
+          ? button('Add', () => openMenu(addBtn!, addItems(null, true)), { variant: 'small', ariaLabel: 'Add entity' })
+          : null;
+      return el('div', { class: 'pn-group' }, [title, ...(addBtn ? [addBtn] : [])]);
+    };
     const clientList = scriptList('client');
     const serverList = scriptList('server');
-    const keys = el('span', { id: 'explorer-keys', class: 'sr-only' }, ['Arrow keys move, Enter opens, F2 renames, Delete removes the script.']);
+    const keys = el('span', { id: 'explorer-keys', class: 'sr-only' }, ['Arrow keys move, Enter opens a script, F2 renames, Ctrl+D duplicates an entity, Delete removes, Shift+F10 opens the context menu.']);
     root.replaceChildren(keys, group('Scene'), list, group('Client scripts', 'client'), clientList, group('Server scripts', 'server'), serverList);
     if (!items.some((i) => keyOf(i) === focusKey)) focusKey = items[0] ? keyOf(items[0]) : null;
     root.querySelectorAll<HTMLElement>('li').forEach((li) => (li.tabIndex = li.dataset.key === focusKey ? 0 : -1));
@@ -93,8 +145,15 @@ export function createExplorerPanel(project: Project, selection: Selection, edit
         else render();
         root.querySelector<HTMLElement>(`li[data-key="${CSS.escape(focusKey)}"]`)?.focus();
       } else if (e.key === 'Enter' && it.kind === 'script') editor.open({ kind: it.script, name: it.name });
-      else if (e.key === 'F2' && it.kind === 'script') rename(it.script, it.name);
-      else if (e.key === 'Delete' && it.kind === 'script') remove(it.script, it.name);
+      else if (e.key === 'F2') it.kind === 'script' ? rename(it.script, it.name) : renameEntity(it.id);
+      else if (e.key === 'Delete') it.kind === 'script' ? remove(it.script, it.name) : deleteEntity(it.id);
+      else if (e.key === 'd' && e.ctrlKey && it.kind === 'entity') {
+        e.preventDefault();
+        duplicateEntity(it.id);
+      } else if ((e.key === 'ContextMenu' || (e.key === 'F10' && e.shiftKey)) && it.kind === 'entity') {
+        e.preventDefault();
+        entityMenu(li!, it.id);
+      }
     };
 
     function row(item: Item, depth: number, iconName: string, label: string, sub: string, selected: boolean): HTMLElement {
@@ -106,6 +165,14 @@ export function createExplorerPanel(project: Project, selection: Selection, edit
         if (item.kind === 'entity') selection.set(item.id);
         else render();
       });
+      if (item.kind === 'entity') {
+        li.addEventListener('contextmenu', (e) => {
+          e.preventDefault();
+          selection.set(item.id);
+          // selection re-renders the list, so anchor the menu on the fresh row
+          entityMenu(root.querySelector<HTMLElement>(`li[data-key="${CSS.escape(keyOf(item))}"]`) ?? li, item.id);
+        });
+      }
       if (item.kind === 'script') {
         li.addEventListener('dblclick', () => editor.open({ kind: item.script, name: item.name }));
         // tabindex -1: F2 and Delete cover the keyboard, so the row stays one tab stop

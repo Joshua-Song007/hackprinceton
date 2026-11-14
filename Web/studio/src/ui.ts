@@ -102,6 +102,8 @@ export function openSheet(title: string, build: (body: HTMLElement, close: () =>
 
 export interface MenuItem {
   label?: string;
+  /** Hint shown at the right edge, e.g. "Ctrl+S". Display only; the key handler lives with the shortcut table. */
+  shortcut?: string;
   checked?: boolean;
   disabled?: boolean;
   /** A non-interactive heading. */
@@ -133,7 +135,11 @@ export function openMenu(anchor: HTMLElement, items: MenuItem[]): void {
       const checkable = item.checked !== undefined;
       const b = el('button', {
         type: 'button', role: checkable ? 'menuitemcheckbox' : 'menuitem', 'aria-checked': checkable ? String(item.checked) : undefined, disabled: item.disabled,
-      }, [el('span', { class: 'menu-check', 'aria-hidden': 'true' }, [item.checked ? '\u2713' : '']), item.label ?? '']);
+      }, [
+        el('span', { class: 'menu-check', 'aria-hidden': 'true' }, [item.checked ? '\u2713' : '']), item.label ?? '',
+        ...(item.shortcut ? [el('span', { class: 'menu-shortcut', 'aria-hidden': 'true' }, [item.shortcut])] : []),
+      ]);
+      if (item.shortcut) b.setAttribute('aria-keyshortcuts', item.shortcut.replace(/\s/g, ''));
       b.addEventListener('click', () => {
         close(true);
         item.run?.();

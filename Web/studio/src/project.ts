@@ -1,12 +1,15 @@
 // Project model: scene JSON + client/server script sources + cloud link, dirty tracking and IndexedDB autosave.
 // The Flagship template is imported from Games/Flagship through Vite (never copied into the Studio).
 import type { GameVersion, NewGameVersion } from '@omni/cloud';
-import { parseScene, type SceneDescription } from '@omni/runtime';
+import { parseGestures, parseInputs, parseScene, type SceneDescription } from '@omni/runtime';
 import flagshipScene from '../../../Games/Flagship/scene.json';
+import hotPotatoScene from '../../../Games/HotPotato/scene.json';
 import { blankClientScripts, blankScene, blankServerScripts } from './templates/blank';
 
 const flagshipFiles = import.meta.glob('../../../Games/Flagship/scripts/*.js', { query: '?raw', import: 'default', eager: true }) as Record<string, string>;
 const flagshipScripts = Object.fromEntries(Object.entries(flagshipFiles).map(([path, src]) => [/([^/]+)\.js$/.exec(path)![1]!, src]));
+const hotPotatoFiles = import.meta.glob('../../../Games/HotPotato/scripts/*.js', { query: '?raw', import: 'default', eager: true }) as Record<string, string>;
+const hotPotatoScripts = Object.fromEntries(Object.entries(hotPotatoFiles).map(([path, src]) => [/([^/]+)\.js$/.exec(path)![1]!, src]));
 
 export type ScriptKind = 'client' | 'server';
 export type SceneJson = Record<string, unknown>;
@@ -23,8 +26,9 @@ export interface ProjectSnapshot {
 export type ProjectChange = 'open' | 'scene' | 'script' | 'scripts' | 'saved' | 'cloud';
 
 export const TEMPLATES = [
-  { id: 'flagship', label: 'Flagship (Hollow Choir)' },
-  { id: 'blank', label: 'Blank' },
+  { id: 'blank', label: 'Blank', blurb: 'A floor, one cube, a client script and a server script that counts taps. The smallest working loop.' },
+  { id: 'hotpotato', label: 'Hot potato', blurb: 'Multiplayer tag: the holder is eliminated when a timer runs out. Teaches server timers, positions and remote events.' },
+  { id: 'flagship', label: 'Flagship (Hollow Choir)', blurb: 'Audio and heart-rate horror game using head tracking, gestures and a server-run round.' },
 ] as const;
 export type TemplateId = (typeof TEMPLATES)[number]['id'];
 
@@ -32,8 +36,10 @@ export function templateSnapshot(id: TemplateId): ProjectSnapshot {
   if (id === 'blank') {
     return structuredClone({ scene: blankScene, clientScripts: blankClientScripts, serverScripts: blankServerScripts, gameId: null, version: null });
   }
-  const scene = structuredClone(flagshipScene) as SceneJson;
-  const pick = (names: unknown) => Object.fromEntries(((names as string[] | undefined) ?? []).map((n) => [n, flagshipScripts[n] ?? '']));
+  const potato = id === 'hotpotato';
+  const scene = structuredClone(potato ? hotPotatoScene : flagshipScene) as SceneJson;
+  const scripts = potato ? hotPotatoScripts : flagshipScripts;
+  const pick = (names: unknown) => Object.fromEntries(((names as string[] | undefined) ?? []).map((n) => [n, scripts[n] ?? '']));
   return { scene, clientScripts: pick(scene.clientScripts), serverScripts: pick(scene.serverScripts), gameId: null, version: null };
 }
 
@@ -59,6 +65,31 @@ export function walkEntities(scene: SceneJson, visit: (entity: RawEntity, id: st
     }
   };
   level((scene.entities as RawEntity[] | undefined) ?? [], null);
+}
+
+function defaultComponent(type: 'script' | 'trigger' | 'audioEmitter', p: { clientScripts: Record<string, string> }): Record<string, unknown> {
+  if (type === 'trigger') return { type, shape: 'sphere', radius: 1, probeSlots: ['head'] };
+  if (type === 'audioEmitter') return { type, soundName: '', gain: 1, loops: false };
+  return { type, name: Object.keys(p.clientScripts)[0] ?? '' };
+}
+
+type V3 = [number, number, number];
+type Q4 = [number, number, number, number];
+const DEG = Math.PI / 180;
+
+/** Euler degrees (yaw Y, pitch X, roll Z; applied Y then X then Z) to a unit quaternion [x, y, z, w]. */
+export function eulerToQuat([x, y, z]: V3): Q4 {
+  const [cx, sx, cy, sy, cz, sz] = [Math.cos(x * DEG / 2), Math.sin(x * DEG / 2), Math.cos(y * DEG / 2), Math.sin(y * DEG / 2), Math.cos(z * DEG / 2), Math.sin(z * DEG / 2)];
+  return [sx * cy * cz + cx * sy * sz, cx * sy * cz - sx * cy * sz, cx * cy * sz - sx * sy * cz, cx * cy * cz + sx * sy * sz];
+}
+
+/** Inverse of `eulerToQuat`; pitch is clamped to +-90 degrees, so gimbal-lock poses return roll 0. */
+export function quatToEuler(q: readonly number[]): V3 {
+  const [x, y, z, w] = q as Q4;
+  const m23 = 2 * (y * z - x * w);
+  const pitch = Math.asin(-Math.max(-1, Math.min(1, m23)));
+  const [yaw, roll] = Math.abs(m23) < 0.9999999 ? [Math.atan2(2 * (x * z + y * w), 1 - 2 * (x * x + y * y)), Math.atan2(2 * (x * y + z * w), 1 - 2 * (x * x + z * z))] : [Math.atan2(-2 * (x * z - y * w), 1 - 2 * (y * y + z * z)), 0];
+  return [pitch / DEG, yaw / DEG, roll / DEG];
 }
 
 export class Project {
@@ -87,18 +118,68 @@ export class Project {
     for (const l of this.listeners) l(change);
   }
 
+  // shortcut: whole-project snapshots, script typing merged into one step per 500 ms; fine for small games, switch to patches if projects grow large.
+  private baseline: ProjectSnapshot | null = null;
+  private undoStack: ProjectSnapshot[] = [];
+  private redoStack: ProjectSnapshot[] = [];
+  private lastTouchMs = 0;
+
   private touch(change: ProjectChange): void {
+    const now = Date.now();
+    if (this.baseline && (change !== 'script' || now - this.lastTouchMs > 500)) {
+      this.undoStack.push(this.baseline);
+      if (this.undoStack.length > 50) this.undoStack.shift();
+    }
+    this.lastTouchMs = now;
+    this.redoStack = [];
+    this.baseline = this.snapshot();
     this.dirty = true;
     this.emit(change);
   }
 
-  /** Replaces the whole project (open template, open from cloud, restore draft); clean afterwards. */
-  load(s: ProjectSnapshot): void {
+  get canUndo(): boolean {
+    return this.undoStack.length > 0;
+  }
+
+  get canRedo(): boolean {
+    return this.redoStack.length > 0;
+  }
+
+  undo(): void {
+    const prev = this.undoStack.pop();
+    if (!prev || !this.baseline) return;
+    this.redoStack.push(this.baseline);
+    this.restore(prev);
+  }
+
+  redo(): void {
+    const next = this.redoStack.pop();
+    if (!next || !this.baseline) return;
+    this.undoStack.push(this.baseline);
+    this.restore(next);
+  }
+
+  private restore(s: ProjectSnapshot): void {
+    this.apply(structuredClone(s));
+    this.baseline = s;
+    this.dirty = true;
+    this.emit('open');
+  }
+
+  private apply(s: ProjectSnapshot): void {
     this.scene = s.scene;
     this.clientScripts = s.clientScripts;
     this.serverScripts = s.serverScripts;
     this.gameId = s.gameId;
     this.version = s.version;
+  }
+
+  /** Replaces the whole project (open template, open from cloud, restore draft); clean afterwards. */
+  load(s: ProjectSnapshot): void {
+    this.apply(s);
+    this.undoStack = [];
+    this.redoStack = [];
+    this.baseline = this.snapshot();
     this.dirty = false;
     this.emit('open');
   }
@@ -193,6 +274,144 @@ export class Project {
     return true;
   }
 
+  /** Removes an entity and its children. Returns false when the id no longer exists. */
+  deleteEntity(id: string): boolean {
+    let removed = false;
+    walkEntities(this.scene, (e, eid, siblings) => {
+      if (removed || eid !== id) return;
+      siblings.splice(siblings.indexOf(e), 1);
+      removed = true;
+    });
+    if (removed) this.touch('scene');
+    return removed;
+  }
+
+  private siblingsOf(parentId: string | null): RawEntity[] | undefined {
+    if (parentId === null) return ((this.scene.entities ??= []) as RawEntity[]);
+    const p = this.entity(parentId);
+    return p ? (p.children ??= []) : undefined;
+  }
+
+  private uniqueName(siblings: RawEntity[], base: string): string {
+    const taken = new Set(siblings.map((s) => s.name));
+    let name = base;
+    for (let n = 2; taken.has(name); n++) name = `${base} ${n}`;
+    return name;
+  }
+
+  /** Adds an entity under `parentId` (null = scene root); returns its id, or null when the parent no longer exists. */
+  addEntity(parentId: string | null, kind: 'box' | 'sphere' | 'trigger' | 'empty', at: [number, number, number] = [0, 0, 0]): string | null {
+    const siblings = this.siblingsOf(parentId);
+    if (!siblings) return null;
+    const label = { box: 'Box', sphere: 'Sphere', trigger: 'Trigger', empty: 'Empty' }[kind];
+    const name = this.uniqueName(siblings, label);
+    // shortcut: an empty is a small box (scene format has no mesh-less entity), upgrade when the format gains one.
+    const e: RawEntity = { name, shape: kind === 'sphere' || kind === 'trigger' ? 'sphere' : 'box', position: [...at], scale: kind === 'empty' ? [0.2, 0.2, 0.2] : [1, 1, 1], components: kind === 'trigger' ? [defaultComponent('trigger', this)] : [] };
+    siblings.push(e);
+    this.touch('scene');
+    return (parentId === null ? '' : `${parentId}/`) + name;
+  }
+
+  /** Deep-clones an entity (children included) next to the original; returns the new id. */
+  duplicateEntity(id: string): string | null {
+    let result: string | null = null;
+    walkEntities(this.scene, (e, eid, siblings) => {
+      if (result !== null || eid !== id) return;
+      const copy = structuredClone(e);
+      copy.name = this.uniqueName(siblings, String(e.name ?? ''));
+      siblings.splice(siblings.indexOf(e) + 1, 0, copy);
+      result = eid.slice(0, eid.lastIndexOf('/') + 1) + copy.name;
+    });
+    if (result !== null) this.touch('scene');
+    return result;
+  }
+
+  /** Returns the new id (descendant ids change too) or an error sentence. */
+  renameEntity(id: string, name: string): { id: string } | { error: string } {
+    const clean = name.trim();
+    if (!clean || /[/#]/.test(clean)) return { error: 'Entity names cannot be empty or contain / or #.' };
+    let out: { id: string } | { error: string } = { error: 'That entity no longer exists.' };
+    walkEntities(this.scene, (e, eid, siblings) => {
+      if (eid !== id || 'id' in out) return;
+      if (e.name === clean) return void (out = { id });
+      if (siblings.some((s) => s.name === clean)) return void (out = { error: `A sibling named ${clean} already exists. Pick another name.` });
+      e.name = clean;
+      out = { id: id.slice(0, id.lastIndexOf('/') + 1) + clean };
+      this.touch('scene');
+    });
+    return out;
+  }
+
+  addComponent(id: string, type: 'script' | 'trigger' | 'audioEmitter'): boolean {
+    return this.updateEntity(id, (e) => (e.components ??= []).push(defaultComponent(type, this)));
+  }
+
+  removeComponent(id: string, index: number): boolean {
+    const e = this.entity(id);
+    if (!e?.components?.[index]) return false;
+    return this.updateEntity(id, (x) => void x.components!.splice(index, 1));
+  }
+
+  /** Keys: name, requiredTier, runMode, permissions.location, playerOrigin. Returns an error sentence, or undefined on success. */
+  setSceneSetting(key: string, value: unknown): string | undefined {
+    switch (key) {
+      case 'name':
+        if (typeof value !== 'string') return 'Scene name must be text.';
+        break;
+      case 'requiredTier':
+        if (value !== 1 && value !== 2 && value !== 3) return 'Tier must be 1, 2 or 3.';
+        break;
+      case 'runMode':
+        if (value !== 'screen' && value !== 'device') return 'Run mode must be screen or device.';
+        break;
+      case 'permissions.location':
+        if (typeof value !== 'boolean') return 'Location permission must be on or off.';
+        this.scene.permissions = { ...(this.scene.permissions as object | undefined), location: value };
+        this.touch('scene');
+        return undefined;
+      case 'playerOrigin':
+        if (!Array.isArray(value) || value.length !== 3 || !value.every((n) => typeof n === 'number' && Number.isFinite(n))) return 'Player origin needs three numbers.';
+        break;
+      case 'inputs':
+        try {
+          if (value !== null) parseInputs(value);
+        } catch (e) {
+          return e instanceof Error ? e.message : String(e);
+        }
+        if (value === null) delete this.scene.inputs;
+        else this.scene.inputs = structuredClone(value);
+        this.touch('scene');
+        return undefined;
+      case 'gestures':
+        try {
+          parseGestures(value);
+        } catch (e) {
+          return e instanceof Error ? e.message : String(e);
+        }
+        if (value && Object.keys(value as object).length) this.scene.gestures = structuredClone(value);
+        else delete this.scene.gestures;
+        this.touch('scene');
+        return undefined;
+      default:
+        return `Unknown scene setting ${key}.`;
+    }
+    this.scene[key] = value;
+    this.touch('scene');
+    return undefined;
+  }
+
+  /** Adds a client script stub and attaches it to the entity as one undo step. Returns an error sentence, or undefined. */
+  createAndAttachScript(entityId: string, name: string): string | undefined {
+    const e = this.entity(entityId);
+    if (!e) return 'That entity no longer exists.';
+    const bad = this.checkName('client', name);
+    if (bad) return bad;
+    this.clientScripts[name] = SCRIPT_STUBS.client;
+    (e.components ??= []).push({ type: 'script', name });
+    this.syncNames();
+    this.touch('scripts');
+  }
+
   /** The body of a `POST /api/games/{id}/versions` request. */
   toVersion(): NewGameVersion {
     this.syncNames();
@@ -224,7 +443,7 @@ function openDb(): Promise<IDBDatabase> {
   });
 }
 
-async function withStore<T>(mode: IDBTransactionMode, run: (store: IDBObjectStore) => IDBRequest<T>): Promise<T> {
+export async function withStore<T>(mode: IDBTransactionMode, run: (store: IDBObjectStore) => IDBRequest<T>): Promise<T> {
   const db = await openDb();
   return new Promise<T>((resolve, reject) => {
     const req = run(db.transaction(STORE, mode).objectStore(STORE));

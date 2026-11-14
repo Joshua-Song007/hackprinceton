@@ -1,15 +1,17 @@
 // Script editor: CodeMirror 6, one tab per open script, inline error markers from sandbox and server errors.
 // Ctrl+S is handled at window level in main.ts (CodeMirror leaves it unbound).
+import { autocompletion, type CompletionContext, type CompletionResult } from '@codemirror/autocomplete';
 import { javascript } from '@codemirror/lang-javascript';
 import { HighlightStyle, syntaxHighlighting } from '@codemirror/language';
 import { setDiagnostics, lintGutter, type Diagnostic } from '@codemirror/lint';
 import { EditorState } from '@codemirror/state';
-import { EditorView } from '@codemirror/view';
+import { EditorView, hoverTooltip } from '@codemirror/view';
 import { tags } from '@lezer/highlight';
 import { basicSetup } from 'codemirror';
+import { API, findHandler, findMember, handlerSignature, type ApiSide } from './api';
 import type { PanelView } from './layout';
 import type { Project, ScriptKind } from './project';
-import { el } from './ui';
+import { button, el, openSheet } from './ui';
 
 export interface ScriptRef {
   kind: ScriptKind;
@@ -104,6 +106,68 @@ export function errorRange(source: string, message: string): { from: number; to:
   return { from: start, to: end < 0 ? source.length : end };
 }
 
+/** Autocomplete and hover for one side of the script API, driven by api.ts. */
+export function apiExtensions(side: ApiSide) {
+  const { handlers, members } = API[side];
+  const complete = (c: CompletionContext): CompletionResult | null => {
+    const m = c.matchBefore(/(self|ctx|console)\.[\w.]*$/);
+    if (m) {
+      const [obj, typed] = [m.text.slice(0, m.text.indexOf('.')), m.text.slice(m.text.indexOf('.') + 1)];
+      const base = typed.slice(0, typed.lastIndexOf('.') + 1);
+      const seen = new Map<string, { label: string; detail?: string; info?: string }>();
+      for (const mem of members) {
+        if (!mem.path.startsWith(`${obj}.${base}`)) continue;
+        const rest = mem.path.slice(obj.length + 1 + base.length);
+        const seg = rest.split('.')[0]!;
+        seen.set(seg, rest === seg ? { label: seg, detail: mem.signature, info: mem.description } : seen.get(seg) ?? { label: seg });
+      }
+      return seen.size ? { from: m.to - (typed.length - base.length), options: [...seen.values()].map((o) => ({ ...o, type: 'property' })) } : null;
+    }
+    // Handler names: at the start of a line (one identifier typed), not after a dot.
+    const h = c.matchBefore(/^\s*\w*$/m);
+    if (!h || (h.text.trim() === '' && !c.explicit)) return null;
+    const from = h.to - h.text.trim().length;
+    return { from, options: handlers.map((x) => ({ label: x.name, detail: `(${x.params.map((q) => q.name).join(', ')})`, info: x.description, type: 'method', apply: `${handlerSignature(x)} {
+  
+},` })) };
+  };
+  const hover = hoverTooltip((view, pos) => {
+    const line = view.state.doc.lineAt(pos);
+    const re = /[\w.]+/g;
+    for (let m = re.exec(line.text); m; m = re.exec(line.text)) {
+      const [from, to] = [line.from + m.index, line.from + m.index + m[0].length];
+      if (pos < from || pos > to) continue;
+      const path = m[0].slice(0, pos - from + (/\w*/.exec(m[0].slice(pos - from))?.[0].length ?? 0));
+      const h = findHandler(side, path);
+      const mem = findMember(side, path);
+      const [title, text] = h ? [handlerSignature(h), h.description] : mem ? [mem.signature, mem.description] : [];
+      if (!title) return null;
+      return { pos: from, end: to, create: () => ({ dom: el('div', { class: 'cm-api-tip' }, [el('code', {}, [title]), el('div', {}, [text!])]) }) };
+    }
+    return null;
+  });
+  return [autocompletion({ override: [complete] }), hover];
+}
+
+/** Help > API reference: both sides from api.ts, with a filter box. */
+export function openApiSheet(): void {
+  openSheet('API reference', (body, close) => {
+    const filter = el('input', { type: 'search', placeholder: 'Filter', 'aria-label': 'Filter API reference' }) as HTMLInputElement;
+    const rows: { row: HTMLElement; text: string }[] = [];
+    const list = el('div', { class: 'api-ref', style: 'max-height:60vh;overflow:auto' });
+    for (const side of ['client', 'server'] as const) {
+      list.append(el('h3', {}, [side === 'client' ? 'Client' : 'Server']));
+      for (const x of [...API[side].handlers.map((h) => ({ sig: handlerSignature(h), d: h.description, ex: h.example })), ...API[side].members.map((m) => ({ sig: m.signature, d: m.description, ex: m.example }))]) {
+        const row = el('div', {}, [el('code', {}, [x.sig]), el('div', {}, [x.d]), el('pre', {}, [x.ex])]);
+        rows.push({ row, text: `${side} ${x.sig} ${x.d}`.toLowerCase() });
+        list.append(row);
+      }
+    }
+    filter.addEventListener('input', () => rows.forEach((r) => (r.row.hidden = !r.text.includes(filter.value.toLowerCase()))));
+    body.append(filter, list, el('div', { class: 'sheet-actions' }, [button('Close', close, { variant: 'default' })]));
+  });
+}
+
 export function createEditorPanel(project: Project, bus: EditorBus): PanelView {
   const root = el('div', { class: 'pn pn-flex', role: 'region', 'aria-label': 'Script editor', tabindex: -1 });
   const tabBar = el('div', { class: 'ed-tabs', role: 'tablist', 'aria-label': 'Open scripts' });
@@ -121,7 +185,7 @@ export function createEditorPanel(project: Project, bus: EditorBus): PanelView {
         doc: project.scripts(ref.kind)[ref.name] ?? '',
         extensions: [
           EditorView.theme({}, { dark: document.documentElement.dataset.theme !== 'light' }), // colors come from theme.css tokens
-          basicSetup, javascript(), syntaxHighlighting(omniHighlight), lintGutter(),
+          basicSetup, javascript(), ...apiExtensions(ref.kind), syntaxHighlighting(omniHighlight), lintGutter(),
           EditorView.contentAttributes.of({ 'aria-label': `${ref.name} ${ref.kind} script` }),
           EditorView.updateListener.of((u) => {
             if (u.docChanged) project.setScript(ref.kind, ref.name, u.state.doc.toString());

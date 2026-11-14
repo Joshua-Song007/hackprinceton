@@ -7,9 +7,9 @@
 
   var CLIENT_HANDLERS = [
     "onLookAt", "onGesture", "onHeartRate", "onRaycastHit",
-    "onTriggerEnter", "onTriggerExit", "onRemote"
+    "onTriggerEnter", "onTriggerExit", "onRemote", "onTick"
   ];
-  var SERVER_HANDLERS = ["onPlayerJoin", "onPlayerLeave", "onRemote"];
+  var SERVER_HANDLERS = ["onPlayerJoin", "onPlayerLeave", "onRemote", "onTimer"];
 
   function checkHandlers(kind, definition, allowed) {
     if (definition === null || typeof definition !== "object") {

@@ -142,50 +142,116 @@ export class DebugStore {
   }
 }
 
-const tableRow = (cells: (string | Node)[], cls = '') => el('tr', cls ? { class: cls } : {}, cells.map((c) => el('td', {}, [c])));
+export type ConsoleFilter = 'all' | 'client' | 'server' | 'errors';
+export interface ConsoleRow { t: number; source: string; level: Level; text: string }
 
-function logPanel(label: string, store: DebugStore, topic: 'output' | 'server', head: string[], rows: () => { cells: (string | Node)[]; level: Level }[], bar: () => Node[]): PanelView {
-  const root = el('div', { class: 'pn pn-flex', role: 'region', 'aria-label': label, tabindex: -1 });
-  const barEl = el('div', { class: 'pn-bar' });
-  const scroller = el('div', { class: 'grow om-log-flat', tabindex: 0, role: 'region', 'aria-label': `${label} log` });
-  root.append(barEl, scroller);
-  const render = () => {
+/** Client output and server rows merged in time order (output first on ties), then filtered. */
+export function consoleRows(output: OutputEntry[], server: ServerRow[], filter: ConsoleFilter): ConsoleRow[] {
+  const rows: ConsoleRow[] = [];
+  if (filter !== 'server') for (const o of output) rows.push({ t: o.t, source: o.script ?? 'client', level: o.level, text: o.text });
+  if (filter !== 'client') {
+    for (const s of server) {
+      const talk = s.kind === 'log' || s.kind === 'error';
+      rows.push({ t: s.t, source: talk || !s.player ? 'server' : s.player, level: s.level, text: talk ? s.detail : `${s.kind}: ${s.detail}` });
+    }
+  }
+  const sorted = rows.map((r, i) => [r, i] as const).sort((a, b) => a[0].t - b[0].t || a[1] - b[1]).map(([r]) => r);
+  return filter === 'errors' ? sorted.filter((r) => r.level === 'error') : sorted;
+}
+
+const tableRow = (cells: (string | Node)[], cls = '') => el('tr', cls ? { class: cls } : {}, cells.map((c) => el('td', {}, [c])));
+const STATE_KEY = 'omni.console.state';
+const readState = (): boolean => {
+  try {
+    return localStorage.getItem(STATE_KEY) === '1';
+  } catch {
+    return false;
+  }
+};
+
+export function createConsolePanel(store: DebugStore): PanelView {
+  let filter: ConsoleFilter = 'all';
+  let showState = readState();
+  let advanced = false;
+  let packets = false;
+  const root = el('div', { class: 'pn pn-flex', role: 'region', 'aria-label': 'Console', tabindex: -1 });
+  const group = el('div', { role: 'radiogroup', 'aria-label': 'Filter', style: 'display:flex;gap:4px' });
+  const filters = (['all', 'client', 'server', 'errors'] as const).map((f) => {
+    const b = button(f[0]!.toUpperCase() + f.slice(1), () => ((filter = f), render()), { variant: 'small' });
+    b.setAttribute('role', 'radio');
+    return [f, b] as const;
+  });
+  group.append(...filters.map(([, b]) => b));
+  const toggle = (label: string, on: () => void) => {
+    const b = button(label, on, { variant: 'small' });
+    b.setAttribute('aria-pressed', 'false');
+    return b;
+  };
+  const stateBtn = toggle('State', () => {
+    showState = !showState;
+    try {
+      localStorage.setItem(STATE_KEY, showState ? '1' : '0');
+    } catch { /* not remembered */ }
+    render();
+  });
+  const packetsBtn = toggle('Packets', () => ((packets = !packets), render()));
+  const advBtn = toggle('Advanced', () => ((advanced = !advanced), (packets &&= advanced), render()));
+  const clearBtn = button('Clear', () => (packets ? store.clear('packets') : (store.clear('output'), store.clear('server'))), { variant: 'small' });
+  const status = el('span', { class: 'om-secondary om-num' });
+  root.append(el('div', { class: 'pn-bar' }, [group, stateBtn, advBtn, packetsBtn, clearBtn, status]));
+
+  const scroller = el('div', { class: 'grow om-log-flat', tabindex: 0, role: 'region', 'aria-label': 'Console log' });
+  const body = el('div', { class: 'grow', style: 'display:flex;min-height:0' });
+  root.append(body);
+  let side: PanelView | null = null;
+  let pk: PanelView | null = null;
+
+  const renderLog = () => {
     const stick = scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 8;
-    barEl.replaceChildren(...bar());
-    const items = rows();
+    const items = consoleRows(store.output, store.server, filter);
+    status.textContent = store.serverConnected ? `Server connected, version ${store.serverVersion ?? 'none'}, ${store.players.size} ${store.players.size === 1 ? 'player' : 'players'}` : 'Server not connected';
     if (!items.length) {
-      scroller.replaceChildren(el('div', { class: 'pn-empty' }, [topic === 'output' ? 'No output yet. Run the project to see script logs and errors.' : store.testPlayer ? `Only the game owner sees the server console. This tab is test player ${store.testPlayer}.` : 'No server events. Use Run on server to open a live session.']));
+      scroller.replaceChildren(el('div', { class: 'pn-empty' }, [store.testPlayer ? `Only the game owner sees the server console. This tab is test player ${store.testPlayer}.` : 'Nothing here yet. Run the project to see script logs, errors and server events.']));
       return;
     }
     const table = el('table', {}, [
-      el('thead', {}, [el('tr', {}, head.map((h) => el('th', {}, [h])))]),
-      el('tbody', {}, items.map((r) => tableRow(r.cells, r.level === 'error' ? 'is-error' : r.level === 'warn' ? 'is-warn' : ''))),
+      el('thead', {}, [el('tr', {}, ['Time', 'Source', 'Level', 'Message'].map((h) => el('th', {}, [h])))]),
+      el('tbody', {}, items.map((r) => tableRow([clock(r.t), r.source, r.level, r.text], r.level === 'error' ? 'is-error' : r.level === 'warn' ? 'is-warn' : ''))),
     ]);
     for (const td of table.querySelectorAll('td:last-child')) td.classList.add('msg');
     scroller.replaceChildren(table);
     if (stick) scroller.scrollTop = scroller.scrollHeight;
   };
-  const off = store.subscribe(topic, render);
+
+  const render = () => {
+    for (const [f, b] of filters) b.setAttribute('aria-checked', String(f === filter));
+    stateBtn.setAttribute('aria-pressed', String(showState));
+    advBtn.setAttribute('aria-pressed', String(advanced));
+    packetsBtn.setAttribute('aria-pressed', String(packets));
+    packetsBtn.hidden = !advanced;
+    renderLog();
+    if (packets && !pk) pk = packetsView(store);
+    if (!packets && pk) (pk.dispose?.(), (pk = null));
+    if (showState && !side) side = stateView(store);
+    if (!showState && side) (side.dispose?.(), (side = null));
+    const main = packets && pk ? pk.element : scroller;
+    const wanted = [main, ...(side ? [side.element] : [])];
+    if (body.children.length !== wanted.length || wanted.some((n, i) => body.children[i] !== n)) {
+      main.style.flex = side ? '3 1 0' : '1 1 0';
+      main.style.minWidth = '0';
+      if (side) side.element.style.cssText = 'flex:2 1 0;min-width:0';
+      body.replaceChildren(...wanted);
+    }
+  };
+  const offs = [store.subscribe('output', renderLog), store.subscribe('server', renderLog)];
   render();
-  return { element: root, focus: () => scroller.focus(), dispose: off };
+  return {
+    element: root,
+    focus: () => (packets && pk ? pk.focus?.() : scroller.focus()),
+    dispose: () => (offs.forEach((o) => o()), pk?.dispose?.(), side?.dispose?.()),
+  };
 }
 
-export function createOutputPanel(store: DebugStore): PanelView {
-  return logPanel('Output', store, 'output', ['Time', 'Level', 'Script', 'Message'],
-    () => store.output.map((o) => ({ level: o.level, cells: [clock(o.t), o.level, o.script ?? '', o.text] })),
-    () => [button('Clear', () => store.clear('output'), { variant: 'small' }), el('span', { class: 'om-secondary' }, [`${store.output.length} lines`])]);
-}
-
-export function createServerPanel(store: DebugStore): PanelView {
-  return logPanel('Server', store, 'server', ['Time', 'Event', 'Player', 'Detail'],
-    () => store.server.map((s) => ({ level: s.level, cells: [clock(s.t), s.kind, s.player, s.detail] })),
-    () => [
-      button('Clear', () => store.clear('server'), { variant: 'small' }),
-      el('span', { class: 'om-secondary om-num' }, [
-        store.serverConnected ? `Connected, version ${store.serverVersion ?? 'none'}, ${store.players.size} ${store.players.size === 1 ? 'player' : 'players'}` : 'Not connected',
-      ]),
-    ]);
-}
 
 function jsonNode(store: DebugStore, key: string, value: unknown, path: string, depth: number): HTMLElement {
   const label = (k: string) => el('span', { class: 'k' }, [`${k}: `]);
@@ -200,7 +266,7 @@ function jsonNode(store: DebugStore, key: string, value: unknown, path: string, 
   return details;
 }
 
-export function createStatePanel(store: DebugStore): PanelView {
+function stateView(store: DebugStore): PanelView {
   const root = el('div', { class: 'pn pn-flex', role: 'region', 'aria-label': 'State', tabindex: -1 });
   const tree = el('div', { class: 'grow json-tree', role: 'region', 'aria-label': 'ctx.state' });
   root.append(el('div', { class: 'pn-bar' }, [el('span', { class: 'om-secondary' }, ['Server ctx.state, read only'])]), tree);
@@ -229,7 +295,7 @@ export function packetRowKey(ids: number[], current: number, key: string): { id:
   return j === i || j < 0 || j >= ids.length ? null : { id: ids[j]!, select: false };
 }
 
-export function createPacketsPanel(store: DebugStore): PanelView {
+function packetsView(store: DebugStore): PanelView {
   const root = el('div', { class: 'pn pn-flex', role: 'region', 'aria-label': 'Packets', tabindex: -1 });
   const filter = el('input', { placeholder: 'Filter by device or channel', 'aria-label': 'Filter packets' });
   let paused = false;

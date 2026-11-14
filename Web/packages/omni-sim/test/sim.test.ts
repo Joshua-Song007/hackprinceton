@@ -88,3 +88,22 @@ describe('parseUsisJsonl and UsisPlayer', () => {
     expect(player.playing).toBe(false);
   });
 });
+
+describe('SimDevices rig', () => {
+  it('emits only for present devices; gestures need the phone', () => {
+    vi.useFakeTimers();
+    const out: UsisPacket[] = [];
+    const sim = new SimDevices((p) => out.push(p), { now: () => 0, kinds: ['airpods'] });
+    sim.start();
+    sim.gesture('tap');
+    expect(out.map((p) => p.kind)).toEqual(['airpods']);
+    sim.addDevice('phone');
+    sim.addDevice('watch');
+    sim.gesture('tap');
+    vi.advanceTimersByTime(20);
+    sim.stop();
+    expect(new Set(out.map((p) => p.kind))).toEqual(new Set(['airpods', 'phone', 'watch']));
+    sim.removeDevice('watch');
+    expect(sim.list()).toEqual(['airpods', 'phone']);
+  });
+});

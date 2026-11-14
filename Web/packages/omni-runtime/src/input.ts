@@ -19,6 +19,8 @@ export interface DeviceSample {
   gestures: Gesture[];
   heartRate?: number;
   pencil?: PencilState;
+  /** Meters, accuracy of `position`. */
+  accuracy?: number;
 }
 
 export interface InputFrame {
@@ -58,6 +60,7 @@ export class InputBus {
     if (ch.gesture) sample.gestures.push(ch.gesture);
     if (ch.heartRate !== undefined) sample.heartRate = ch.heartRate;
     if (ch.pencil) sample.pencil = ch.pencil;
+    if (typeof ch.accuracy === 'number') sample.accuracy = ch.accuracy;
     this.held.set(slot, { sample, receivedAt: nowMs });
     return true;
   }

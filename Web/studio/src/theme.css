@@ -20,7 +20,7 @@ html, body { height: 100%; overflow: hidden; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 
 /* Window shell: toolbar, dock area, status bar. Zoom implements the 90-200% UI scale. */
-#studio { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; zoom: var(--ui-scale); width: calc(100vw / var(--ui-scale)); height: calc(100vh / var(--ui-scale)); background: var(--bg-panel); }
+#studio { display: grid; grid-template-rows: auto auto minmax(0, 1fr) auto; zoom: var(--ui-scale); width: calc(100vw / var(--ui-scale)); height: calc(100vh / var(--ui-scale)); background: var(--bg-panel); }
 #dock { min-height: 0; min-width: 0; position: relative; }
 .om-toolbar { flex-wrap: nowrap; overflow-x: auto; }
 .om-toolbar .om-sep { width: 1px; align-self: stretch; margin: 10px 2px; background: var(--line); }
@@ -152,6 +152,11 @@ dialog.sheet .sheet-error { color: var(--error); font-size: 12px; margin: var(--
 .menu button:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
 .menu button[disabled] { opacity: .4; }
 .menu .menu-check { width: 14px; }
+.menu .menu-shortcut { margin-left: auto; padding-left: 24px; font-size: 11px; opacity: .7; }
+.om-menubar { display: flex; gap: 2px; padding: 2px 6px; background: var(--bg-panel); border-bottom: 1px solid var(--line); }
+.om-menubar-item { all: unset; box-sizing: border-box; min-height: var(--row-height); padding: 0 10px; display: flex; align-items: center; border-radius: var(--radius-control); font-size: 12px; cursor: default; }
+.om-menubar-item:hover, .om-menubar-item[aria-expanded="true"] { background: var(--line); }
+.om-menubar-item:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
 .menu hr { border: 0; border-top: 1px solid var(--line); margin: 4px 0; }
 .menu .menu-label { font-size: 11px; color: var(--text-secondary); padding: 4px 10px 2px; }
 .menu-host { position: relative; }
@@ -161,3 +166,17 @@ dialog.sheet .sheet-error { color: var(--error); font-size: 12px; margin: var(--
 .om-tree-row .om-secondary { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .om-list li.om-tree-row { grid-template-columns: 18px auto minmax(0, 1fr); }
 .om-tree-row .om-secondary { text-align: right; }
+
+/* Full-window screens (login, projects) laid over the always-mounted editor */
+.scr { position: fixed; inset: 0; z-index: 40; overflow: auto; background: var(--bg-window); color: var(--text); display: flex; justify-content: center; }
+.scr[hidden] { display: none; }
+.scr-card { width: min(720px, 100%); box-sizing: border-box; padding: 40px 16px; }
+.scr-login { width: min(420px, 100%); align-self: center; }
+.scr h1 { font: var(--text-title); font-size: 20px; margin: 0 0 8px; }
+.scr h2 { font: var(--text-title); font-size: 13px; margin: 24px 0 8px; color: var(--text-secondary); }
+.scr-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.scr-head h1 { margin: 0; flex: 1; }
+.scr-list { list-style: none; margin: 0 0 8px; padding: 0; border: 1px solid var(--line); border-radius: var(--radius-control); }
+.scr-row { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--line); }
+.scr-row:last-child { border-bottom: 0; }
+.scr-row .om-name { flex: 1; min-width: 0; display: flex; flex-direction: column; }

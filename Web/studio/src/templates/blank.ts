@@ -7,6 +7,7 @@ export const blankScene = {
   requiredTier: 1,
   playerOrigin: [0, 1.6, 0],
   runMode: 'screen',
+  inputs: { gestures: ['tap'], players: [1, 32] },
   clientScripts: ['cube'],
   serverScripts: ['counter'],
   entities: [

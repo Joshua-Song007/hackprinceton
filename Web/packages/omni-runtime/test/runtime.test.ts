@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { quat, type Quat, type Vec3 } from '@omni/core';
 import flagship from '../../../../Games/Flagship/scene.json';
-import { InputBus, SceneEvents, flattenScene, parseScene, SceneError, STALE_AFTER_MS } from '../src';
+import { InputBus, SceneEvents, flattenScene, parseScene, parseInputs, SceneError, STALE_AFTER_MS } from '../src';
 
 const scene = parseScene(flagship);
 
@@ -146,5 +146,23 @@ describe('events.ts', () => {
     expect(rig.step(watch(120))).toEqual([{ handler: 'onHeartRate', args: [120], intensity: 0.5 }]);
     expect(rig.step(watch(120))).toEqual([]);
     expect(rig.step(watch(300))[0]).toMatchObject({ intensity: 1 });
+  });
+});
+
+describe('parseInputs', () => {
+  it('defaults an empty block', () => {
+    expect(parseInputs({})).toEqual({ head: false, position: false, heartRate: false, gestures: [], players: [1, 32] });
+  });
+  it('keeps declared values and dedupes gestures', () => {
+    expect(parseInputs({ head: true, gestures: ['tap', 'tap', 'flick'], players: [2, 4] })).toMatchObject({ head: true, gestures: ['tap', 'flick'], players: [2, 4] });
+  });
+  it('rejects an unknown gesture', () => {
+    expect(() => parseInputs({ gestures: ['wave'] })).toThrow(/unknown gesture 'wave'/);
+  });
+  it('rejects bad players', () => {
+    for (const players of [[0, 4], [3, 2], [1, 33], [1.5, 2], [1], 'x']) expect(() => parseInputs({ players })).toThrow(SceneError);
+  });
+  it('rejects a non-object', () => {
+    expect(() => parseInputs(null)).toThrow(SceneError);
   });
 });

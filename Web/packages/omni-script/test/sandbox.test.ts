@@ -139,3 +139,17 @@ describe('ScriptSandbox in a worker', () => {
     expect(after.outputs).toHaveLength(2);
   }, 10_000);
 });
+
+describe('ctx.player, ctx.position and onTick', () => {
+  const src = `export default script({
+    onTick(self, ctx, dt) { ctx.remote.fire("tick", { id: ctx.player.id, pos: ctx.position, dt }); },
+  });`;
+  it('exposes the player id and position, null when absent', () => {
+    const rt = new ScriptRuntime(prelude);
+    rt.load('t', src);
+    const withIds = rt.call({ script: 't', entity: ref('E'), handler: 'onTick', args: [0.2], playerId: 'p1', position: [1, 2, 3] });
+    expect(withIds.outputs).toEqual([{ kind: 'remote', name: 'tick', data: { id: 'p1', pos: [1, 2, 3], dt: 0.2 } }]);
+    const without = rt.call({ script: 't', entity: ref('E'), handler: 'onTick', args: [0.2] });
+    expect(without.outputs).toEqual([{ kind: 'remote', name: 'tick', data: { id: null, pos: null, dt: 0.2 } }]);
+  });
+});

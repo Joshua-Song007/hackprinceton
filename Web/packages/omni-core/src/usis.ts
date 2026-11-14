@@ -49,6 +49,8 @@ export interface UsisChannels {
   gesture?: Gesture;
   heartRate?: number;
   pencil?: PencilState;
+  /** Meters, horizontal accuracy of `position` (GPS-style). Not in usis.schema.json yet: rides on `ch` allowing extra channels. */
+  accuracy?: number;
   [unknownChannel: string]: unknown;
 }
 export interface UsisPacket {
@@ -108,6 +110,7 @@ function checkChannels(ch: Obj, errors: string[]): void {
     }
   }
   if (heartRate !== undefined && (!isNum(heartRate) || heartRate < 0)) errors.push('ch.heartRate: expected number >= 0');
+  if (ch.accuracy !== undefined && (!isNum(ch.accuracy) || ch.accuracy < 0)) errors.push('ch.accuracy: expected number >= 0');
   if (pencil !== undefined) {
     if (!isObj(pencil)) errors.push('ch.pencil: expected object');
     else {

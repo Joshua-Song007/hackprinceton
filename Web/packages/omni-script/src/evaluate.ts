@@ -29,6 +29,12 @@ export interface HandlerCall {
   args: unknown[];
   /** Sets `ctx.intensity` before the call (Swift sets it on heart-rate events). */
   intensity?: number;
+  /** `ctx.player.id`: this client's id on the game server (from the `_welcome` frame), null before it arrives. */
+  playerId?: string | null;
+  /** `ctx.position`: this player's own position, only when the scene grants the location permission; else null. */
+  position?: readonly [number, number, number] | null;
+  /** `ctx.positionAccuracy`: meters (GPS-style horizontal accuracy), null when unknown or without the location permission. */
+  positionAccuracy?: number | null;
 }
 
 export interface CallResult {
@@ -57,7 +63,7 @@ export function scriptLine(e: unknown, prelude: string): number | undefined {
 
 // shortcut: shadowing these names is not a security boundary (sloppy-mode `this` still reaches the worker global);
 // the Worker itself is: no DOM, no page storage, no tokens. Upgrade to a realm/ShadowRealm when one is available.
-const SHADOWED = [
+export const SHADOWED = [
   'fetch', 'XMLHttpRequest', 'WebSocket', 'EventSource', 'importScripts', 'postMessage', 'Worker', 'SharedWorker',
   'indexedDB', 'caches', 'self', 'globalThis', 'window', 'document', 'navigator', 'location', 'close', 'onmessage',
 ];
@@ -87,12 +93,15 @@ export class ScriptRuntime {
   private scripts = new Map<string, Loaded>();
   private selves = new Map<string, SelfObject>();
   private outputs: ScriptOutput[] = [];
-  private ctx: { intensity: number; remote: { fire(name: string, data?: unknown): void }; spawn(name: string): void; haptic(pattern: string, intensity: number): void };
+  private ctx: { intensity: number; player: { id: string | null }; position: number[] | null; positionAccuracy: number | null; remote: { fire(name: string, data?: unknown): void }; spawn(name: string): void; haptic(pattern: string, intensity: number): void };
 
   constructor(prelude: string) {
     this.prelude = prelude;
     this.ctx = {
       intensity: 0,
+      player: { id: null },
+      position: null,
+      positionAccuracy: null,
       remote: { fire: (name, data) => this.push({ kind: 'remote', name: String(name), data: data === undefined ? null : JSON.parse(JSON.stringify(data)) }) },
       spawn: (name) => this.push({ kind: 'spawn', name: String(name) }),
       haptic: (pattern, intensity) =>
@@ -138,6 +147,9 @@ export class ScriptRuntime {
     const self = this.selfFor(c.entity);
     self.position = [...c.entity.position];
     if (c.intensity !== undefined) this.ctx.intensity = c.intensity;
+    this.ctx.player = { id: c.playerId ?? null };
+    this.ctx.position = c.position ? [...c.position] : null;
+    this.ctx.positionAccuracy = c.position && c.positionAccuracy != null ? c.positionAccuracy : null;
     this.outputs = [];
     let error: string | undefined;
     try {
