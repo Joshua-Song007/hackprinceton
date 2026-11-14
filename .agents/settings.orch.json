@@ -58,7 +58,7 @@
     "Stop": [
       {
         "hooks": [
-          { "type": "command", "command": "\"$CLAUDE_PROJECT_DIR\"/.agents/scripts/stop-gate.sh" }
+          { "type": "command", "command": "\"$CLAUDE_PROJECT_DIR\"/.agents/scripts/stop-gate.sh", "timeout": 900 }
         ]
       }
     ]

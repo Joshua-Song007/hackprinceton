@@ -66,6 +66,7 @@ Applies to agents launched via `.agents/scripts/run.sh` (the laptop orchestrator
 
 ## Done means verified
 - On a Mac run `.agents/scripts/verify-swift.sh`; on any laptop run `.agents/scripts/verify-nonswift.sh` for non-Swift work; see it pass. Do not claim success without running it. On a Mac a stop-hook enforces this for the packages you changed and everything that depends on them; on Windows it checks only JSON and JS. After 5 blocks the hook lets you stop, so your report must state the real result.
+- `verify-swift.sh` can take several minutes in a cold worktree. Call it with the Bash tool's `timeout` set to 600000 (the 120000 default kills it midway, as happened on the first Mac run). If it still does not finish, say so in your report: never describe a push as verified without a green run.
 - If a check fails and you cannot fix it, say so with the failing output. Never report success on a red check.
 - Same failure three times: stop retrying, write what you tried in your report, and move to the next item (the orchestrator labels the issue `needs-human`).
 

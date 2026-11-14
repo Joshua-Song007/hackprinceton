@@ -9,7 +9,7 @@ For the laptop orchestrator (`run.sh --orch`, `claude-opus-5-5`). Read `.agents/
 
 | Laptop (`OMNI_LAPTOP`) | OS | Lane |
 |---|---|---|
-| `joshua-song007` | macOS (confirm) | Swift: OmniCore, OmniInput, OmniOutput, OmniRuntime, OmniScript (including `prelude.js`) |
+| `joshua-song007` | macOS (confirmed by the Mac validation run) | Swift: OmniCore, OmniInput, OmniOutput, OmniRuntime, OmniScript (including `prelude.js`) |
 | `mungbeanbeanie` | macOS (confirm) | Swift: OmniSim (including its `.usis.jsonl` presets), OmniBridge, OmniCompanion, OmniStudio |
 | `tienvu-lol` | Windows | Non-Swift A: `Games/Flagship/**` (scene and scripts), notes in `docs/agents/` |
 | `jacob-e-lee` | Windows (confirm) | Non-Swift B: `Recordings/**` only |
