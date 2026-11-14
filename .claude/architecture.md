@@ -236,6 +236,10 @@ Tools/                                              (plan decision: hardware pro
   AirPodsProbe/
     Package.swift  Info.plist  bundle.sh                                              [HW]
     Sources/AirPodsProbe/main.swift                                                   [HW]
+  PhoneProbe.swiftpm/                               (iOS app package; keep the .swiftpm suffix)
+    Package.swift  Sources/PhoneProbe/PhoneProbeApp.swift                             [HW]
+  PhoneProbeHost/
+    Package.swift  Sources/PhoneProbeHost/main.swift                                  [HW]
 
 Games/
   Flagship/                                         (name unscheduled)
