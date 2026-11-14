@@ -76,7 +76,7 @@ Goal: every package exists with its dependency boundary enforced, USIS v1 is def
 - [ ] `Apps/OmniStudio/OmniStudio.xcodeproj/project.pbxproj` — macOS app project linking the local packages (Xcode-generated).
 - [ ] `Apps/OmniStudio/OmniStudio/OmniStudioApp.swift` — SwiftUI app entry, single window.
 - [ ] `Apps/OmniStudio/OmniStudio/AppModel.swift` — composition root: builds `InputPipeline`, `SceneRunner` (plus `ScriptEngine` once it exists, 2.3) and the sim `InputSource` / `OutputSink` pair for Phase 2; runs the per-frame loop and drains `OutputQueue` into the active sink (name and placement are a plan decision; `ModeController` takes over source/sink selection in 3.5).
-- [ ] `Apps/OmniStudio/OmniStudio/Viewport/ViewportView.swift` — `RealityView` hosting the `SceneRunner` scene; shows the hard-coded-packet trigger firing; reads its scene from `AppModel`.
+- [ ] `Apps/OmniStudio/OmniStudio/Viewport/ViewportView.swift` — `RealityView` hosting the `SceneRunner` scene; shows the hard-coded-packet trigger firing; reads its scene from `AppModel`. (Once `SceneDescription.runMode` exists (2.1), `device` games preview at phone aspect ratio.)
 
 ---
 
@@ -90,7 +90,7 @@ Goal: a creator can exercise every mechanic on a Mac alone; the jitter buffer is
 - [ ] `Packages/OmniRuntime/Sources/OmniRuntime/Events/HeartRateIntensity.swift` — `d = clamp((HR − HR_rest)/(HR_max − HR_rest), 0, 1)` and `onHeartRate` emission.
 - [ ] `Packages/OmniRuntime/Sources/OmniRuntime/Events/RaycastHitDetector.swift` — `onRaycastHit` from phone aim or simulator gaze via RealityKit raycast.
 - [ ] `Packages/OmniRuntime/Sources/OmniRuntime/Systems/AudioListenerSystem.swift` — moves the RealityKit audio listener with head pose from `InputFrame`. (Head position = the head sample's `position` when present, else `SceneDescription.playerOrigin` — plan decision, overview.md is silent.)
-- [ ] `Packages/OmniRuntime/Sources/OmniRuntime/Scene/SceneDescription.swift` — Codable declarative scene (entities, transforms, components, script names) (scene file format is not specified in overview.md; proposed here, confirm before building on it). (Also carries `requiredTier: Int` (1…3, default 1; an Int so OmniRuntime stays off `CapabilityTier`) and `playerOrigin` — plan decisions, overview.md specifies neither.)
+- [ ] `Packages/OmniRuntime/Sources/OmniRuntime/Scene/SceneDescription.swift` — Codable declarative scene (entities, transforms, components, script names) (scene file format is not specified in overview.md; proposed here, confirm before building on it). (Also carries `requiredTier: Int` (1…3, default 1; an Int so OmniRuntime stays off `CapabilityTier`) and `playerOrigin` — plan decisions, overview.md specifies neither.) (Also carries `runMode`: `screen` | `device`, default `screen` (overview.md Module 7 Run Mode; the default is a plan decision), and lists client and server script names separately.)
 - [ ] `Packages/OmniRuntime/Sources/OmniRuntime/Scene/SceneLoader.swift` — builds RealityKit entities and components from a `SceneDescription`.
 - [ ] `Packages/OmniRuntime/Tests/OmniRuntimeTests/LookAtDetectorTests.swift` — threshold, dwell time, reset when gaze leaves.
 - [ ] `Packages/OmniRuntime/Tests/OmniRuntimeTests/HeartRateIntensityTests.swift` — clamping and normalization.
@@ -122,15 +122,19 @@ Goal: a creator can exercise every mechanic on a Mac alone; the jitter buffer is
 - [ ] `Packages/OmniSim/Tests/OmniSimTests/SimPipelineTests.swift` — virtual devices and `UsisPlayer` through `InputPipeline`: jitter-buffer interpolation at mixed rates, stale-freeze, calibration, and an `InputFrame` that carries no source (added after the plan.md audit; overview.md does not require it).
 
 ### 2.3 OmniScript — creator scripting API
-- [ ] `Packages/OmniScript/Sources/OmniScript/Resources/prelude.js` — defines `script({...})` and handles `export default` for JavaScriptCore (which has no ES module loader).
+- [ ] `Packages/OmniScript/Sources/OmniScript/Resources/prelude.js` — defines `script({...})` and handles `export default` for JavaScriptCore (which has no ES module loader). (Also defines `serverScript({...})`, overview.md Module 3.)
 - [ ] `Packages/OmniScript/Sources/OmniScript/SelfBridge.swift` — `JSExport` surface for `self` (audio, speed, entity state). (Also deletes `Module.swift`.)
-- [ ] `Packages/OmniScript/Sources/OmniScript/ContextBridge.swift` — `JSExport` surface for `ctx` (`spawn`, `intensity`, output commands); no file, network or raw USIS access.
-- [ ] `Packages/OmniScript/Sources/OmniScript/ScriptEngine.swift` — sandboxed `JSContext`; implements `EventDispatcher` to call `onLookAt`/`onGesture`/`onHeartRate`/`onRaycastHit` handlers. (Also calls `onTriggerEnter` / `onTriggerExit` handlers for the `triggerEntered` / `triggerExited` events added in 1.5.)
+- [ ] `Packages/OmniScript/Sources/OmniScript/ContextBridge.swift` — `JSExport` surface for `ctx` (`spawn`, `intensity`, output commands); no file, network or raw USIS access. (Also `ctx.remote.fire`, which sends through the `RemoteChannel`; the only network path a script has.)
+- [ ] `Packages/OmniScript/Sources/OmniScript/ScriptEngine.swift` — sandboxed `JSContext`; implements `EventDispatcher` to call `onLookAt`/`onGesture`/`onHeartRate`/`onRaycastHit` handlers. (Also calls `onTriggerEnter` / `onTriggerExit` handlers for the `triggerEntered` / `triggerExited` events added in 1.5.) (Also calls `onRemote` for remote events from the server, delivered at the start of the frame.)
 - [ ] `Packages/OmniScript/Sources/OmniScript/ScriptReloader.swift` — recompiles a script on source change without restarting the scene.
-- [ ] `Packages/OmniScript/Tests/OmniScriptTests/ScriptEngineTests.swift` — handler dispatch, sandbox isolation, error containment, hot reload. (Covers the trigger handlers too.)
+- [ ] `Packages/OmniScript/Sources/OmniScript/RemoteChannel.swift` — protocol carrying remote events between client scripts and server scripts (player id, event name, JSON data); implemented in memory by Studio's `LocalTestSession` and later by the player app's game-server connection, so scripts can't tell which.
+- [ ] `Packages/OmniScript/Sources/OmniScript/ServerScriptEngine.swift` — sandboxed `JSContext` running a game's server scripts: `onPlayerJoin` / `onPlayerLeave` / `onRemote`, `ctx.state`, `ctx.remote.fire` / `fireAll`; never sees input. Mirrors the backend's `script_host.rs` (same `serverScript` API).
+- [ ] `Packages/OmniScript/Tests/OmniScriptTests/ScriptEngineTests.swift` — handler dispatch, sandbox isolation, error containment, hot reload. (Covers the trigger handlers too.) (Also `onRemote` dispatch and `ctx.remote.fire`.)
+- [ ] `Packages/OmniScript/Tests/OmniScriptTests/ServerScriptEngineTests.swift` — join/leave, remote event in → `fireAll` out, sandbox isolation; uses the same server-script fixture as `Backend/tests/script_host.rs`.
 
 ### 2.4 OmniStudio — simulator UI
-- [ ] `Apps/OmniStudio/OmniStudio/Sim/SimulatorPanelView.swift` — device slot picker, gizmos/sliders, heart-rate slider, "spike" button, preset buttons, record/replay controls.
+- [ ] `Apps/OmniStudio/OmniStudio/Sim/SimulatorPanelView.swift` — device slot picker, gizmos/sliders, heart-rate slider, "spike" button, preset buttons, record/replay controls. (Also the simulated player count and which player the panel and viewport follow, overview.md Module 4 Multiple players.)
+- [ ] `Apps/OmniStudio/OmniStudio/Test/LocalTestSession.swift` — local multiplayer test (overview.md Module 7): one `ServerScriptEngine` plus N simulated players, each with its own `InputPipeline`, `SceneRunner` and client `ScriptEngine`, joined by an in-memory `RemoteChannel`; a game with no server scripts runs as a single player with no server. (Viewport shows one selected player — plan decision.)
 - [ ] `Apps/OmniStudio/OmniStudio/Debug/DebugOverlayView.swift` — live raw USIS JSON per device: rate, latency, stale flags, source, schema errors.
 - [ ] `Apps/OmniStudio/OmniStudio/Debug/CapabilityWarningView.swift` — warns when connected or simulated devices cannot satisfy the game's declared capability tier (`SceneDescription.requiredTier`, mapped to `CapabilityTier`).
 
@@ -178,7 +182,7 @@ Goal: real devices stream USIS into the same pipeline; Sim ↔ Live is a one-cli
 
 ## Phase 4: Flagship Game
 
-Goal: a game playable by a stranger in under 60 s using at least two input types, built only through the public runtime and script API. Name and design are unscheduled (`<Flagship>` placeholder).
+Goal: a game playable by a stranger in under 60 s using at least two input types, built only through the public runtime and script API. Name and design are unscheduled (`<Flagship>` placeholder). Also: creators sign in and publish from Studio to the Rust backend (4.1, 4.2).
 
 - [ ] `Games/Flagship/scene.json` — `SceneDescription` for the game world. (Sets `requiredTier`.)
 - [ ] `Games/Flagship/scripts/enemy.js` — enemy behavior: `onLookAt` audio lock-on, `onHeartRate` aggression scaling.
@@ -188,6 +192,26 @@ Goal: a game playable by a stranger in under 60 s using at least two input types
 - [ ] `Apps/OmniStudio/OmniStudio/Inspector/InspectorView.swift` — entity inspector for components and script assignment.
 
 Not file-bound: sound design, visuals and feedback polish (no gray boxes); playtest with someone who has never seen it.
+
+### 4.1 Accounts & publishing — Studio side (overview.md Modules 7 and 11)
+- [ ] `Packages/OmniCloud/Package.swift` — OmniCloud manifest, no dependencies; only OmniStudio may depend on it. (Also add it to `Omni.xcworkspace` and link it from the OmniStudio project.)
+- [ ] `Packages/OmniCloud/Sources/OmniCloud/CloudClient.swift` — `URLSession` client for the backend: sign-in, publish a game version (scene, client and server scripts, assets, metadata incl. run mode), list and fetch the account's games. (Sign-in method not decided; Sign in with Apple preferred.)
+- [ ] `Packages/OmniCloud/Tests/OmniCloudTests/CloudClientTests.swift` — request encoding and response decoding against a stubbed `URLProtocol`; auth failure surfaces as an error, not a crash.
+- [ ] `Apps/OmniStudio/OmniStudio/Account/SignInView.swift` — sign-in and signed-in account state.
+- [ ] `Apps/OmniStudio/OmniStudio/Publish/PublishView.swift` — packs the open game and publishes it through `CloudClient`; shows the published version or the error.
+
+### 4.2 Backend — Rust (overview.md Module 11)
+(Rust, so Windows laptops can build it; Rust crates are tracked in `Backend/Cargo.lock`, not `branchDep.md`, which tracks Swift packages only.)
+- [ ] `Backend/Cargo.toml` — crate manifest: axum, tokio, sqlx (Postgres), serde, and the JS engine (deno_core or rquickjs, not decided).
+- [ ] `Backend/migrations/0001_init.sql` — `accounts`, `games` (owned by an account), `game_versions` (scene, scripts, assets, metadata). (Game files stored in TigerData for now; object storage not decided.)
+- [ ] `Backend/src/main.rs` — starts the HTTP API and the WebSocket game server; reads the TigerData URL from the environment.
+- [ ] `Backend/src/db.rs` — TigerData connection pool and queries.
+- [ ] `Backend/src/api/accounts.rs` — sign-in and session tokens. (Sign-in method not decided.)
+- [ ] `Backend/src/api/games.rs` — publish a version, list games, fetch a version; only the owner may publish.
+- [ ] `Backend/src/game_server/session.rs` — one WebSocket session per live game: players join and leave, remote events go into the script host and its `fire` / `fireAll` go out. Lobbies and matchmaking are game code.
+- [ ] `Backend/src/game_server/script_host.rs` — embedded JS engine running a game's server scripts with the same `serverScript` API as `ServerScriptEngine`.
+- [ ] `Backend/tests/api.rs` — publish → fetch round-trip; non-owner publish rejected.
+- [ ] `Backend/tests/script_host.rs` — same server-script fixture as `ServerScriptEngineTests.swift`, same results.
 
 ---
 
@@ -226,4 +250,4 @@ Throwaway probes that confirm what each real device delivers before its Phase 3 
 
 ## Phase 7: After the Hackathon (unscheduled — no checklist)
 
-Open, not scheduled: Lua scripting backend; third-party Bluetooth adapters (Joy-Cons, haptic gloves, ESP32 bands) via `OmniAdapters`; iPad / Pencil and Vision Pro input; player apps on iOS / visionOS; relay server for remote collaboration; multiplayer gameplay; publishing games to the cloud game host (overview.md Module 11: published games are hosted in a cloud database, like Roblox). The backend, package boundary, accounts, version history and moderation are undecided, so no files are planned yet; when scheduled it gets its own checklist section.
+Open, not scheduled: Lua scripting backend; third-party Bluetooth adapters (Joy-Cons, haptic gloves, ESP32 bands) via `OmniAdapters`; iPad / Pencil and Vision Pro input; player apps on iOS / visionOS (they connect players to the game server, 4.2, through a `RemoteChannel`); relay server for remote collaboration; automatic state replication; permissions, version history and moderation for hosted games.
