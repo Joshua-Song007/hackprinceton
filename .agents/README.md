@@ -18,6 +18,7 @@ Instructions and tooling for autonomous agents. `.claude/` is human-only: agents
 - `scripts/loop.sh` — per-laptop overnight loop (`OMNI_ROLE=orch|integrator`): agent cycle, backoff, STOP check, build-to-maintain phase switch for the integrator, credit-exhaustion detection (OUT / BACK on the `Loop capacity` issue), failure issue + local notification.
 - `scripts/setup.sh <laptop> [--check]` — installs and checks the tools the loop needs (Homebrew on macOS, winget on Windows); lists what only a human can do.
 - `scripts/verify-nonswift.sh` — JSON / JSONL validity and JS syntax; runs on macOS and Windows (the Windows lanes' check, also run in CI).
+- `scripts/selftest.sh [--keep]` — self-test of the agent tooling: `bash -n` on every script, `shellcheck -S error` when installed, `--help` of each tooling script, smoke runs of `prs.sh` / `worktrees.sh` / `health.sh` in a throwaway git repo with a stub `gh`, then `check-docs.sh`. Touches nothing outside a temp directory.
 - `scripts/verify-backend.sh` — Rust backend (`Backend/`): `cargo build` + `cargo test`; any OS; passes while `Backend/Cargo.toml` does not exist. Database tests skip without `DATABASE_URL`.
 - `scripts/verify-swift.sh` — the checks (`swift build` + `swift test` per package). Same script runs in CI, the stop-hook, and by hand.
 - `scripts/stop-gate.sh` — stop-hook: agent can't finish while checks fail for the packages it changed and their dependents.
