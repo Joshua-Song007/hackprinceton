@@ -29,6 +29,9 @@
       location = "group:Packages/OmniAdapters">
    </FileRef>
    <FileRef
+      location = "group:Packages/OmniCloud">
+   </FileRef>
+   <FileRef
       location = "group:Apps/OmniStudio/OmniStudio.xcodeproj">
    </FileRef>
    <FileRef
