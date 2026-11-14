@@ -31,8 +31,9 @@ prot=$(grep -E '^(\.claude|\.agents|\.github)/' <<<"$files" || true)
 [ -n "$prot" ] && out "  ✗ touches protected paths: $(tr '\n' ' ' <<<"$prot")" || out "  ✓ no protected paths touched"
 npk=$(grep -c . <<<"$pkgs" || true)
 [ "$npk" -le 1 ] && out "  ✓ packages touched: ${pkgs:-none}" || out "  ✗ touches $npk packages: $(tr '\n' ' ' <<<"$pkgs")"
-extra=$(grep -v -E '^(Packages|Schema|Games|Apps|Recordings|docs/agents)/' <<<"$files" || true)
-[ -n "$extra" ] && out "  ✗ files outside Packages/, Schema/, Games/, Apps/, Recordings/, docs/agents/: $(tr '\n' ' ' <<<"$extra")"
+extra=$(grep -v -E '^(Packages|Schema|Games|Apps|Recordings|Backend|docs/agents)/' <<<"$files" || true)
+[ -n "$extra" ] && out "  ✗ files outside Packages/, Schema/, Games/, Apps/, Recordings/, Backend/, docs/agents/: $(tr '\n' ' ' <<<"$extra")"
+grep -q '^Backend/target/' <<<"$files" && out "  ✗ Rust build output (Backend/target/) committed"
 
 section "Dependencies vs architecture.md graph"
 read -r -d '' PYDEPS <<'PY'

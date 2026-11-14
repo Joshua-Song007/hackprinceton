@@ -9,3 +9,5 @@ Tools/PhoneProbeHost/*.jsonl
 Tools/PhoneProbeHost/*.log
 Tools/PhoneProbeHost/*.cues.json
 Packages/OmniCore/.build
+Backend/target/
+.env

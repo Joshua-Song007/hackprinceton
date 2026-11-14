@@ -48,6 +48,15 @@ echo "[tools]"
 need gh gh GitHub.cli
 need jq jq jqlang.jq
 need node node OpenJS.NodeJS.LTS
+for d in "$HOME/.cargo/bin"; do [ -d "$d" ] && PATH="$d:$PATH"; done   # rustup's default location, before a new shell picks it up
+need cargo rust Rustlang.Rustup
+if [ "$plat" = win ]; then   # MSVC linker for Rust; detected with vswhere
+  vsw="/c/Program Files (x86)/Microsoft Visual Studio/Installer/vswhere.exe"
+  msvc() { [ -x "$vsw" ] && [ -n "$("$vsw" -products '*' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath 2>/dev/null)" ]; }
+  if msvc; then ok "MSVC C++ build tools"
+  elif [ "$mode" = --check ]; then bad "MSVC C++ build tools (rerun setup without --check)"
+  else echo "  installing MSVC C++ build tools (large; Windows may ask for admin approval) ..."; winget.exe install --id Microsoft.VisualStudio.2022.BuildTools -e --silent --accept-package-agreements --accept-source-agreements --override "--quiet --wait --norestart --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended" >/dev/null 2>&1; msvc && ok "MSVC C++ build tools (installed)" || bad "MSVC C++ build tools (approve the installer prompt, or install 'Desktop development with C++' from Visual Studio Build Tools, then rerun)"; fi
+fi
 pyok && ok "python (json)" || { [ "$mode" = --check ] && bad python || { if [ "$plat" = mac ]; then brew install python >/dev/null 2>&1; else winget.exe install --id Python.Python.3.12 -e --silent --accept-package-agreements --accept-source-agreements >/dev/null 2>&1; fi; pyok && ok "python (installed)" || bad "python (installed but not on PATH yet, or Windows Store stub: open a new shell and rerun)"; }; }
 gv=$(git --version | grep -oE '[0-9]+\.[0-9]+' | head -1); [ "$(printf '%s\n2.31\n' "$gv" | sort -V | head -1)" = "2.31" ] && ok "git $gv" || bad "git 2.31+"
 if have claude; then ok "claude $(claude --version 2>/dev/null | head -1)"

@@ -11,3 +11,8 @@ jobs:
       - run: bash .agents/scripts/verify-swift.sh
       - run: bash .agents/scripts/verify-nonswift.sh
       - run: bash .agents/scripts/check-docs.sh
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash .agents/scripts/verify-backend.sh

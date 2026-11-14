@@ -22,12 +22,13 @@ The human's prompt to follow this file is the explicit request for the git comma
 **Shortcut:** `.agents/scripts/start.sh <laptop>` does steps 3, 4 and 5 below in one go (setup, checks, start in tmux under `caffeinate -i` on a Mac, or in its own Git Bash window with a keep-awake helper on Windows). Add `--integrator` to start the tooling integrator loop afterwards (`INTEGRATOR.md`). The **HUMAN** items still need a person.
 
 ## 3. Install and log in
-1. `.agents/scripts/setup.sh <laptop>`: installs whatever is missing (Homebrew, tmux, gh, jq, node, python on Mac; gh, jq, node, python through winget on Windows).
+1. `.agents/scripts/setup.sh <laptop>`: installs whatever is missing (Homebrew, tmux, gh, jq, node, python, Rust on Mac; gh, jq, node, python, Rust and the MSVC C++ build tools through winget on Windows).
 2. **HUMAN** items that setup reports:
    - `gh` login: in this session's prompt, type `! gh auth login -h github.com` (HTTPS, repo scope). A fine-grained token limited to this repo is safer: orchestrators push and merge with it.
    - `claude` login, if setup says it is not logged in: start `claude` once and sign in. `setup.sh` and `loop.sh` both check this with a one-cent Haiku call.
    - Mac only: Xcode 16+ from the App Store, and the `xcode-select --install` dialog.
    - Windows only: set sleep to Never while plugged in.
+   - Windows only: approve the admin prompt when setup installs the MSVC C++ build tools (Rust needs them), then open a new Git Bash so `cargo` is on PATH.
    - Mac only: keep the laptop on power with the lid open. `caffeinate -i` stops idle sleep, not lid sleep.
 3. Run `.agents/scripts/setup.sh <laptop> --check` again until it prints `READY`.
 
@@ -35,7 +36,7 @@ The human's prompt to follow this file is the explicit request for the git comma
 Each command must pass:
 1. `gh repo view --json viewerPermission --jq .viewerPermission` prints `ADMIN`, `MAINTAIN` or `WRITE`.
 2. `.agents/scripts/check-docs.sh` prints `check-docs: OK`.
-3. `.agents/scripts/verify-nonswift.sh`.
+3. `.agents/scripts/verify-nonswift.sh`, then `.agents/scripts/verify-backend.sh` (passes at once while the backend does not exist).
 4. Mac only: `.agents/scripts/verify-swift.sh` (builds and tests every package; takes minutes).
 5. `git fetch origin`, then `git show origin/main:STOP`. This must fail with "does not exist". Do the same with `STOP-<laptop>`. If either file exists, stop and report: only Tien removes it.
 
