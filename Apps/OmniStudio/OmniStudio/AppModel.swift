@@ -34,6 +34,8 @@ final class AppModel {
     let sink = RecordingOutputSink()
     /// Chooses the active source/sink pair (Sim / Live).
     let modeController: ModeController
+    /// Offline fallback replay, built on `modeController`. [provisional: needs-tien-review] wiring is not a plan.md item.
+    let demoMode: DemoMode
 
     private(set) var headInsideTrigger = false
     private(set) var framesRun = 0
@@ -54,6 +56,7 @@ final class AppModel {
         )
         headDevice.targetPosition = Vector3(-2, 0, 0)
         modeController = ModeController(bus: pipeline, simSources: [headDevice], simSink: sink)
+        demoMode = DemoMode(modeController: modeController)
         buildScene()
     }
 
