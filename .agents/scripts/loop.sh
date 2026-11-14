@@ -8,6 +8,12 @@ laptop=${OMNI_LAPTOP:?set OMNI_LAPTOP}
 logs="$(dirname "$PWD")/$(basename "$PWD").worktrees/logs"; flag="$logs/.loop-failing-$laptop"
 base=${LOOP_DELAY:-300}; fails=0; delay=$base
 notify() { echo "NOTIFY: $1"; osascript -e "display notification \"$1\" with title \"Omni loop $laptop\"" 2>/dev/null || true; }
+fix() { notify "preflight failed: $1"; exit 1; }   # an unattended loop with broken permissions would only fail all night
+command -v jq >/dev/null 2>&1 || fix "jq missing (run .agents/scripts/setup.sh $laptop)"
+command -v claude >/dev/null 2>&1 || fix "claude CLI missing (run .agents/scripts/setup.sh $laptop)"
+gh auth status >/dev/null 2>&1 || fix "gh not logged in: run  gh auth login  (repo scope)"
+case "$(gh repo view --json viewerPermission --jq .viewerPermission 2>/dev/null)" in ADMIN|MAINTAIN|WRITE) ;; *) fix "this gh account has no write access to the repo";; esac
+jq -e . .agents/settings.orch.json >/dev/null 2>&1 || fix ".agents/settings.orch.json is not valid JSON"
 while true; do
   git fetch -q origin || { sleep 60; continue; }
   if git cat-file -e origin/main:STOP 2>/dev/null || git cat-file -e "origin/main:STOP-$laptop" 2>/dev/null; then notify "STOP found; loop ended"; exit 0; fi

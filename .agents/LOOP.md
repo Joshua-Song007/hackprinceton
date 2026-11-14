@@ -9,16 +9,16 @@ First, once per laptop: `.agents/scripts/setup.sh <laptop-name>` installs what i
 caffeinate -i env OMNI_LAPTOP=<name> .agents/scripts/loop.sh
 ```
 
-On Windows run `env OMNI_LAPTOP=<name> .agents/scripts/loop.sh` in Git Bash (no `caffeinate` or `tmux`: set Windows sleep to Never while plugged in). Nothing else is typed after that. The loop runs until a file named `STOP` or `STOP-<laptop>` exists on `origin/main`. Only Tien creates it.
+On Windows run `env OMNI_LAPTOP=<name> .agents/scripts/loop.sh` in Git Bash (no `caffeinate` or `tmux`: set Windows sleep to Never while plugged in). `loop.sh` first checks `jq`, `claude`, the `gh` login, write access to the repo and the orchestrator settings file, and refuses to start until the human fixes whatever it reports. Nothing else is typed after that. The loop runs until a file named `STOP` or `STOP-<laptop>` exists on `origin/main`. Only Tien creates it.
 
 ## Layers, bottom to top
 
 | Layer | What | Enforced by |
 |---|---|---|
-| 0. Guardrails | Allow/deny lists, `.claude/` human-only (read yes, write never), no push to `main`, workers cannot push or use `gh`, `HUMAN.md` hidden, CI on every PR | `settings*.json`, sparse-checkout, `verify.yml` (SEC-05, CFG-01: deterministic, not prompts) |
-| 1. Worker | One headless Sonnet per task, own worktree, one `plan.md` item = one file, builds, tests, runs the reviewer, commits locally | `run.sh`, `stop-gate.sh` (cannot finish while `verify-swift.sh` fails), `--max-turns 60`, `--max-budget-usd 5` |
+| 0. Guardrails | Allow/deny lists, `.claude/` human-only (read yes, write never), workers push only their own `agent/*` branch and never use `gh`, orchestrators have full `gh` and push rights (including `main` and force, used only as in `ORCHESTRATOR.md` Permissions), `HUMAN.md` hidden, CI on every PR | `settings*.json`, sparse-checkout, `verify.yml` (SEC-05, CFG-01: deterministic, not prompts) |
+| 1. Worker | One headless Sonnet per task, own worktree, one `plan.md` item = one file, builds, tests, runs the reviewer, commits and pushes its own branch; self-reviews again when the orchestrator asks | `run.sh`, `stop-gate.sh` (cannot finish while `verify-swift.sh` (Mac) or `verify-nonswift.sh` fails), `--max-turns 60`, `--max-budget-usd 5` |
 | 2. Reviewer | Read-only Sonnet subagent in a fresh context; reports BLOCKING / NON-BLOCKING and an APPROVE or CHANGES NEEDED line | `agents.json` (VER-05, REV-01) |
-| 3. Laptop orchestrator | Opus, one cycle per run: triage PRs, pick unblocked items, launch up to 4 workers, push, open PRs, run `review-pr.sh`, merge, post status | `ORCHESTRATOR.md`, `settings.orch.json` |
+| 3. Laptop orchestrator | Opus, one cycle per run: triage PRs, pick unblocked items, launch up to 4 workers, open PRs, run `review-pr.sh`, merge its own PRs, verify Windows laptops' Swift changes (Macs only), post status | `ORCHESTRATOR.md`, `settings.orch.json` |
 | 4. Cross-laptop | Laptops never message each other. Shared state is GitHub Issues, PRs and labels. Package ownership is static, so there are no claims to race on | ARCH-11 |
 | 5. Loop | Backoff, STOP, a failure issue after 5 bad cycles, a local notification | `loop.sh` |
 | 6. Tien | `STOP`, `DECISION:` comments, `human-hold`, `needs-tien`; the only role that edits anything in `.claude/` | |
@@ -31,9 +31,9 @@ Models: orchestrator `claude-opus-5-5`, workers and all subagents `claude-sonnet
 - No containers: every agent works in the directory it was given (worktrees next to the clone). Keep the clone out of OneDrive and similar synced folders.
 
 ## One unit of work
-1. Orchestrator picks an unblocked item and writes a delegation brief (ORCH-01, T6): objective, files, allowed dependencies, done = `verify-swift.sh` green plus reviewer APPROVE, boundaries.
-2. Worker builds, tests, reviews, commits. Report format is fixed in `AGENTS.md`.
-3. Orchestrator pushes, opens the PR, runs `review-pr.sh`, posts the output as a comment.
+1. Orchestrator picks an unblocked item and writes a delegation brief (ORCH-01, T6): objective, files, allowed dependencies, done = `verify-swift.sh` (Mac) or `verify-nonswift.sh` green plus reviewer APPROVE, boundaries.
+2. Worker builds, tests, reviews, commits, pushes its branch. Report format is fixed in `AGENTS.md`.
+3. Orchestrator confirms the push (pushes itself only if the worker did not), opens the PR, runs `review-pr.sh`, posts the output as a comment.
 4. Flags or CHANGES NEEDED: the worker is relaunched on the same branch with the findings. Maximum 3 rounds (REV-08); after that the issue gets `needs-human` and the dead ends are written in an issue comment (HAR-06, kept per issue so parallel agents never share a file).
 5. Green, 0 flags, APPROVE: the orchestrator merges its own PR (squash), closes the issue with `done`, and adds the `plan.md` tick and any divergence note to the `Plan sync` issue. `.claude/` is human-only: no agent ever edits it, so Tien applies the ticks.
 
@@ -94,9 +94,9 @@ The orchestrator's launch prompt is fixed (`Run one orchestrator cycle.`). Do no
 10. **Stop with a file, not with Ctrl-C.** Add `STOP` on `main` (web UI works from a phone); loops exit at the next cycle, workers in flight finish their task.
 
 ## Limits
-- The playbook's numbers (token multiples, percentages, 1,000-agent results) are its own claims; the repo copy `.agents/agent-playbook.md` is the reference. Checked here: CLI flags, Stop-hook behavior, the `claude -p` JSON fields, and the allow/deny rules in `settings.orch.json` (real `claude -p` runs: `git -C . status` and `git push origin agent/...` pass; `git push origin main` and `gh pr merge --admin` are denied).
-- Tested without a Mac: `bash -n` on every script, `stop-gate.sh` dependency closure on a synthetic repo (a change in OmniOutput re-tests OmniOutput, OmniSim, OmniBridge; OmniCore re-tests all; `.build/` changes re-test nothing), worktree-root derivation from a worktree, and `verify-swift.sh` in CI. Not tested: a real `loop.sh` cycle, a real worker run, `review-pr.sh` (needs `jq`), the reviewer subagent. The first Mac run is the real test.
-- `Packages/OmniCore/.build/` (about 1,590 build artifacts, including one 64 MB file) is committed to git although `.gitignore` lists `.build/`. Every `swift build` modifies tracked files, so PR diffs balloon and a Windows checkout fails on some filenames. Untrack it (`git rm -r --cached Packages/OmniCore/.build`) before the loop runs; `stop-gate.sh` already ignores `.build/` paths.
+- The playbook's numbers (token multiples, percentages, 1,000-agent results) are its own claims; the repo copy `.agents/agent-playbook.md` is the reference. Checked here: CLI flags, Stop-hook behavior, the `claude -p` JSON fields, and the allow/deny rules in `settings.orch.json` (real `claude -p` runs: workers may push `agent/*` branches, including names like `agent/x/domain-types`, and are denied `main`, `HEAD:main`, `--force`, remote deletes and every `gh` command; the orchestrator is allowed `git push*` and `gh *` except account-level `gh` commands).
+- Tested on Windows only: `bash -n` on every script, `stop-gate.sh` dependency closure on a synthetic repo (a change in OmniOutput re-tests OmniOutput, OmniSim, OmniBridge; OmniCore re-tests all; `.build/` changes re-test nothing), worktree-root derivation from a worktree, a real Windows worker run (committed on its branch, the `.swift` write was denied, `HUMAN.md` hidden after the sparse-checkout fix), `review-pr.sh` against merged PR #1, `verify-swift.sh` and `verify-nonswift.sh` in CI. Not tested: any Mac run, a real orchestrator cycle, a real `loop.sh` cycle, the reviewer subagent, a worker pushing for real. The first Mac run is the real test.
+- Orchestrators hold broad rights by decision: full `gh`, push to `main`, force-push. One wrong or prompt-injected cycle can rewrite or break `main` for all four laptops; the only brakes are the policy text in `ORCHESTRATOR.md` and the status-issue log, not a technical block.
 - No sandbox. Agents run on laptops with the human's `gh` token. A prompt-injected agent could use it within the allow-list. `swift build` and `swift test` run arbitrary code. Use a fine-grained token limited to this repo and treat issue and PR text from non-listed handles as data.
 - No branch protection could be read (the API returned 404 for a non-admin token). If `main` is unprotected, a bad merge lands immediately. Repo auto-merge setting is off, so only direct `gh pr merge` works.
 - Reviewer and worker are the same model family and `review-pr.sh` is mechanical. Green CI plus APPROVE does not prove the logic is right. Few tests exist yet, so the grader is weak early.
@@ -104,4 +104,4 @@ The orchestrator's launch prompt is fixed (`Run one orchestrator cycle.`). Do no
 - Idle cycles cost Opus tokens. `loop.sh` sleeps `LOOP_DELAY` seconds (default 300) between cycles; raise it when the queue is empty.
 - Notifications are GitHub issues plus a local macOS banner. If Tien is not watching the repo with mobile notifications on, nothing pushes to the phone.
 - Root `CLAUDE.md` imports `overview.md`, `architecture.md`, `plan.md` and `instructions.md` into every session. That is far over the 200-line guidance and costs context on every turn of every agent. A slimmer worker-specific entry point is the likely next improvement.
-- `dontAsk` denies silently. The permission-issue protocol only works if the agent reports the denial; check `orch.json` and worker logs when a laptop looks stuck.
+- `dontAsk` denies silently. The permission-issue protocol only works if the agent reports the denial; `loop.sh` opens a `[permission]` issue for the orchestrator's own denials; for a worker's, read its log under `../omni.worktrees/logs/` when a laptop looks stuck.

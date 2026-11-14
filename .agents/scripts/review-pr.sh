@@ -37,7 +37,7 @@ extra=$(grep -v -E '^(Packages|Schema|Games|Apps|Recordings|docs/agents)/' <<<"$
 section "Dependencies vs architecture.md graph"
 read -r -d '' PYDEPS <<'PY'
 import os, re, subprocess
-def sh(*a): return subprocess.run(a, capture_output=True, text=True).stdout
+def sh(*a): return subprocess.run(a, capture_output=True, text=True, encoding="utf-8", errors="replace").stdout   # Windows defaults to cp1252 and chokes on the box-drawing characters in architecture.md
 arch = sh("git", "show", "origin/main:.claude/architecture.md")
 sec = arch.split("## Package Dependency Graph", 1)[-1].split("### Forbidden Edges", 1)[0]
 allowed = {}
@@ -57,7 +57,7 @@ for p in os.environ["PKGS"].split():
     if ext: print("  ✗ " + p + ": third-party dependency (check branchDep.md and needs-tien): " + ", ".join(ext))
 PY
 py=python3; "$py" -c 1 >/dev/null 2>&1 || py=python   # on Windows python3 is often a Store stub that does nothing
-deps_out=$(PKGS="$pkgs" REF="$ref" "$py" -c "$PYDEPS")
+deps_out=$(PYTHONUTF8=1 PKGS="$pkgs" REF="$ref" "$py" -c "$PYDEPS")   # utf-8 stdout: the check marks crash cp1252 on Windows
 while IFS= read -r l; do [ -n "$l" ] && out "$l"; done <<<"$deps_out"
 
 section "Purity and hardware-blind rule"

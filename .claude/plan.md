@@ -26,7 +26,7 @@ Goal: every package exists with its dependency boundary enforced, USIS v1 is def
 - [x] `Packages/OmniCollab/Sources/OmniCollab/Module.swift` — empty module marker; removed in Phase 6.
 - [x] `Packages/OmniAdapters/Package.swift` — OmniAdapters manifest (stretch), depends on OmniCore and OmniInput.
 - [x] `Packages/OmniAdapters/Sources/OmniAdapters/Module.swift` — empty module marker; stays until Phase 7.
-- [ ] `.gitignore` — ignores `.build/`, `.swiftpm/`, `xcuserdata/` and `.DS_Store` so SwiftPM and Xcode output stays out of the repo (the file already existed but was empty, so only its contents are added; git itself is not touched).
+- [x] `.gitignore` — ignores `.build/`, `.swiftpm/`, `xcuserdata/` and `.DS_Store` so SwiftPM and Xcode output stays out of the repo (the file already existed but was empty, so only its contents are added; git itself is not touched).
 
 ### 1.2 OmniCore — math and USIS types (pure, no I/O)
 - [x] `Schema/usis.schema.json` — USIS v1 JSON Schema: envelope (`v`, `deviceId`, `kind`, `slot`, `source`, `t`, `seq`) and channels (orientation, position, accel, touch, gesture, heartRate, pencil). Source of truth for companions, sim and adapters.

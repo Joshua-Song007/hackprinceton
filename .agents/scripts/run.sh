@@ -2,7 +2,7 @@
 # Launch an autonomous agent in its own git worktree + branch agent/<laptop>/<slug>.
 # usage: OMNI_LAPTOP=<name> .agents/scripts/run.sh [-i] [--orch] <slug> "<task, e.g. implement plan.md items 1.3>"
 #   -i      interactive session instead of headless. AGENT_BUDGET=<usd> caps headless spend (default 5, orchestrator 10).
-#   --orch  orchestrator role: Opus, .agents/settings.orch.json (push + gh). Default role is worker: Sonnet, .agents/settings.json (commit only).
+#   --orch  orchestrator role: Opus, .agents/settings.orch.json (push + gh). Default role is worker: Sonnet, .agents/settings.json (commit + push its own agent/* branch).
 # Worktree must contain .agents/ (i.e. merged to origin/main).
 set -euo pipefail
 interactive=0; role=worker

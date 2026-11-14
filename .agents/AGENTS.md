@@ -3,9 +3,15 @@
 Applies to agents launched via `.agents/scripts/run.sh` (the laptop orchestrator and its workers) and their subagents. Where these rules conflict with `.claude/instructions.md`, these win (see its `## Autonomous Mode`). Manual sessions never read this file.
 
 ## Roles and models
-- Orchestrator (`run.sh --orch`): `claude-opus-5-5`. Follows `.agents/ORCHESTRATOR.md` on top of this file. The only role that pushes and uses `gh`.
-- Worker (`run.sh`) and every subagent (`reviewer`, `swift-package-worker`): `claude-sonnet-5-5`. Workers commit locally and never push.
+- Orchestrator (`run.sh --orch`): `claude-opus-5-5`. Follows `.agents/ORCHESTRATOR.md` on top of this file. The only role that uses `gh`, with full GitHub access (PRs, reviews, comments, issues, merges), and it may push any branch including `main` and force-push, locally from its own laptop (Tien's decision, see `ORCHESTRATOR.md` Permissions).
+- Worker (`run.sh`) and every subagent (`reviewer`, `swift-package-worker`): `claude-sonnet-5-5`. Workers commit and push their own `agent/<laptop>/<slug>` branch and nothing else; no `gh`.
 - Same for every teammate. Models are pinned in `run.sh` and `agents.json`, never taken from personal settings.
+
+## Permissions
+- Every orchestrator, on all four laptops, has the same rights from `.agents/settings.orch.json`: full `gh` (PRs, reviews, comments, issues, labels, API), any `git push` including `main` and force-push, merging, reviewing every laptop's PRs. They run locally on their own laptop. Rules for using them are in `.agents/ORCHESTRATOR.md` Permissions.
+- Workers get the narrower `.agents/settings.json`: own `agent/*` branch only, no `gh`.
+- The human starting an autonomous loop fixes permissions first: `gh auth login` (repo scope, write access to the repo), `.agents/scripts/setup.sh <laptop>` until READY, and any rule an agent reports as denied. `loop.sh` checks this at startup and refuses to loop until it passes.
+- A denied command is a permission gap for the human to fix, never something to work around. Open a `[permission] <command>` issue (the orchestrator) or report the exact command (a worker), then move on.
 
 ## Read first (read-only)
 - `.claude/` is human-only. Every agent, orchestrator included, may read it and none may create, edit, rename or delete anything in it (`overview.md`, `plan.md`, `architecture.md`, `instructions.md`, `planHistory/`, all of it). To propose a change, put it in your report or open a `needs-tien` issue.
@@ -33,8 +39,8 @@ Applies to agents launched via `.agents/scripts/run.sh` (the laptop orchestrator
 
 ## Git
 - You work in your own worktree on branch `agent/<laptop>/<slug>`. Commit there freely, in small commits.
-- Workers: never push, never use `gh`. Finish with your work committed in the worktree; the orchestrator pushes. If the branch is behind, `git fetch` then `git merge origin/main`.
-- Orchestrator: push only `agent/<laptop>/*` branches and open PRs with `gh pr create`. Never push to `main`. No force-push, rebase, reset, or checkout of other branches. Merge only your own PRs, under the conditions in `.agents/ORCHESTRATOR.md` step 2.
+- Workers: when `verify-swift.sh` (or `verify-nonswift.sh`) is green and the reviewer has approved, push your own branch yourself: `git push -u origin agent/<laptop>/<slug>`. Push again after every fix round. Never push any other branch, never push `main`, never force-push or delete remote branches, never use `gh` (the orchestrator opens and merges PRs from your pushed branch). If the branch is behind, `git fetch` then `git merge origin/main`.
+- Orchestrator: the normal flow is PRs from `agent/<laptop>/*` branches. Pushing to `main` and force-pushing are permitted but exceptional; the rules for them are in `.agents/ORCHESTRATOR.md` Permissions. Merge only your own PRs, under the conditions in step 2 there.
 - PR body: never put a line starting with `#` inside the `gh pr create --body "..."` command. The permission check denies it. Use bold labels (`**Completed**`) instead of Markdown headings. The body can still be multi-line.
 
 ## Platform: macOS vs Windows
@@ -45,18 +51,23 @@ Applies to agents launched via `.agents/scripts/run.sh` (the laptop orchestrator
 
 ## Tools and denied commands
 - Read, search and list files with the Read, Grep and Glob tools, not shell text tools (`cat`, `wc`, `head`, `find`). The shell allow-list is narrow on purpose.
+- One command per Bash call: no `&&`, `||`, `;` or `|`, because every part is checked on its own and one unlisted part denies the whole call. Write files with the Write tool, never `echo >` or `mkdir && ...`. A denied call does not mean all of Bash is denied: split it and retry the allowed parts.
 - A denied command is not a broken shell. Other allowed commands (`.agents/scripts/*`, `swift`, `git`) still work. Try another tool. If the task truly can't proceed, report the exact denied command in your final message and continue with whatever you can still do.
 - Run scripts by relative path from the repo root, exactly `.agents/scripts/verify-swift.sh`. The allow-list matches the relative form only: an absolute path or `cd ... && ...` is denied. Also denied: heredocs that write files (use Write/Edit), brace expansion. When you brief a subagent, tell it to use the relative form too.
 - Before assuming work is already done, check the checklist item's file contents against `plan.md` and run the verify script. Do not stop on the assumption.
 
 ## Subagents
+- Self-review on request: when the orchestrator's prompt asks for a review (or another round), run the `reviewer` on your branch again, fix every BLOCKING finding, push, and report the new verdict line. You may also run it on your own whenever you doubt your work.
 - `reviewer` (read-only): before you finish, run it on your branch. Fix every BLOCKING finding, run it again, and paste its final verdict line in your report. If you disagree with a finding, say why in the report instead of ignoring it.
 - `swift-package-worker`: delegate to it only for large multi-item tasks inside one package. For a single checklist item, do the work yourself. (The orchestrator delegates by launching workers with `run.sh`.)
 
 ## Done means verified
-- Run `.agents/scripts/verify-swift.sh` and see it pass. Do not claim success without running it. A stop-hook enforces this for the packages you changed and everything that depends on them.
+- On a Mac run `.agents/scripts/verify-swift.sh`; on any laptop run `.agents/scripts/verify-nonswift.sh` for non-Swift work; see it pass. Do not claim success without running it. A stop-hook enforces this for the packages you changed and everything that depends on them.
 - If a check fails and you cannot fix it, say so with the failing output. Never report success on a red check.
 - Same failure three times: stop retrying, write what you tried in your report, and move to the next item (the orchestrator labels the issue `needs-human`).
+
+## Notes you write stay fresh
+Last step before every push: re-read each `.md` you created or edited (your notes in `docs/agents/`), correct anything that is no longer true, delete stale or duplicated lines, and put the date on the note. A note that no longer matches the code is worse than no note. The reviewer checks this, and `.agents/scripts/check-docs.sh` runs in CI.
 
 ## Report (final message; the orchestrator pastes it into the PR)
 - `plan.md` items completed.
