@@ -129,6 +129,18 @@ struct LibraryAPITests {
         }
     }
 
+    @Test func sessionTokenIsReadableAfterSignIn() async throws {
+        let client = makeClient { req in req.url?.path == "/api/library" ? (401, Data()) : (200, Self.appleBody) }
+        #expect(await client.sessionToken == nil)
+        try await client.signInWithApple(identityToken: "jwt")
+        #expect(await client.sessionToken == "s1")
+        await client.signOut()
+        #expect(await client.sessionToken == nil)
+        try await client.signInWithApple(identityToken: "jwt")
+        await #expect(throws: CloudError.unauthorized) { try await client.listCatalog() }
+        #expect(await client.sessionToken == nil)
+    }
+
     // MARK: Catalog
 
     @Test func listCatalogRequiresSignIn() async {

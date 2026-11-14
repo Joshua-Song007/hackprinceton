@@ -220,7 +220,8 @@ public enum CloudError: Error, Sendable, Equatable {
 public actor CloudClient {
     private let baseURL: URL
     private let session: URLSession
-    private var sessionToken: String?
+    /// Readable so an app can persist the session (the player keeps it in the Keychain); restore it with `signIn(token:)`.
+    public private(set) var sessionToken: String?
     public private(set) var account: Account?
 
     public init(baseURL: URL, session: URLSession = .shared) {

@@ -290,7 +290,7 @@ Apps/
 
   OmniPlayer/                                       (Phase 9: iOS + macOS player app, library shell)
     OmniPlayer.xcodeproj/project.pbxproj            [P9]
-    OmniPlayer.entitlements                         [P9]
+    OmniPlayer.entitlements  Info.plist             [P9, Info.plist extra]
     OmniPlayer/
       OmniPlayerApp.swift  PlayerModel.swift                                          [P9]
       Account/     AppleSignInView.swift                                              [P9]
