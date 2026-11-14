@@ -76,3 +76,51 @@ OMNI_E2E_URL=http://localhost:8080 npm --prefix Web test   # includes the server
 - Live monitor (Windows): `powershell -ExecutionPolicy Bypass -File Tools\watch-workflow.ps1`. It reads pi-subagents run files in `%TEMP%`.
 - The pi orchestrator agent used here lives in user config, not in the repo: `~/.pi/agent/agents/orchestrator.md`. Its tools are `subagent` and `bg_wait`, and it may launch only `worker` or `reviewer`. Copy it if your laptop runs pi. Builtin `worker` agents cannot spawn subagents.
 - Mac laptops: run the Swift checks (`.agents/scripts/verify-swift.sh`) before touching `Packages/` or `Apps/`. Phase 8 changed no Swift code.
+
+## Checkpoint: branch, commits, PR
+
+- Branch `phase8/web-studio`, based on `main` at `7233555` (the STOP commit; the overnight loops are stopped). The working tree is clean.
+- Commits, one per lane:
+
+  | Commit | Scope |
+  |---|---|
+  | `3771eb8` | Backend 8.1 |
+  | `f2c19eb` | Web SDK 8.2 |
+  | `26fdcc0` | Deploy 8.5 and `demo.sh` |
+  | `8ce4876` | Tools: Jev hooks and monitor |
+  | `e029765` | Studio 8.3, Tauri 8.4 and the blank template |
+  | `d625192` | Plan, architecture and handoff |
+
+- PR: not opened yet. Its body is drafted on the tienvu-lol laptop at `.git/PR_PHASE8.md`; once the PR exists, the PR description is the report. Merge by squash, following the repo rule.
+- Before continuing on another laptop:
+
+  ```bash
+  git fetch origin && git switch phase8/web-studio
+  ```
+
+  Branch from it for new work, `agent/<laptop>/<slug>`, and open PRs against `phase8/web-studio` until it merges.
+
+## Run record (2026-11-14, UTC-5)
+
+The supervisor was Opus, in the manual session. The orchestrator was Opus (`863662d7`, custom pi agent). Every worker was Sonnet 5.5 and ran in its own directory.
+
+| Run | Item | Attempts | Jev gate |
+|---|---|---|---|
+| `8b695ab1` | 8.1 backend integration | 1 | 0.89 |
+| `1ba28ed8` | `memstore.rs` | 1 | 0.91 |
+| `d0ec60fa` | 8.2 Web SDK | 1 | 0.98 |
+| `c202bb17` | 8.5 Deploy, `demo.sh`, `download.html` | 1 | 0.87 |
+| `ecbd1a1e` | 8.3 Studio and `blank.ts` | 1 | 0.95 |
+| `6180e84a` | backend leading-comment fix | 1 | 0.89 |
+| `b38fa630` | `demo.sh` workaround removed | 1 | 0.89 |
+| `82d39c87` | `studio-release.yml` | 1 | YAML parses |
+| `c85b15cb` then `3172c48f` | 8.4 Tauri | 1, revived after a question | 0.70, overridden |
+| `ce50fe1a` | live UI verification | 1 | all steps pass |
+| `8c0c367f` | brand-kit and accessibility review | 1 | 27+ findings |
+| `a4bdd509` | Studio fix round 1 | 1 | 0.96 |
+
+- No item needed a second attempt.
+- Every in-run gate "failure" before the Git Bash fix was the WSL `bash` problem (exit 127). In each case the work itself was fine.
+- Lost or wasted runs:
+  - `c85eab6d`: an orchestrator launched as a builtin `worker`, which cannot spawn subagents. Replaced.
+  - One parallel launch failed because its cwd `Web/` did not exist yet.
