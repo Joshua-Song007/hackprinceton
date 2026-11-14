@@ -47,10 +47,10 @@ def bash_executable():
     if os.name == 'nt':
         executable = shutil.which('git')
         if executable:
-            install = Path(executable).resolve().parent.parent
-            for candidate in (install / 'bin/bash.exe', install / 'usr/bin/bash.exe'):
-                if candidate.is_file():
-                    return str(candidate)
+            for install in list(Path(executable).resolve().parents)[:4]:
+                for candidate in (install / 'bin/bash.exe', install / 'usr/bin/bash.exe'):
+                    if candidate.is_file():
+                        return str(candidate)
         raise RuntimeError('Git Bash not found; set OMNI_BASH to its bash.exe (not WSL bash)')
     return shutil.which('bash') or 'bash'
 

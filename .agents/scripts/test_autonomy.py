@@ -154,6 +154,17 @@ class Rules(unittest.TestCase):
             a.orchestration_cycle(store, 'offline/repo', 'alpha')
             self.assertEqual(reviews.call_count, 2)
 
+    @unittest.skipUnless(os.name == 'nt', 'Git Bash discovery is Windows-specific')
+    def test_git_bash_discovery_handles_nested_git_layout(self):
+        with tempfile.TemporaryDirectory() as d:
+            git = Path(d) / 'Git/ucrt64/bin/git.exe'
+            bash = Path(d) / 'Git/usr/bin/bash.exe'
+            for executable in (git, bash):
+                executable.parent.mkdir(parents=True, exist_ok=True)
+                executable.touch()
+            with patch.dict(os.environ, {'OMNI_BASH': ''}), patch.object(a.shutil, 'which', return_value=str(git)):
+                self.assertEqual(a.bash_executable(), str(bash))
+
     def test_hung_command_has_wall_time_limit(self):
         start = a.time.monotonic()
         with self.assertRaisesRegex(RuntimeError, 'wall-time'):
