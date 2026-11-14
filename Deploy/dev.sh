@@ -8,6 +8,10 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 export PATH="$HOME/.cargo/bin:$PATH"
 export OMNI_DEV_SIGNIN="${OMNI_DEV_SIGNIN:-1}"
 export PORT="${PORT:-8080}"
+# Marketplace on the dev box: seed Plugins/ at startup (in memory), and point the hosted-agent proxy at a
+# local runtime (`cd Plugins/langchain-deepagents && uv run python runtime/server.py`) for signed-in browsers.
+export OMNI_PLUGIN_SEED_DIR="${OMNI_PLUGIN_SEED_DIR:-$ROOT/Plugins}"
+export OMNI_AGENT_RUNTIME_URL="${OMNI_AGENT_RUNTIME_URL:-ws://127.0.0.1:9410/ws}"
 STUDIO_URL="http://localhost:5173" # Vite's default; the backend's default CORS list allows it
 
 command -v cargo >/dev/null || { echo "cargo not found: install Rust from https://rustup.rs" >&2; exit 1; }

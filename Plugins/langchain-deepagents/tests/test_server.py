@@ -177,3 +177,62 @@ def test_extra_origin_from_env_is_accepted(monkeypatch):
     assert asyncio.run(scenario("https://studio.example")) is None
     assert asyncio.run(scenario("http://localhost:5174")) is None
     assert "403" in str(asyncio.run(scenario("http://evil.example")))
+
+
+def test_sanitize_redacts_known_and_key_shaped_secrets():
+    msg = "AuthenticationError: bad key sk-ant-abcdefghijkl1234 and AIzaSyA1234567890abcdefghijk, mine=hunter2hunter2"
+    out = server.sanitize(msg, ["hunter2hunter2"])
+    assert "sk-ant" not in out and "AIza" not in out and "hunter2" not in out and out.count("[redacted]") == 3
+
+
+def test_slow_reader_does_not_hold_the_project_lock(tmp_path):
+    async def scenario():
+        slow = server.run_prompt({"text": "one"}, tmp_path, ScriptedModel(replies=[say("one")], name="one"))
+        await slow.__anext__()  # the first reader stops reading here and never resumes
+        fast = [e async for e in server.run_prompt({"text": "two"}, tmp_path, ScriptedModel(replies=[say("two")], name="two"))]
+        await slow.aclose()
+        return fast
+
+    fast = asyncio.run(asyncio.wait_for(scenario(), 10))
+    assert fast[-1]["type"] == "done"
+
+
+def test_hosted_mode_requires_the_secret_and_never_uses_env_keys(tmp_path, monkeypatch):
+    monkeypatch.setenv("OMNI_RUNTIME_SECRET", "s3cret")
+    monkeypatch.setenv("OMNI_PROJECTS_ROOT", str(tmp_path))
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-env-key-must-not-be-used")
+
+    async def scenario():
+        async with serve(server.handle_socket, "127.0.0.1", 0, process_request=server.handle_request) as srv:
+            port = srv.sockets[0].getsockname()[1]
+            url = f"ws://127.0.0.1:{port}/ws"
+            out = {}
+            for name, headers in (("none", {}), ("wrong", {"Authorization": "Bearer nope"})):
+                try:
+                    async with connect(url, additional_headers=headers):
+                        out[name] = "open"
+                except Exception as exc:  # noqa: BLE001
+                    out[name] = str(exc)
+            ok = {"Authorization": "Bearer s3cret", "X-Omni-Account": "acct-1", "X-Omni-Project": "p1"}
+            async with connect(url, additional_headers=ok) as ws:
+                await ws.send(json.dumps({"type": "prompt", "id": "p", "text": "hi"}))
+                out["nokey"] = json.loads(await ws.recv())
+            async with connect(url, additional_headers={**ok, "X-Omni-Project": "../x"}) as ws:
+                out["badid"] = json.loads(await ws.recv())
+            health = await asyncio.to_thread(urllib.request.urlopen, f"http://127.0.0.1:{port}/health")
+            out["health"] = json.load(health)["model"]
+            return out
+
+    out = asyncio.run(scenario())
+    assert "401" in out["none"] and "401" in out["wrong"]
+    assert out["nokey"] == {"type": "error", "id": "p", "message": server.NO_KEY_MESSAGE}
+    assert out["badid"]["type"] == "error"
+    assert out["health"] == "per-account"
+    assert (tmp_path / "acct-1" / "p1").is_dir()
+
+
+def test_hosted_model_uses_the_header_key_for_its_provider():
+    model, key = server.hosted_model({"X-Omni-Model-Provider": "openai", "X-Omni-Model-Key": "sk-header-key-123"})
+    assert key == "sk-header-key-123" and model.openai_api_key.get_secret_value() == "sk-header-key-123"
+    assert server.hosted_model({"X-Omni-Model-Provider": "nope", "X-Omni-Model-Key": "k"}) == (None, None)
+    assert server.hosted_model({}) == (None, None)

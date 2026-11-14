@@ -19,3 +19,16 @@ jsonwebtoken = { version = "12", default-features = false, features = ["rust_cry
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
 # OS random bytes for session tokens (accounts.rs new_token); already in Cargo.lock through other crates.
 getrandom = "0.3"
+# Marketplace (Phase 10): gzip tarball bundles, SHA-256 + Ed25519 signatures, S3 (SigV4) object storage,
+# AES-256-GCM for per-account model keys, and a WebSocket client for the hosted agent runtime proxy.
+# All but aes-gcm, tar and flate2 were already in Cargo.lock through other crates.
+tar = "0.4"
+flate2 = "1"
+sha2 = "0.10"
+hmac = "0.12"
+hex = "0.4"
+base64 = "0.22"
+ed25519-dalek = "3"
+aes-gcm = "0.10"
+tokio-tungstenite = "0.29"
+futures-util = "0.3"

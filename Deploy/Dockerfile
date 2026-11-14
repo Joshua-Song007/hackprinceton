@@ -24,6 +24,8 @@ COPY --from=studio /repo/Web/studio/dist /app/studio
 # /download is a directory in the Studio build, served by the backend's static fallback.
 COPY Deploy/download.html /app/studio/download/index.html
 COPY docs/brand-kit/project/tokens.css /app/studio/download/tokens.css
+# Plugin sources for the marketplace seed job: docker compose run --rm backend /app/omni-backend seed /app/Plugins
+COPY Plugins /app/Plugins
 ENV PORT=8080 OMNI_STUDIO_DIR=/app/studio
 EXPOSE 8080
 CMD ["/app/omni-backend"]

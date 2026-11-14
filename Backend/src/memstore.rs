@@ -10,16 +10,21 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use serde_json::Value;
-
-use crate::db::{catalog_tier, Account, CatalogRow, Game, GameVersion, NewGameVersion, Plugin, PluginSummary};
+use crate::db::{catalog_tier, Account, CatalogRow, Game, GameVersion, InstallRecord, NewGameVersion, PluginSummary, PluginVersion};
 
 #[derive(Default)]
 struct Inner {
     accounts: Vec<Account>,
     games: Vec<Game>,
     versions: Vec<GameVersion>,
-    plugins: Vec<Plugin>,
+    /// (plugin id, author account id; None = seed job).
+    plugins: Vec<(String, Option<String>)>,
+    /// In publish order (the SQL `seq`).
+    plugin_versions: Vec<PluginVersion>,
+    /// (plugin id, account id, version, installed).
+    plugin_installs: Vec<(String, String, String, bool)>,
+    /// account id -> (provider, sealed key).
+    model_keys: std::collections::HashMap<String, (String, String)>,
 }
 
 /// Cheap to clone: clones share the same data.
@@ -49,7 +54,7 @@ fn new_id() -> String {
 }
 
 /// Current UTC time as RFC3339 with microseconds, e.g. `2024-01-02T03:04:05.123456Z`.
-fn now_rfc3339() -> String {
+pub fn now_rfc3339() -> String {
     let d = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default();
     let (secs, micros) = (d.as_secs() as i64, d.subsec_micros());
     let (days, rem) = (secs.div_euclid(86_400), secs.rem_euclid(86_400));
@@ -163,45 +168,95 @@ impl MemStore {
             .cloned()
     }
 
-    /// Same rule as the SQL upsert: an existing plugin keeps its installs count.
-    pub fn upsert_plugin(&self, p: &Plugin) {
+    pub fn plugin_author(&self, id: &str) -> Option<Option<String>> {
+        self.lock().plugins.iter().find(|p| p.0 == id).map(|p| p.1.clone())
+    }
+
+    pub fn latest_plugin_version(&self, id: &str, approved_only: bool) -> Option<PluginVersion> {
+        let s = self.lock();
+        s.plugin_versions.iter().rev().find(|v| v.plugin_id == id && (!approved_only || v.status == "approved")).cloned()
+    }
+
+    pub fn find_plugin_version(&self, id: &str, version: &str) -> Option<PluginVersion> {
+        let s = self.lock();
+        s.plugin_versions.iter().find(|v| v.plugin_id == id && v.version == version).cloned()
+    }
+
+    pub fn insert_plugin_version(&self, author_id: Option<&str>, v: &PluginVersion) {
         let mut s = self.lock();
-        match s.plugins.iter_mut().find(|x| x.id == p.id) {
-            Some(x) => *x = Plugin { installs: x.installs, ..p.clone() },
-            None => s.plugins.push(p.clone()),
+        if !s.plugins.iter().any(|p| p.0 == v.plugin_id) {
+            s.plugins.push((v.plugin_id.clone(), author_id.map(String::from)));
+        }
+        s.plugin_versions.push(v.clone());
+    }
+
+    pub fn set_plugin_version_status(&self, id: &str, version: &str, status: &str) -> bool {
+        let mut s = self.lock();
+        match s.plugin_versions.iter_mut().find(|v| v.plugin_id == id && v.version == version) {
+            Some(v) => {
+                v.status = status.into();
+                true
+            }
+            None => false,
         }
     }
 
-    /// Ordered by id, like the SQL `ORDER BY id`.
+    fn installs_of_plugin(s: &Inner, id: &str) -> i64 {
+        s.plugin_installs.iter().filter(|i| i.0 == id && i.3).count() as i64
+    }
+
+    /// Ordered by id, like the SQL `ORDER BY plugin_id`.
     pub fn list_plugins(&self) -> Vec<PluginSummary> {
-        let mut out: Vec<PluginSummary> = self
-            .lock()
-            .plugins
-            .iter()
-            .map(|p| PluginSummary {
-                id: p.id.clone(),
-                name: p.name.clone(),
-                version: p.version.clone(),
-                author: p.author.clone(),
-                category: p.category.clone(),
-                description: p.description.clone(),
-                installs: p.installs,
+        let s = self.lock();
+        let mut ids: Vec<&String> = s.plugins.iter().map(|p| &p.0).collect();
+        ids.sort();
+        ids.into_iter()
+            .filter_map(|id| {
+                let v = s.plugin_versions.iter().rev().find(|v| &v.plugin_id == id && v.status == "approved")?;
+                Some(PluginSummary::from_manifest(id, &v.version, &v.manifest, Self::installs_of_plugin(&s, id)))
             })
+            .collect()
+    }
+
+    pub fn set_plugin_install(&self, id: &str, account_id: &str, version: Option<&str>) -> Option<i64> {
+        let mut s = self.lock();
+        if !s.plugins.iter().any(|p| p.0 == id) {
+            return None;
+        }
+        match s.plugin_installs.iter_mut().find(|i| i.0 == id && i.1 == account_id) {
+            Some(i) => {
+                if let Some(v) = version {
+                    i.2 = v.into();
+                }
+                i.3 = version.is_some();
+            }
+            None => s.plugin_installs.push((id.into(), account_id.into(), version.unwrap_or_default().into(), version.is_some())),
+        }
+        Some(Self::installs_of_plugin(&s, id))
+    }
+
+    pub fn plugin_installs_of(&self, account_id: &str) -> Vec<InstallRecord> {
+        let s = self.lock();
+        let mut out: Vec<InstallRecord> = s
+            .plugin_installs
+            .iter()
+            .filter(|i| i.1 == account_id)
+            .map(|i| InstallRecord { id: i.0.clone(), version: i.2.clone(), installed: i.3 })
             .collect();
         out.sort_by(|a, b| a.id.cmp(&b.id));
         out
     }
 
-    pub fn get_plugin_content(&self, id: &str) -> Option<(Value, Value)> {
-        let s = self.lock();
-        s.plugins.iter().find(|p| p.id == id).map(|p| (p.manifest.clone(), p.bundle.clone()))
+    pub fn set_model_key(&self, account_id: &str, provider: &str, ciphertext: &str) {
+        self.lock().model_keys.insert(account_id.into(), (provider.into(), ciphertext.into()));
     }
 
-    pub fn add_plugin_install(&self, id: &str) -> Option<i64> {
-        let mut s = self.lock();
-        let p = s.plugins.iter_mut().find(|p| p.id == id)?;
-        p.installs += 1;
-        Some(p.installs)
+    pub fn get_model_key(&self, account_id: &str) -> Option<(String, String)> {
+        self.lock().model_keys.get(account_id).cloned()
+    }
+
+    pub fn delete_model_key(&self, account_id: &str) {
+        self.lock().model_keys.remove(account_id);
     }
 
     /// Same result as the SQL in `db::list_catalog`: games with at least one version, newest-updated

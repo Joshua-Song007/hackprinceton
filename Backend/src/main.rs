@@ -27,6 +27,23 @@ async fn main() {
         }
     }
 
+    // `omni-backend seed <dir>`: the marketplace seed/publish job. Publishes every plugin dir under
+    // <dir> as approved, then exits (non-zero if any plugin failed). Safe to re-run.
+    let args: Vec<String> = std::env::args().collect();
+    if args.get(1).map(String::as_str) == Some("seed") {
+        let (Some(dir), Some(db)) = (args.get(2), db.as_ref()) else {
+            eprintln!("usage: omni-backend seed <plugins dir> (needs a database)");
+            std::process::exit(2);
+        };
+        if matches!(db, Db::Pg(_)) && matches!(omni_backend::blobs::blobs(), omni_backend::blobs::Blobs::Mem(_)) {
+            eprintln!("seed: DATABASE_URL is set but OMNI_S3_* is not: bundles would be lost when this job exits");
+            std::process::exit(2);
+        }
+        let (new, unchanged, failed) = omni_backend::api::marketplace::seed(db, std::path::Path::new(dir)).await;
+        eprintln!("seed: {new} published, {unchanged} unchanged, {failed} failed");
+        std::process::exit(if failed == 0 { 0 } else { 1 });
+    }
+
     let studio_dir = std::env::var("OMNI_STUDIO_DIR").ok().map(std::path::PathBuf::from);
     if let Some(dir) = &studio_dir {
         eprintln!("serving Studio from {}", dir.display());

@@ -22,16 +22,17 @@ pub enum Db {
 
 const MIGRATION_0001: &str = include_str!("../migrations/0001_init.sql");
 const MIGRATION_0002: &str = include_str!("../migrations/0002_plugins.sql");
+const MIGRATION_0003: &str = include_str!("../migrations/0003_marketplace_cloud.sql");
 
 /// Lazy pool: no connection is made until a query runs.
 pub fn connect_lazy(url: &str) -> DbResult<PgPool> {
     PgPoolOptions::new().connect_lazy(url)
 }
 
-/// Applies 0001_init.sql and 0002_plugins.sql, each once: a step is skipped when its table
-/// (`accounts`, `plugins`) already exists.
+/// Applies 0001_init.sql, 0002_plugins.sql and 0003_marketplace_cloud.sql, each once: a step is
+/// skipped when its table (`accounts`, `plugins`, `plugin_versions`) already exists.
 pub async fn migrate(pool: &PgPool) -> DbResult<()> {
-    for (table, sql) in [("accounts", MIGRATION_0001), ("plugins", MIGRATION_0002)] {
+    for (table, sql) in [("accounts", MIGRATION_0001), ("plugins", MIGRATION_0002), ("plugin_versions", MIGRATION_0003)] {
         let exists: bool = sqlx::query("SELECT to_regclass($1) IS NOT NULL")
             .bind(format!("public.{table}"))
             .fetch_one(pool)
@@ -87,21 +88,22 @@ pub struct NewGameVersion {
     pub run_mode: String,
 }
 
-/// A marketplace plugin row. `bundle` is {"files":{"relpath":"utf8 content"}}.
+/// One published version of a marketplace plugin. The tarball lives in object storage under `object_key`;
+/// `sha256` (hex) is its hash and `signature` the server's Ed25519 signature (crypto::signed_message).
 #[derive(Debug, Clone, PartialEq)]
-pub struct Plugin {
-    pub id: String,
-    pub name: String,
+pub struct PluginVersion {
+    pub plugin_id: String,
     pub version: String,
-    pub author: String,
-    pub category: String,
-    pub description: String,
     pub manifest: Value,
-    pub bundle: Value,
-    pub installs: i64,
+    pub sha256: String,
+    pub signature: String,
+    pub object_key: String,
+    pub size: i64,
+    /// pending | approved | rejected; only approved versions are listed and served.
+    pub status: String,
 }
 
-/// What GET /api/plugins lists (no manifest or bundle).
+/// What GET /api/plugins lists: the latest approved version of each plugin (no manifest or bundle).
 #[derive(Debug, Clone, Serialize, PartialEq)]
 pub struct PluginSummary {
     pub id: String,
@@ -110,7 +112,31 @@ pub struct PluginSummary {
     pub author: String,
     pub category: String,
     pub description: String,
+    /// Accounts that have the plugin installed now.
     pub installs: i64,
+}
+
+impl PluginSummary {
+    pub fn from_manifest(id: &str, version: &str, manifest: &Value, installs: i64) -> PluginSummary {
+        let field = |k: &str| manifest[k].as_str().unwrap_or_default().to_string();
+        PluginSummary {
+            id: id.into(),
+            name: field("name"),
+            version: version.into(),
+            author: field("author"),
+            category: field("category"),
+            description: field("description"),
+            installs,
+        }
+    }
+}
+
+/// One account's install state for a plugin (GET /api/me/plugins).
+#[derive(Debug, Clone, Serialize, PartialEq)]
+pub struct InstallRecord {
+    pub id: String,
+    pub version: String,
+    pub installed: bool,
 }
 
 // The sqlx `derive` feature is not enabled, so rows are mapped by hand.
@@ -349,84 +375,213 @@ pub async fn list_catalog(db: &Db) -> DbResult<Vec<CatalogRow>> {
         .collect()
 }
 
-/// Inserts or updates a plugin by id; an existing row keeps its `installs` count.
-pub async fn upsert_plugin(db: &Db, p: &Plugin) -> DbResult<()> {
-    let pool = match db {
-        Db::Pg(pool) => pool,
-        Db::Mem(m) => return Ok(m.upsert_plugin(p)),
-    };
-    sqlx::query(
-        "INSERT INTO plugins (id, name, version, author, category, description, manifest, bundle) \
-         VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8::jsonb) \
-         ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, version = EXCLUDED.version, \
-         author = EXCLUDED.author, category = EXCLUDED.category, description = EXCLUDED.description, \
-         manifest = EXCLUDED.manifest, bundle = EXCLUDED.bundle",
-    )
-    .bind(&p.id)
-    .bind(&p.name)
-    .bind(&p.version)
-    .bind(&p.author)
-    .bind(&p.category)
-    .bind(&p.description)
-    .bind(p.manifest.to_string())
-    .bind(p.bundle.to_string())
-    .execute(pool)
-    .await?;
-    Ok(())
+fn plugin_version_from_row(r: &sqlx::postgres::PgRow) -> DbResult<PluginVersion> {
+    Ok(PluginVersion {
+        plugin_id: r.try_get("plugin_id")?,
+        version: r.try_get("version")?,
+        manifest: json_col(r, "manifest")?,
+        sha256: r.try_get("sha256")?,
+        signature: r.try_get("signature")?,
+        object_key: r.try_get("object_key")?,
+        size: r.try_get("size")?,
+        status: r.try_get("status")?,
+    })
 }
 
+const PLUGIN_VERSION_COLS: &str =
+    "plugin_id, version, manifest::text AS manifest, sha256, signature, object_key, size, status";
+
+/// Whether the plugin exists, and its author account (None = published by the seed job).
+pub async fn plugin_author(db: &Db, id: &str) -> DbResult<Option<Option<String>>> {
+    let pool = match db {
+        Db::Pg(pool) => pool,
+        Db::Mem(m) => return Ok(m.plugin_author(id)),
+    };
+    let row = sqlx::query("SELECT author_id::text AS author_id FROM plugins WHERE id = $1")
+        .bind(id)
+        .fetch_optional(pool)
+        .await?;
+    row.map(|r| r.try_get("author_id")).transpose()
+}
+
+/// The newest version of a plugin (publish order), any status unless `approved_only`.
+pub async fn latest_plugin_version(db: &Db, id: &str, approved_only: bool) -> DbResult<Option<PluginVersion>> {
+    let pool = match db {
+        Db::Pg(pool) => pool,
+        Db::Mem(m) => return Ok(m.latest_plugin_version(id, approved_only)),
+    };
+    let sql = format!(
+        "SELECT {PLUGIN_VERSION_COLS} FROM plugin_versions WHERE plugin_id = $1 AND ($2 = false OR status = 'approved') \
+         ORDER BY seq DESC LIMIT 1"
+    );
+    let row = sqlx::query(&sql).bind(id).bind(approved_only).fetch_optional(pool).await?;
+    row.as_ref().map(plugin_version_from_row).transpose()
+}
+
+pub async fn find_plugin_version(db: &Db, id: &str, version: &str) -> DbResult<Option<PluginVersion>> {
+    let pool = match db {
+        Db::Pg(pool) => pool,
+        Db::Mem(m) => return Ok(m.find_plugin_version(id, version)),
+    };
+    let sql = format!("SELECT {PLUGIN_VERSION_COLS} FROM plugin_versions WHERE plugin_id = $1 AND version = $2");
+    let row = sqlx::query(&sql).bind(id).bind(version).fetch_optional(pool).await?;
+    row.as_ref().map(plugin_version_from_row).transpose()
+}
+
+/// Stores a new version, creating the plugin row (owned by `author_id`) on its first version.
+/// The caller has checked ownership and that the version is newer.
+pub async fn insert_plugin_version(db: &Db, author_id: Option<&str>, v: &PluginVersion) -> DbResult<()> {
+    let pool = match db {
+        Db::Pg(pool) => pool,
+        Db::Mem(m) => return Ok(m.insert_plugin_version(author_id, v)),
+    };
+    let mut tx = pool.begin().await?;
+    sqlx::query("INSERT INTO plugins (id, author_id) VALUES ($1, $2::uuid) ON CONFLICT (id) DO NOTHING")
+        .bind(&v.plugin_id)
+        .bind(author_id)
+        .execute(&mut *tx)
+        .await?;
+    sqlx::query(
+        "INSERT INTO plugin_versions (plugin_id, version, manifest, sha256, signature, object_key, size, status) \
+         VALUES ($1, $2, $3::jsonb, $4, $5, $6, $7, $8)",
+    )
+    .bind(&v.plugin_id)
+    .bind(&v.version)
+    .bind(v.manifest.to_string())
+    .bind(&v.sha256)
+    .bind(&v.signature)
+    .bind(&v.object_key)
+    .bind(v.size)
+    .bind(&v.status)
+    .execute(&mut *tx)
+    .await?;
+    tx.commit().await
+}
+
+/// Sets a version's review status; false when that version does not exist.
+pub async fn set_plugin_version_status(db: &Db, id: &str, version: &str, status: &str) -> DbResult<bool> {
+    let pool = match db {
+        Db::Pg(pool) => pool,
+        Db::Mem(m) => return Ok(m.set_plugin_version_status(id, version, status)),
+    };
+    let r = sqlx::query("UPDATE plugin_versions SET status = $3 WHERE plugin_id = $1 AND version = $2")
+        .bind(id)
+        .bind(version)
+        .bind(status)
+        .execute(pool)
+        .await?;
+    Ok(r.rows_affected() == 1)
+}
+
+/// Latest approved version of every plugin that has one, by id; installs = accounts with it installed now.
 pub async fn list_plugins(db: &Db) -> DbResult<Vec<PluginSummary>> {
     let pool = match db {
         Db::Pg(pool) => pool,
         Db::Mem(m) => return Ok(m.list_plugins()),
     };
     let rows = sqlx::query(
-        "SELECT id, name, version, author, category, description, installs FROM plugins ORDER BY id",
+        "SELECT DISTINCT ON (v.plugin_id) v.plugin_id, v.version, v.manifest::text AS manifest, \
+         (SELECT count(*) FROM plugin_installs i WHERE i.plugin_id = v.plugin_id AND i.uninstalled_at IS NULL) AS installs \
+         FROM plugin_versions v WHERE v.status = 'approved' ORDER BY v.plugin_id, v.seq DESC",
     )
     .fetch_all(pool)
     .await?;
     rows.iter()
         .map(|r| {
-            Ok(PluginSummary {
-                id: r.try_get("id")?,
-                name: r.try_get("name")?,
-                version: r.try_get("version")?,
-                author: r.try_get("author")?,
-                category: r.try_get("category")?,
-                description: r.try_get("description")?,
-                installs: r.try_get("installs")?,
-            })
+            let id: String = r.try_get("plugin_id")?;
+            let version: String = r.try_get("version")?;
+            Ok(PluginSummary::from_manifest(&id, &version, &json_col(r, "manifest")?, r.try_get("installs")?))
         })
         .collect()
 }
 
-/// The manifest and bundle of one plugin, or None for an unknown id.
-pub async fn get_plugin_content(db: &Db, id: &str) -> DbResult<Option<(Value, Value)>> {
+/// Records an install (`Some(version)`) or an uninstall (`None`) for one account and returns the
+/// plugin's install count, or None for an unknown plugin. Installing twice counts once; an
+/// uninstall keeps the row (marked) so other devices see it as uninstalled, not unknown.
+pub async fn set_plugin_install(db: &Db, id: &str, account_id: &str, version: Option<&str>) -> DbResult<Option<i64>> {
     let pool = match db {
         Db::Pg(pool) => pool,
-        Db::Mem(m) => return Ok(m.get_plugin_content(id)),
+        Db::Mem(m) => return Ok(m.set_plugin_install(id, account_id, version)),
     };
-    let row = sqlx::query("SELECT manifest::text AS manifest, bundle::text AS bundle FROM plugins WHERE id = $1")
-        .bind(id)
-        .fetch_optional(pool)
-        .await?;
-    match row {
-        Some(r) => Ok(Some((json_col(&r, "manifest")?, json_col(&r, "bundle")?))),
-        None => Ok(None),
+    if plugin_author(db, id).await?.is_none() {
+        return Ok(None);
     }
+    sqlx::query(
+        "INSERT INTO plugin_installs (plugin_id, account_id, version, uninstalled_at) \
+         VALUES ($1, $2::uuid, COALESCE($3, ''), CASE WHEN $3::text IS NULL THEN now() END) \
+         ON CONFLICT (plugin_id, account_id) DO UPDATE SET \
+         version = COALESCE($3, plugin_installs.version), updated_at = now(), \
+         uninstalled_at = CASE WHEN $3::text IS NULL THEN now() END",
+    )
+    .bind(id)
+    .bind(account_id)
+    .bind(version)
+    .execute(pool)
+    .await?;
+    let n: i64 = sqlx::query("SELECT count(*) FROM plugin_installs WHERE plugin_id = $1 AND uninstalled_at IS NULL")
+        .bind(id)
+        .fetch_one(pool)
+        .await?
+        .try_get(0)?;
+    Ok(Some(n))
 }
 
-/// Adds one install and returns the new count, or None for an unknown id.
-pub async fn add_plugin_install(db: &Db, id: &str) -> DbResult<Option<i64>> {
+/// Every plugin this account has installed or uninstalled, by id.
+pub async fn plugin_installs_of(db: &Db, account_id: &str) -> DbResult<Vec<InstallRecord>> {
     let pool = match db {
         Db::Pg(pool) => pool,
-        Db::Mem(m) => return Ok(m.add_plugin_install(id)),
+        Db::Mem(m) => return Ok(m.plugin_installs_of(account_id)),
     };
-    let row = sqlx::query("UPDATE plugins SET installs = installs + 1 WHERE id = $1 RETURNING installs")
-        .bind(id)
+    let rows = sqlx::query(
+        "SELECT plugin_id, version, uninstalled_at IS NULL AS installed FROM plugin_installs \
+         WHERE account_id = $1::uuid ORDER BY plugin_id",
+    )
+    .bind(account_id)
+    .fetch_all(pool)
+    .await?;
+    rows.iter()
+        .map(|r| Ok(InstallRecord { id: r.try_get("plugin_id")?, version: r.try_get("version")?, installed: r.try_get("installed")? }))
+        .collect()
+}
+
+/// Stores (replaces) an account's sealed model API key.
+pub async fn set_model_key(db: &Db, account_id: &str, provider: &str, ciphertext: &str) -> DbResult<()> {
+    let pool = match db {
+        Db::Pg(pool) => pool,
+        Db::Mem(m) => return Ok(m.set_model_key(account_id, provider, ciphertext)),
+    };
+    sqlx::query(
+        "INSERT INTO account_model_keys (account_id, provider, ciphertext) VALUES ($1::uuid, $2, $3) \
+         ON CONFLICT (account_id) DO UPDATE SET provider = EXCLUDED.provider, ciphertext = EXCLUDED.ciphertext, updated_at = now()",
+    )
+    .bind(account_id)
+    .bind(provider)
+    .bind(ciphertext)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+/// (provider, sealed key) for an account, if one is stored.
+pub async fn get_model_key(db: &Db, account_id: &str) -> DbResult<Option<(String, String)>> {
+    let pool = match db {
+        Db::Pg(pool) => pool,
+        Db::Mem(m) => return Ok(m.get_model_key(account_id)),
+    };
+    let row = sqlx::query("SELECT provider, ciphertext FROM account_model_keys WHERE account_id = $1::uuid")
+        .bind(account_id)
         .fetch_optional(pool)
         .await?;
-    row.map(|r| r.try_get("installs")).transpose()
+    row.map(|r| Ok((r.try_get("provider")?, r.try_get("ciphertext")?))).transpose()
+}
+
+pub async fn delete_model_key(db: &Db, account_id: &str) -> DbResult<()> {
+    let pool = match db {
+        Db::Pg(pool) => pool,
+        Db::Mem(m) => return Ok(m.delete_model_key(account_id)),
+    };
+    sqlx::query("DELETE FROM account_model_keys WHERE account_id = $1::uuid").bind(account_id).execute(pool).await?;
+    Ok(())
 }
 
 #[cfg(test)]

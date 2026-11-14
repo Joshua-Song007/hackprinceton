@@ -13,3 +13,5 @@
 .mk-error { margin: 0; color: var(--error); font-size: 11px; }
 .mk-actions { display: flex; flex-wrap: wrap; gap: var(--space-1); }
 .mk .om-btn:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.mk-key { display: grid; gap: var(--space-1); padding: var(--space-2); border-bottom: 1px solid var(--line); }
+.mk-key input { flex: 1; min-width: 12ch; }

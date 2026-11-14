@@ -1,0 +1,33 @@
+# Backend tests against a real Postgres, so the Postgres arms of db.rs (migrations, marketplace upserts,
+# installs, model keys) run in CI: tests that read DATABASE_URL skip without it.
+name: backend-postgres
+on:
+  pull_request:
+    paths: ["Backend/**", "Packages/OmniScript/Sources/OmniScript/Resources/prelude.js", ".github/workflows/backend-postgres.yml"]
+  push:
+    branches: [main]
+    paths: ["Backend/**", ".github/workflows/backend-postgres.yml"]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: omni
+          POSTGRES_PASSWORD: omni
+          POSTGRES_DB: omni
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U omni -d omni" --health-interval 5s --health-timeout 3s --health-retries 10
+    env:
+      DATABASE_URL: postgres://omni:omni@localhost:5432/omni
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: Backend
+      - name: cargo test (Postgres)
+        working-directory: Backend
+        run: cargo test --locked
