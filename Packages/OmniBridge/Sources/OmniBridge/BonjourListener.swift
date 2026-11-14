@@ -42,20 +42,23 @@ public final class BonjourListener: Sendable {
 
     /// Starts advertising. Does nothing if already started.
     public func start() {
-        let created: NWListener? = inner.withLock { state in
-            if state.listener != nil { return nil }
+        let created: (listener: NWListener?, error: String?) = inner.withLock { state in
+            if state.listener != nil { return (nil, nil) }
             let tcp = NWProtocolTCP.Options()
             tcp.noDelay = true
             let parameters = NWParameters(tls: nil, tcp: tcp)
             parameters.includePeerToPeer = false
             parameters.prohibitedInterfaceTypes = [.cellular]
-            guard let listener = try? NWListener(using: parameters) else { return nil }
-            state.listener = listener
-            return listener
+            do {
+                let listener = try NWListener(using: parameters)
+                state.listener = listener
+                return (listener, nil)
+            } catch {
+                return (nil, String(describing: error))
+            }
         }
-        guard let listener = created else {
-            let alreadyRunning = inner.withLock { $0.listener != nil }
-            if !alreadyRunning { onState(.failed("could not create listener")) }
+        guard let listener = created.listener else {
+            if let message = created.error { onState(.failed("could not create listener: \(message)")) }
             return
         }
         listener.service = NWListener.Service(name: serviceName, type: Self.serviceType)
