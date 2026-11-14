@@ -61,7 +61,7 @@ export function createExplorerPanel(project: Project, selection: Selection, edit
       list.append(row({ kind: 'entity', id }, depth, 'cube', String(e.name ?? ''), types, selection.entityId === id));
     });
     const scriptList = (kind: ScriptKind) => {
-      const ul = el('ul', { class: 'om-list', role: 'listbox', 'aria-label': `${kind} scripts` });
+      const ul = el('ul', { class: 'om-list', role: 'listbox', 'aria-label': `${kind} scripts`, 'aria-describedby': 'explorer-keys' });
       for (const name of Object.keys(project.scripts(kind))) {
         const item: Item = { kind: 'script', script: kind, name };
         items.push(item);
@@ -74,7 +74,8 @@ export function createExplorerPanel(project: Project, selection: Selection, edit
       el('div', { class: 'pn-group' }, [title, ...(kind ? [button('Add', () => add(kind), { variant: 'small', ariaLabel: `Add ${kind} script` })] : [])]);
     const clientList = scriptList('client');
     const serverList = scriptList('server');
-    root.replaceChildren(group('Scene'), list, group('Client scripts', 'client'), clientList, group('Server scripts', 'server'), serverList);
+    const keys = el('span', { id: 'explorer-keys', class: 'sr-only' }, ['Arrow keys move, Enter opens, F2 renames, Delete removes the script.']);
+    root.replaceChildren(keys, group('Scene'), list, group('Client scripts', 'client'), clientList, group('Server scripts', 'server'), serverList);
     if (!items.some((i) => keyOf(i) === focusKey)) focusKey = items[0] ? keyOf(items[0]) : null;
     root.querySelectorAll<HTMLElement>('li').forEach((li) => (li.tabIndex = li.dataset.key === focusKey ? 0 : -1));
 
@@ -107,8 +108,11 @@ export function createExplorerPanel(project: Project, selection: Selection, edit
       });
       if (item.kind === 'script') {
         li.addEventListener('dblclick', () => editor.open({ kind: item.script, name: item.name }));
-        li.append(button('Rename', () => rename(item.script, item.name), { variant: 'small', ariaLabel: `Rename ${item.name}` }));
-        li.append(button('Delete', () => remove(item.script, item.name), { variant: 'small', ariaLabel: `Delete ${item.name}` }));
+        // tabindex -1: F2 and Delete cover the keyboard, so the row stays one tab stop
+        const rn = button('Rename', () => rename(item.script, item.name), { variant: 'small', ariaLabel: `Rename ${item.name}` });
+        const dl = button('Delete', () => remove(item.script, item.name), { variant: 'small', ariaLabel: `Delete ${item.name}` });
+        rn.tabIndex = dl.tabIndex = -1;
+        li.append(rn, dl);
         li.style.gridTemplateColumns = '18px minmax(0, 1fr) auto auto auto';
       }
       return li;

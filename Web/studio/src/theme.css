@@ -24,9 +24,12 @@ html, body { height: 100%; overflow: hidden; }
 #dock { min-height: 0; min-width: 0; position: relative; }
 .om-toolbar { flex-wrap: nowrap; overflow-x: auto; }
 .om-toolbar .om-sep { width: 1px; align-self: stretch; margin: 10px 2px; background: var(--line); }
-.om-toolbar .om-activity { min-width: 120px; }
-.om-toolbar .om-activity span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.om-toolbar > :not(.om-activity) { flex-shrink: 0; }
+.om-toolbar .om-activity { min-width: 0; }
+.om-toolbar .om-activity span { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .om-btn[aria-pressed="true"] { background: var(--bg-selected); }
+/* Bundle sizes small buttons and the filter at 20px; controls are 24px. */
+.om-btn--small, .om-filter, .om-tabs .om-filter { height: var(--control-height); }
 
 /* Dockview mapped to tokens */
 .dockview-theme-omni {
@@ -88,11 +91,11 @@ html, body { height: 100%; overflow: hidden; }
 
 /* Script editor */
 .ed-tabs { display: flex; align-items: center; gap: 2px; padding: 0 6px; min-height: 28px; background: var(--bg-window); border-bottom: 1px solid var(--line); overflow-x: auto; }
-.ed-tab { display: inline-flex; align-items: center; gap: 4px; height: 22px; padding: 0 4px 0 8px; font-size: 11px; border-radius: 4px; color: var(--text-secondary); white-space: nowrap; }
+.ed-tab { display: inline-flex; align-items: center; gap: 4px; height: var(--control-height); padding: 0 0 0 8px; font-size: 11px; border-radius: var(--radius-control); color: var(--text-secondary); white-space: nowrap; }
 .ed-tab.is-active { background: var(--bg-hover); color: var(--text); }
 .ed-tab button { all: unset; cursor: default; }
 .ed-tab .ed-tab-name { padding: 2px 0; }
-.ed-tab .ed-tab-close { width: 16px; height: 16px; text-align: center; border-radius: 3px; line-height: 16px; }
+.ed-tab .ed-tab-close { width: var(--control-height); height: var(--control-height); text-align: center; border-radius: var(--radius-control); line-height: var(--control-height); }
 .ed-tab .ed-tab-close:hover { background: var(--bg-selected); }
 .ed-tab button:focus-visible { outline: 2px solid var(--focus); }
 .ed-body { flex: 1; min-height: 0; }
@@ -120,7 +123,7 @@ html, body { height: 100%; overflow: hidden; }
 .om-log-flat { background: var(--bg-field); font-size: 11px; height: 100%; overflow: auto; }
 .om-log-flat table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
 .om-log-flat th { position: sticky; top: 0; background: var(--bg-panel); color: var(--text-secondary); font-weight: 400; text-align: left; height: var(--table-row-height); padding: 0 8px; border-bottom: 1px solid var(--line); }
-.om-log-flat td { padding: 2px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.om-log-flat td { height: var(--table-row-height); padding: 0 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
 .om-log-flat td.msg { white-space: pre-wrap; word-break: break-word; font-family: var(--font-mono); font-size: 12px; line-height: 16px; }
 .om-log-flat tr.is-error td { color: var(--error); }
 .om-log-flat tr.is-warn td:first-child { box-shadow: inset 2px 0 var(--warn); }
@@ -136,7 +139,7 @@ html, body { height: 100%; overflow: hidden; }
 .json-tree div.leaf { margin-left: 14px; }
 
 /* Sheets and menus */
-dialog.sheet { border: 1px solid var(--line-control); border-radius: var(--radius-window); background: var(--bg-panel); color: var(--text); padding: var(--space-6); width: min(520px, calc(92vw / var(--ui-scale))); zoom: var(--ui-scale); font: var(--text-body); }
+dialog.sheet { margin: 12vh auto auto; border: 1px solid var(--line-control); border-radius: var(--radius-window); background: var(--bg-panel); color: var(--text); padding: var(--space-6); width: min(520px, calc(92vw / var(--ui-scale))); zoom: var(--ui-scale); font: var(--text-body); }
 dialog.sheet::backdrop { background: color-mix(in srgb, var(--bg-window) 70%, transparent); }
 dialog.sheet h2 { font: var(--text-title); margin: 0 0 var(--space-4); }
 dialog.sheet .sheet-actions { display: flex; justify-content: flex-end; gap: var(--space-2); margin-top: var(--space-4); }
@@ -146,6 +149,7 @@ dialog.sheet .sheet-error { color: var(--error); font-size: 12px; margin: var(--
 .menu { position: fixed; z-index: 2000; zoom: var(--ui-scale); min-width: 220px; max-height: calc(70vh / var(--ui-scale)); overflow: auto; background: var(--bg-panel); border: 1px solid var(--line-control); border-radius: var(--radius-window); padding: 4px; }
 .menu button { all: unset; display: flex; align-items: center; gap: 8px; width: 100%; box-sizing: border-box; min-height: var(--row-height); padding: 0 10px; border-radius: var(--radius-control); font-size: 12px; cursor: default; }
 .menu button:hover, .menu button:focus-visible { background: var(--accent); color: var(--on-accent); }
+.menu button:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
 .menu button[disabled] { opacity: .4; }
 .menu .menu-check { width: 14px; }
 .menu hr { border: 0; border-top: 1px solid var(--line); margin: 4px 0; }

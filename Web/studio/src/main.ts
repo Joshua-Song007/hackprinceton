@@ -10,7 +10,7 @@ import { LayoutManager, type PanelSpec } from './layout';
 import { PreferenceStore, bindPreferences, inDesktopApp, openSettingsSheet } from './preferences';
 import { Project, TEMPLATES, attachAutosave, loadDraft, templateSnapshot, type ProjectSnapshot } from './project';
 import { RunController, ViewportHost, createDevicesPanel, createViewportPanel } from './run';
-import { announce, button, el, openMenu, promptSheet } from './ui';
+import { announce, button, el, openMenu, openSheet, promptSheet, rovingToolbar } from './ui';
 
 const params = new URLSearchParams(location.search);
 /** A test-player tab (opened by "Add test player"): its own dev account, no autosave, no stored session. */
@@ -28,7 +28,15 @@ const viewport = new ViewportHost();
 debug.onServerError = (message) => editor.reportServerError(project, message);
 
 let layout: LayoutManager;
-const run = new RunController({ project, debug, account, viewport, editor, reveal: (id) => layout.show(id) });
+debug.testPlayer = testPlayer?.name ?? null;
+// A test player tab: fetch a version, load it into the project and join it (at startup and on a server `_reload`).
+const joinVersion = async (version: number | 'latest') => {
+  const v = await account.client.fetchVersion(testPlayer!.gameId, version);
+  project.load(Project.snapshotOfVersion(v));
+  history.replaceState(null, '', `${location.pathname}?${new URLSearchParams({ join: v.game_id, version: String(v.version), as: testPlayer!.name })}`);
+  await run.join(v.game_id, v.version);
+};
+const run = new RunController({ project, debug, account, viewport, editor, reveal: (id) => layout.show(id), onReload: testPlayer ? joinVersion : undefined });
 
 const panels: PanelSpec[] = [
   { id: 'explorer', title: 'Explorer', create: () => createExplorerPanel(project, selection, editor) },
@@ -71,9 +79,24 @@ const status = (text: string) => {
   announce(text);
 };
 
-const confirmDiscard = () => !project.dirty || confirm('This project has unsaved changes. Discard them?');
-const openSnapshot = (snapshot: ProjectSnapshot) => {
-  if (!confirmDiscard()) return;
+const confirmDiscard = (): Promise<boolean> => new Promise((resolve) => {
+  if (!project.dirty) return resolve(true);
+  let answer = false;
+  openSheet('Discard unsaved changes?', (body, close) => {
+    const keep = button('Keep editing', close);
+    const discard = button('Discard changes', () => {
+      answer = true;
+      close();
+    }, { variant: 'default' });
+    body.append(el('p', {}, [`${project.name} has changes you have not saved.`]), el('div', { class: 'sheet-actions' }, [keep, discard]));
+    // Escape and the backdrop also close the sheet, which keeps editing.
+    const dialog = body.parentElement as HTMLDialogElement;
+    dialog.addEventListener('close', () => resolve(answer), { once: true });
+    queueMicrotask(() => keep.focus());
+  });
+});
+const openSnapshot = async (snapshot: ProjectSnapshot) => {
+  if (!(await confirmDiscard())) return;
   run.stop();
   project.load(snapshot);
   status(`Opened ${project.name}`);
@@ -129,6 +152,7 @@ const accountButton = button('Sign in', () => openAccountSheet(account, prefs, {
 const settingsButton = button('Settings', () => openSettingsSheet(prefs), { variant: 'borderless' });
 const sep = () => el('span', { class: 'om-sep', 'aria-hidden': 'true' });
 toolbar.append(runLocal, runServer, stop, testPlayerButton, sep(), projectButton, activity, publishButton, windowButton, accountButton, settingsButton);
+rovingToolbar(toolbar);
 
 // Status bar
 const statusbar = document.getElementById('statusbar')!;
@@ -216,9 +240,7 @@ if (testPlayer) {
   void guard(async () => {
     status(`Signing in as ${testPlayer.name}`);
     await account.signIn(testPlayer.name);
-    const v = await account.client.fetchVersion(testPlayer.gameId, testPlayer.version ?? 'latest');
-    project.load(Project.snapshotOfVersion(v));
-    await run.join(v.game_id, v.version);
+    await joinVersion(testPlayer.version ?? 'latest');
   })();
 } else {
   attachAutosave(project, (message) => debug.addOutput('warn', message));

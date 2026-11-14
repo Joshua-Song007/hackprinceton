@@ -5,7 +5,7 @@ import prelude from '../../../Packages/OmniScript/Sources/OmniScript/Resources/p
 import { DebugStore, packetRowKey } from '../src/debug-panel';
 import { menuPosition } from '../src/ui';
 import { errorRange } from '../src/editor';
-import { defaultPreferences, motionReduced, parsePreferences } from '../src/preferences';
+import { PreferenceStore, defaultPreferences, motionReduced, parsePreferences } from '../src/preferences';
 import { Project, templateSnapshot, walkEntities } from '../src/project';
 
 describe('preferences.ts', () => {
@@ -137,5 +137,21 @@ describe('fix round 1', () => {
   it('menu position is in zoomed units so a scaled menu lands under its anchor', () => {
     expect(menuPosition({ left: 400, bottom: 38 }, 2, 1600)).toEqual({ left: 200, top: 20 });
     expect(menuPosition({ left: 1590, bottom: 0 }, 2, 1600)).toEqual({ left: 560, top: 1 });
+  });
+});
+
+describe('account.ts publishIfChanged', () => {
+  it('publishes once, then joins the same version until the project changes', async () => {
+    const { AccountController } = await import('../src/account');
+    const acc = new AccountController(new PreferenceStore(null), false, null);
+    acc.gameId = 'g1';
+    let n = 0;
+    (acc as unknown as { client: unknown }).client = { publish: async () => ({ version: ++n, game_id: 'g1' }) };
+    const p = new Project(templateSnapshot('flagship'));
+    expect(await acc.publishIfChanged(p)).toEqual({ version: 1, published: true });
+    expect(await acc.publishIfChanged(p)).toEqual({ version: 1, published: false });
+    p.setCloud('g1', 1);
+    p.setScript('client', Object.keys(p.clientScripts)[0]!, '// changed');
+    expect((await acc.publishIfChanged(p)).published).toBe(true);
   });
 });

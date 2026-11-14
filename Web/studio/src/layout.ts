@@ -44,7 +44,7 @@ export class LayoutManager {
   private views = new Map<string, PanelView>();
   private saveTimer: ReturnType<typeof setTimeout> | undefined;
   private restoring = false;
-  private collapsed = new Map<string, { width: number; height: number }>();
+  private collapsed = new Map<string, { width: number; height: number; minimumWidth: number; minimumHeight: number }>();
 
   constructor(
     private host: HTMLElement,
@@ -208,12 +208,12 @@ export class LayoutManager {
     this.focusInto(id);
   }
 
-  private focusInto(id: string): void {
+  private focusInto(id: string, quiet = false): void {
     const view = this.views.get(id);
     if (!view) return;
     if (view.focus) view.focus();
     else (view.element.querySelector<HTMLElement>('input, button, [tabindex="0"], textarea, select') ?? view.element).focus();
-    announce(`${this.specs.get(id)?.title ?? id} panel`);
+    if (!quiet) announce(`${this.specs.get(id)?.title ?? id} panel`);
   }
 
   /** F6: next group in reading order (top to bottom, left to right), wrapping. */
@@ -256,7 +256,7 @@ export class LayoutManager {
     if (target) panel.api.moveTo({ group: target, position: split ? direction : 'center' });
     else if (panel.group.panels.length > 1) panel.api.moveTo({ group: panel.group, position: direction });
     announce(`${panel.title ?? panel.id} moved ${direction}`);
-    this.focusInto(panel.id);
+    this.focusInto(panel.id, true); // the move announcement is the one to hear
   }
 
   private onKey(e: KeyboardEvent): void {
@@ -269,6 +269,21 @@ export class LayoutManager {
     if (sash && e.key in ARROWS && !e.ctrlKey && !e.altKey) {
       e.preventDefault();
       this.nudgeSash(sash as HTMLElement, ARROWS[e.key]!, e.shiftKey ? SASH_STEP * 4 : SASH_STEP);
+      return;
+    }
+    const tab = (e.target as HTMLElement).closest?.('.dv-tab');
+    if (tab && !e.ctrlKey && !e.altKey && !e.metaKey && (e.key === 'Enter' || e.key === ' ' || e.key === 'Delete')) {
+      const group = this.api.groups.find((g) => g.element.contains(tab));
+      const target = group?.panels[[...group.element.querySelectorAll('.dv-tab')].indexOf(tab)];
+      if (!target) return;
+      e.preventDefault();
+      if (e.key === 'Delete') {
+        announce(`Closed ${target.title ?? target.id}`);
+        target.api.close();
+      } else {
+        target.api.setActive();
+        this.focusInto(target.id);
+      }
       return;
     }
     const panel = this.api.activePanel;
@@ -297,10 +312,12 @@ export class LayoutManager {
     if (!group) return;
     const before = this.collapsed.get(group.id);
     if (before) {
+      group.api.setConstraints({ minimumWidth: before.minimumWidth, minimumHeight: before.minimumHeight });
       group.api.setSize(before);
       this.collapsed.delete(group.id);
     } else {
-      this.collapsed.set(group.id, { width: group.width, height: group.height });
+      this.collapsed.set(group.id, { width: group.width, height: group.height, minimumWidth: group.minimumWidth, minimumHeight: group.minimumHeight });
+      group.api.setConstraints({ minimumWidth: COLLAPSED_SIZE, minimumHeight: COLLAPSED_SIZE }); // dockview's default minimum is 100px
       group.api.setSize({ width: COLLAPSED_SIZE, height: COLLAPSED_SIZE });
     }
     announce(before ? 'Panel expanded' : 'Panel collapsed');
@@ -328,6 +345,12 @@ export class LayoutManager {
 
   private makeSashesKeyboardReachable(): void {
     const mark = () => {
+      this.host.querySelectorAll<HTMLElement>('.dv-tab').forEach((t) => {
+        t.setAttribute('role', 'tab');
+        t.setAttribute('aria-selected', String(t.classList.contains('dv-active-tab')));
+        // The x is mouse-only; Delete on the focused tab closes it, so hide the x from assistive tech.
+        t.querySelector('.dv-default-tab-action')?.setAttribute('aria-hidden', 'true');
+      });
       this.host.querySelectorAll<HTMLElement>('.dv-sash:not([tabindex])').forEach((s) => {
         const horizontal = s.closest('.dv-split-view-container')?.classList.contains('dv-horizontal') ?? true;
         s.tabIndex = 0;
@@ -336,7 +359,7 @@ export class LayoutManager {
         s.setAttribute('aria-label', horizontal ? 'Resize panels, use left and right arrow keys' : 'Resize panels, use up and down arrow keys');
       });
     };
-    new MutationObserver(mark).observe(this.host, { childList: true, subtree: true });
+    new MutationObserver(mark).observe(this.host, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] });
     mark();
   }
 

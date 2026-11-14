@@ -227,7 +227,7 @@ export class ViewportHost {
     };
     canvas.addEventListener('keydown', onKey);
     this.detachInput = [
-      attachMouseLook(canvas, run.devices), attachGestureKeys(canvas, run.devices), () => canvas.removeEventListener('keydown', onKey),
+      attachMouseLook(canvas, run.devices), attachGestureKeys(window, run.devices), () => canvas.removeEventListener('keydown', onKey),
     ];
   }
 }
@@ -252,6 +252,8 @@ export interface RunDeps {
   account: AccountController;
   viewport: ViewportHost;
   editor: EditorBus;
+  /** A test player's tab is told the server moved to a newer version; it fetches and rejoins it. */
+  onReload?(version: number): Promise<void> | void;
   /** Called with the panel to show when a run starts (the viewport). */
   reveal?(panelId: string): void;
 }
@@ -305,9 +307,9 @@ export class RunController {
     this.stop();
     this.set({ kind: 'server', text: 'Publishing draft version' });
     try {
-      const version = await account.publish(project);
-      this.out('log', `Published version ${version.version} of ${account.game?.title ?? 'the game'}.`);
-      await this.begin('server', account.gameId, version.version);
+      const { version, published } = await account.publishIfChanged(project);
+      this.out('log', published ? `Published version ${version} of ${account.game?.title ?? 'the game'}.` : `No changes since version ${version}, joining it.`);
+      await this.begin('server', account.gameId, version);
     } catch (e) {
       this.stop();
       throw new Error(describeError(e, account.serverUrl));
@@ -410,7 +412,16 @@ export class RunController {
 
   private async onFrame(frame: PlayFrame): Promise<void> {
     if (frame.name === '_reload') {
-      this.out('log', `Server scripts restarted on version ${(frame.data as { version?: number } | undefined)?.version ?? 'unknown'}. ctx.state was reset.`);
+      const version = (frame.data as { version?: number } | undefined)?.version;
+      if (typeof version !== 'number') return this.out('log', 'Server scripts restarted on an unknown version. ctx.state was reset.');
+      const { account } = this.deps;
+      try {
+        if (this.deps.onReload) await this.deps.onReload(version);
+        else if (this.status.kind === 'server' && account.gameId) await this.begin('server', account.gameId, version); // owner: keep the project's own client scripts
+        this.out('log', `Server scripts restarted on version ${version}. Rejoined with its client scripts.`);
+      } catch (e) {
+        this.out('error', `Could not rejoin version ${version}: ${describeError(e, account.serverUrl)}`);
+      }
       return;
     }
     if (this.sentAt !== null) {
@@ -443,7 +454,7 @@ export function createViewportPanel(host: ViewportHost, run: RunController): Pan
   const root = el('div', { class: 'vp-host', role: 'region', 'aria-label': 'Viewport', tabindex: -1 });
   const canvas = el('canvas', {
     tabindex: 0,
-    'aria-label': 'Viewport. While running: drag to look, arrow keys turn the head, T, F and P send tap, flick and pinch.',
+    'aria-label': 'Viewport. While running: drag to look, arrow keys turn the head, and T, F and P send tap, flick and pinch from anywhere outside text fields.',
   });
   const overlay = el('div', { class: 'vp-overlay', 'aria-hidden': 'true' });
   root.append(canvas, overlay);

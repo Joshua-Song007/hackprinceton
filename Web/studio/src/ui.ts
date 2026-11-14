@@ -41,7 +41,31 @@ export function button(label: string, onClick: () => void, options: { icon?: str
 /** Screen-reader announcement (#announcer is a polite live region in index.html). */
 export function announce(text: string): void {
   const region = document.getElementById('announcer');
-  if (region) region.textContent = text;
+  if (!region) return;
+  region.textContent = '';
+  setTimeout(() => (region.textContent = text), 0); // a cleared region re-announces identical text
+}
+
+/** Arrow-key roving for a role=toolbar: one tab stop, Left/Right/Home/End skip disabled buttons. */
+export function rovingToolbar(bar: HTMLElement): void {
+  const enabled = () => [...bar.querySelectorAll<HTMLButtonElement>('button')].filter((b) => !b.disabled);
+  const sync = (current?: Element | null) => {
+    const list = enabled();
+    const stop = list.find((b) => b === current) ?? list.find((b) => b.tabIndex === 0) ?? list[0];
+    bar.querySelectorAll<HTMLButtonElement>('button').forEach((b) => (b.tabIndex = b === stop ? 0 : -1));
+  };
+  bar.addEventListener('focusin', (e) => sync(e.target as Element));
+  bar.addEventListener('keydown', (e) => {
+    const list = enabled();
+    const i = list.indexOf(document.activeElement as HTMLButtonElement);
+    if (i < 0 || e.ctrlKey || e.altKey || e.metaKey) return;
+    const to = e.key === 'ArrowRight' ? (i + 1) % list.length : e.key === 'ArrowLeft' ? (i - 1 + list.length) % list.length : e.key === 'Home' ? 0 : e.key === 'End' ? list.length - 1 : -1;
+    if (to < 0) return;
+    e.preventDefault();
+    list[to]!.focus();
+  });
+  new MutationObserver(() => sync()).observe(bar, { childList: true, subtree: true, attributes: true, attributeFilter: ['disabled'] });
+  sync();
 }
 
 export const clock = (ms: number): string => new Date(ms).toLocaleTimeString([], { hour12: false }) + '.' + String(ms % 1000).padStart(3, '0');
@@ -59,7 +83,7 @@ export function menuPosition(anchor: { left: number; bottom: number }, scale: nu
 /** Modal sheet on a native <dialog>: focus trap, Escape and backdrop come from the platform. Returns close. */
 export function openSheet(title: string, build: (body: HTMLElement, close: () => void) => void): () => void {
   const titleId = `sheet-title-${++sheetCount}`;
-  const dialog = el('dialog', { class: 'sheet', 'aria-labelledby': titleId });
+  const dialog = el('dialog', { class: 'sheet', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': titleId });
   const body = el('div');
   dialog.append(el('h2', { id: titleId }, [title]), body);
   const close = () => {
@@ -120,11 +144,12 @@ export function openMenu(anchor: HTMLElement, items: MenuItem[]): void {
   }
   menu.addEventListener('keydown', (e) => {
     const i = buttons.indexOf(document.activeElement as HTMLButtonElement);
+    const enabled = buttons.filter((b) => !b.disabled);
     if (e.key === 'Escape') close(true);
-    else if (e.key === 'ArrowDown') buttons[(i + 1) % buttons.length]?.focus();
+    else if (e.key === 'ArrowDown') enabled[(enabled.indexOf(buttons[i]!) + 1) % enabled.length]?.focus();
     else if (e.key === 'Home') buttons.find((b) => !b.disabled)?.focus();
     else if (e.key === 'End') [...buttons].reverse().find((b) => !b.disabled)?.focus();
-    else if (e.key === 'ArrowUp') buttons[(i - 1 + buttons.length) % buttons.length]?.focus();
+    else if (e.key === 'ArrowUp') enabled[(enabled.indexOf(buttons[i]!) - 1 + enabled.length) % enabled.length]?.focus();
     else if (e.key === 'Tab') close(true);
     else return;
     e.preventDefault();
