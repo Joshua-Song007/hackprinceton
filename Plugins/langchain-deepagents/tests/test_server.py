@@ -45,7 +45,7 @@ def test_health_and_fake_prompt_over_websocket(tmp_path, monkeypatch):
             return health_view, events
 
     health_view, events = asyncio.run(scenario())
-    assert health_view == (200, {"status": "ok", "deepagents": "0.7.38"}, "*")
+    assert health_view == (200, {"status": "ok", "deepagents": "0.7.38", "model": "fake"}, "*")
     assert {e["id"] for e in events} == {"p1"}
     assert events[-1]["type"] == "done"
     kinds = {e["type"] for e in events}
@@ -77,3 +77,65 @@ def test_foreign_origin_websocket_is_rejected():
             
     exc = asyncio.run(scenario())
     assert exc is not None and "403" in str(exc)
+
+
+def test_choose_model_env_override_then_key_order():
+    choose = server.choose_model
+    assert choose({"OMNI_AGENT_MODEL": "openai:x", "ANTHROPIC_API_KEY": "k"}) == "openai:x"
+    assert choose({"ANTHROPIC_API_KEY": "k", "OPENAI_API_KEY": "k"}) == "anthropic:claude-sonnet-5-5"
+    assert choose({"OPENAI_API_KEY": "k", "GOOGLE_API_KEY": "k"}) == "openai:gpt-5.5"
+    assert choose({"GOOGLE_API_KEY": "k"}) == "google_genai:gemini-2.5-pro"
+    assert choose({"GEMINI_API_KEY": "k"}) == "google_genai:gemini-2.5-pro"
+    assert choose({}) is None
+
+
+def test_no_key_prompt_yields_one_error(tmp_path, monkeypatch):
+    for name in ("OMNI_AGENT_FAKE", "OMNI_AGENT_MODEL", "ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GOOGLE_API_KEY", "GEMINI_API_KEY"):
+        monkeypatch.delenv(name, raising=False)
+
+    async def collect():
+        return [e async for e in server.run_prompt({"text": "hi"}, tmp_path)]
+
+    assert asyncio.run(collect()) == [{"type": "error", "message": server.NO_KEY_MESSAGE}]
+
+
+def test_providers_resolve_and_subagents_inherit_the_main_model(monkeypatch):
+    for name in ("OMNI_AGENT_FAKE", "OMNI_AGENT_MODEL", "ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GOOGLE_API_KEY"):
+        monkeypatch.delenv(name, raising=False)
+    assert all("model" not in spec for spec in server.SUBAGENTS)
+    for env, spec in (("OPENAI_API_KEY", "openai"), ("GEMINI_API_KEY", "google_genai")):
+        monkeypatch.setenv(env, "test-key")
+        assert server.build_agent(Path(".")) is not None  # init_chat_model accepts the prefix with the installed package
+        monkeypatch.delenv(env)
+
+
+def test_health_reports_chosen_model_without_secrets(monkeypatch):
+    monkeypatch.delenv("OMNI_AGENT_FAKE", raising=False)
+    monkeypatch.delenv("OMNI_AGENT_MODEL", raising=False)
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-secret")
+
+    async def scenario():
+        async with serve(server.handle_socket, "127.0.0.1", 0, process_request=server.handle_request) as srv:
+            port = srv.sockets[0].getsockname()[1]
+            health = await asyncio.to_thread(urllib.request.urlopen, f"http://127.0.0.1:{port}/health")
+            return health.read().decode()
+
+    body = asyncio.run(scenario())
+    assert json.loads(body)["model"] == "openai:gpt-5.5" and "sk-secret" not in body
+
+
+def test_extra_origin_from_env_is_accepted(monkeypatch):
+    monkeypatch.setenv("OMNI_ALLOWED_ORIGINS", "http://localhost:5174, https://studio.example")
+
+    async def scenario(origin):
+        async with serve(server.handle_socket, "127.0.0.1", 0, process_request=server.handle_request) as srv:
+            port = srv.sockets[0].getsockname()[1]
+            try:
+                async with connect(f"ws://127.0.0.1:{port}/ws", origin=origin):
+                    return None
+            except Exception as exc:  # noqa: BLE001
+                return exc
+
+    assert asyncio.run(scenario("https://studio.example")) is None
+    assert asyncio.run(scenario("http://localhost:5174")) is None
+    assert "403" in str(asyncio.run(scenario("http://evil.example")))

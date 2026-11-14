@@ -48,3 +48,5 @@ One packet per device sample, only changed channels present:
 ## Workflow
 
 Read `/AGENTS.md` for the current scene, scripts and peripherals. Write small scripts, one per behaviour; use `edit_file` to change existing ones.
+
+Model: the runtime uses Anthropic, OpenAI or Google Gemini, chosen by `OMNI_AGENT_MODEL` ("provider:model") or the first of `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GOOGLE_API_KEY`/`GEMINI_API_KEY` that is set.

@@ -1,4 +1,8 @@
-"""Omni Deep Agents runtime: /health over HTTP and /ws for panel prompts (websockets only)."""
+"""Omni Deep Agents runtime: /health over HTTP and /ws for panel prompts (websockets only).
+
+Live model: OMNI_AGENT_MODEL ("provider:model") or the first key set of ANTHROPIC_API_KEY, OPENAI_API_KEY,
+GOOGLE_API_KEY/GEMINI_API_KEY. Extra panel origins: OMNI_ALLOWED_ORIGINS (comma-separated). OMNI_AGENT_FAKE=1 replays a script.
+"""
 import asyncio
 import json
 import os
@@ -11,6 +15,7 @@ from string import Template
 from deepagents import FilesystemPermission, create_deep_agent
 from deepagents.backends import FilesystemBackend
 from langchain.agents.middleware import TodoListMiddleware
+from langchain.chat_models import init_chat_model
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
@@ -20,7 +25,21 @@ from websockets.exceptions import ConnectionClosed
 from translate import new_state, translate
 
 PLUGIN_DIR = Path(__file__).resolve().parent.parent
-DEFAULT_MODEL = "anthropic:claude-sonnet-5-5"
+NO_KEY_MESSAGE = "No model API key: set ANTHROPIC_API_KEY, OPENAI_API_KEY or GOOGLE_API_KEY (or OMNI_AGENT_FAKE=1)."
+
+
+def choose_model(env) -> str | None:
+    """The "provider:model" to use, or None when no key is set. OMNI_AGENT_MODEL wins."""
+    if env.get("OMNI_AGENT_MODEL"):
+        return env["OMNI_AGENT_MODEL"]
+    if env.get("ANTHROPIC_API_KEY"):
+        return "anthropic:claude-sonnet-5-5"
+    if env.get("OPENAI_API_KEY"):
+        return "openai:gpt-5.5"
+    if env.get("GOOGLE_API_KEY") or env.get("GEMINI_API_KEY"):
+        # shortcut: unverified model id, override with OMNI_AGENT_MODEL
+        return "google_genai:gemini-2.5-pro"
+    return None
 
 PERMISSIONS = [
     FilesystemPermission(operations=["write"], paths=["/scripts/**"]),
@@ -131,8 +150,18 @@ def fake_model() -> ReplayModel:
     ])
 
 
+def is_fake() -> bool:
+    return os.environ.get("OMNI_AGENT_FAKE") == "1"
+
+
 def build_agent(project_dir: Path):
-    model = fake_model() if os.environ.get("OMNI_AGENT_FAKE") == "1" else os.environ.get("OMNI_AGENT_MODEL", DEFAULT_MODEL)
+    if is_fake():
+        model = fake_model()
+    else:
+        model = choose_model(os.environ)
+        if model.startswith("google_genai:") and not os.environ.get("GOOGLE_API_KEY") and os.environ.get("GEMINI_API_KEY"):
+            model = init_chat_model(model, api_key=os.environ["GEMINI_API_KEY"])
+    # The subagents specs carry no model, so they inherit this one.
     return create_deep_agent(
         model=model,
         skills=["/.omni/skills/"],
@@ -155,6 +184,9 @@ def prepare_project(project_dir: Path, snapshot: dict) -> None:
 
 async def run_prompt(message: dict, project_dir: Path):
     """Yield the panel events (without ids) for one prompt, ending with done or error."""
+    if not is_fake() and choose_model(os.environ) is None:
+        yield {"type": "error", "message": NO_KEY_MESSAGE}
+        return
     try:
         prepare_project(project_dir, message.get("project") or {})
         agent = build_agent(project_dir)
@@ -177,14 +209,16 @@ ALLOWED_ORIGINS = {"http://localhost:5173", "http://127.0.0.1:5173", "tauri://lo
 
 def handle_request(connection, request):
     if request.path == "/health":
-        response = connection.respond(HTTPStatus.OK, json.dumps({"status": "ok", "deepagents": version("deepagents")}))
+        model = "fake" if is_fake() else choose_model(os.environ)
+        response = connection.respond(HTTPStatus.OK, json.dumps({"status": "ok", "deepagents": version("deepagents"), "model": model}))
         response.headers["Content-Type"] = "application/json"
         response.headers["Access-Control-Allow-Origin"] = "*"
         return response
     if request.path != "/ws":
         return connection.respond(HTTPStatus.NOT_FOUND, "not found\n")
     origin = request.headers.get("Origin")
-    if origin is not None and origin not in ALLOWED_ORIGINS:
+    extra = {o.strip() for o in os.environ.get("OMNI_ALLOWED_ORIGINS", "").split(",") if o.strip()}
+    if origin is not None and origin not in ALLOWED_ORIGINS | extra:
         return connection.respond(HTTPStatus.FORBIDDEN, "origin not allowed\n")
     return None
 

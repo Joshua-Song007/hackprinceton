@@ -139,20 +139,27 @@ export class MarketplaceController {
 
   reinstall(id: string): Promise<void> {
     return this.run(id, async () => {
+      const wasInstalled = this.read()[id]?.state === 'installed';
       await this.doUninstall(id);
-      await this.doInstall(id);
+      await this.doInstall(id, wasInstalled);
     });
   }
 
-  private async doInstall(id: string): Promise<void> {
+  /** alreadyCounted: Reinstall of an installed plugin does not bump the counter again. */
+  private async doInstall(id: string, alreadyCounted = this.read()[id]?.state === 'installed'): Promise<void> {
     const projectId = this.deps.projectId();
     const bundle = await this.deps.registry.bundle(id);
     this.step(id, 'Downloaded');
     await this.deps.installer.install(projectId, bundle.files);
     this.step(id, 'Unpacked');
-    const { installs } = await this.deps.registry.recordInstall(id);
-    const listed = this.plugins.find((p) => p.id === id);
-    if (listed) listed.installs = installs;
+    if (!alreadyCounted) {
+      // Best-effort: the plugin is already unpacked, so a failing counter keeps the previous count and the install goes on.
+      try {
+        const { installs } = await this.deps.registry.recordInstall(id);
+        const listed = this.plugins.find((p) => p.id === id);
+        if (listed) listed.installs = installs;
+      } catch {}
+    }
     // Recorded before the runtime is up: a runtime that fails to start is retried by Reinstall, not by another auto-install.
     this.write(id, { state: 'installed', manifest: bundle.manifest });
     await this.launch(id, bundle.manifest);
@@ -177,9 +184,9 @@ export class MarketplaceController {
     await this.deps.installer.start(projectId, manifest);
     try {
       await waitHealthy(`http://localhost:${runtimePort(manifest)}/health`, { fetchFn: this.deps.fetchFn, sleep: this.deps.sleep, timeoutMs: this.deps.healthTimeoutMs });
-    } catch (e) {
-      await this.deps.installer.stop(projectId).catch(() => {});
-      throw new Error(`${e instanceof Error ? e.message : String(e)}.${hint}`);
+    } catch {
+      // The runtime is left running: a first `uv sync` can outlast the poll, and stopping would kill it.
+      throw new Error(`Runtime still starting - press Reinstall or wait.${hint}`);
     }
     this.step(id, 'Healthy');
     const panel = this.deps.panels[id]?.(manifest);
@@ -205,4 +212,12 @@ export class MarketplaceController {
       if (p.state === 'installed') await this.run(id, () => this.launch(id, p.manifest));
     }
   }
+}
+
+/** Link handler of the Deep Agent panel: opens the script tab and reveals the editor dock panel, which may be hidden behind the viewport. */
+export function openScriptAndReveal<Ref>(editor: { open(ref: Ref): void }, reveal: (panelId: string) => void): (ref: Ref) => void {
+  return (ref) => {
+    editor.open(ref);
+    reveal('editor');
+  };
 }
