@@ -22,11 +22,12 @@ export OMNI_LAPTOP=<name>                                               # lowerc
 AGENT_BUDGET=10 .agents/scripts/run.sh <slug> "<task>"                  # change the cap
 .agents/scripts/run.sh -i <slug> "<task>"                               # interactive instead
 tail -f ../omni.worktrees/logs/<slug>.log                               # watch a headless run
-Worktrees land at ../omni.worktrees/<slug> on branch agent/<laptop>/<slug>. The orchestrator's is ../omni.worktrees/orch.
+Worktrees land at ../omni.worktrees/<slug> on branch agent/<laptop>/<slug>. The orchestrator's is ../omni.worktrees/orch. (For a clone named omni; in general it is <clone folder name>.worktrees. Start loop.sh from the clone's root folder.)
+Workers started by the orchestrator use run.sh --detach: they return at once, and ../omni.worktrees/logs/<slug>.state says running / done / failed.
 
 Overnight loop (one tmux window per laptop; untested, watch the first few cycles)
 
-caffeinate -i .agents/scripts/loop.sh      # Mac, inside tmux (Windows: run it without caffeinate in Git Bash, sleep set to Never). backoff, STOP check, failure issue after 5 bad cycles; LOOP_DELAY=<secs> sets the idle gap (default 300). Full design: .agents/LOOP.md
+caffeinate -i .agents/scripts/loop.sh      # Mac, inside tmux (Windows: run it without caffeinate in Git Bash, sleep set to Never). backoff, STOP check, failure issue after 5 bad cycles; LOOP_DELAY=<secs> sets the gap between cycles (default 300), IDLE_DELAY the gap after an idle or blocked cycle (default 1800); a STATUS: done cycle ends the loop. Full design: .agents/LOOP.md
 
 loop.sh refuses to start (and says why) if jq, claude, the gh login, write access or the orchestrator settings are not in order: fix what it names, rerun. Permissions the agents report as denied show up as "[permission] ..." issues: add the rule to .agents/settings.orch.json (or settings.json for workers).
 To stop: add a file named STOP (everyone) or STOP-<laptop> to main (the GitHub web UI works from a phone). Only you do this.

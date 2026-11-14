@@ -26,6 +26,7 @@
       "Bash(git ls-remote*)",
       "Bash(git rev-parse*)",
       "Bash(uname*)",
+      "Bash(date*)",
       "Bash(git -C * push*)",
       "Bash(gh *)",
       "Bash(ls*)",

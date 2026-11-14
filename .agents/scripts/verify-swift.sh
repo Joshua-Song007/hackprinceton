@@ -14,6 +14,6 @@ for p in "${pkgs[@]}"; do
   for dep in $(grep -oE '\.package\(path: "\.\./[A-Za-z]+"' "Packages/$p/Package.swift" | sed 's#.*\.\./##; s#"##'); do has_src "$dep" || skip="$dep"; done
   [ -n "$skip" ] && { echo "skip $p ($skip has no Swift sources yet)"; continue; }
   swift build --package-path "Packages/$p"
-  [ -d "Packages/$p/Tests" ] && swift test --package-path "Packages/$p"
+  if [ -n "$(find "Packages/$p/Tests" -name '*.swift' 2>/dev/null | head -1)" ]; then swift test --package-path "Packages/$p"; fi   # no test files yet: nothing to run
 done
 echo "verify-swift: OK"

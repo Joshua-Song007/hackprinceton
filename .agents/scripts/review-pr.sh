@@ -58,6 +58,7 @@ for p in os.environ["PKGS"].split():
 PY
 py=python3; "$py" -c 1 >/dev/null 2>&1 || py=python   # on Windows python3 is often a Store stub that does nothing
 deps_out=$(PYTHONUTF8=1 PKGS="$pkgs" REF="$ref" "$py" -c "$PYDEPS")   # utf-8 stdout: the check marks crash cp1252 on Windows
+[ -z "$pkgs" ] || [ -n "$deps_out" ] || out "  ✗ dependency check produced no output (python missing?)"
 while IFS= read -r l; do [ -n "$l" ] && out "$l"; done <<<"$deps_out"
 
 section "Purity and hardware-blind rule"
@@ -91,12 +92,16 @@ swiftfiles=$(grep -E '\.swift$|(^|/)Package\.swift$|^Apps/|^Packages/|^Schema/us
 if [ -z "$swiftfiles" ]; then echo "  · no Swift-gated paths changed"
 elif jq -e '[.labels[].name] | index("needs-mac-verify")' <<<"$json" >/dev/null; then
   sha=$(jq -r .headRefOid <<<"$json")
-  gh pr view "$n" --json comments --jq '.comments[].body' | grep -q "MAC-VERIFIED $sha" && out "  ✓ MAC-VERIFIED $sha present" || out "  ✗ labeled needs-mac-verify but no 'MAC-VERIFIED $sha' comment for the current head"
+  cbodies=$(gh pr view "$n" --json comments --jq '.comments[].body')
+  grep -q "MAC-VERIFIED $sha" <<<"$cbodies" && out "  ✓ MAC-VERIFIED $sha present" || out "  ✗ labeled needs-mac-verify but no 'MAC-VERIFIED $sha' comment for the current head"
 else echo "  · Swift-gated paths changed, no needs-mac-verify label (fine for a macOS laptop's PR; a Windows laptop must add the label)"; fi
 
 section "CI and merge state"
-ci=$(gh pr checks "$n" 2>&1 | head -3)
-case "$ci" in *fail*) out "  ✗ CI: $ci";; *pending*) echo "  · CI pending: wait before merging";; *pass*) out "  ✓ CI: $(head -1 <<<"$ci" | awk '{print $1, $2}')";; *) echo "  · CI: $ci";; esac
+ci=$(gh pr checks "$n" 2>&1); cst=$(cut -f2 <<<"$ci")   # tab-separated: name, status, time, url
+if grep -qE '^(fail|cancel)$' <<<"$cst"; then out "  ✗ CI: a check failed"; head -5 <<<"$ci" | sed 's/^/      /'
+elif grep -qx pending <<<"$cst"; then echo "  · CI pending: wait before merging"
+elif grep -qx pass <<<"$cst"; then out "  ✓ CI: $(grep -cx pass <<<"$cst") check(s) pass"
+else echo "  · CI: ${ci:-no checks reported}"; fi
 echo "  · merge state: $(jq -r .mergeStateStatus <<<"$json"); $(git rev-list --count "$ref..origin/main") commit(s) behind main"
 for other in $(gh pr list --state open --json number --jq '.[].number' | grep -v -x "$n" || true); do
   both=$(comm -12 <(gh pr view "$other" --json files --jq '.files[].path' | sort) <(sort <<<"$files"))
@@ -105,8 +110,8 @@ done
 
 section "PR description"
 body=$(jq -r .body <<<"$json")
-grep -q -i -E 'approve' <<<"$body" && out "  ✓ mentions a reviewer verdict" || out "  ✗ no reviewer verdict in the description"
-grep -q -i -E 'CHANGES NEEDED' <<<"$body" && echo "  · mentions a CHANGES NEEDED round (read how it was resolved)"
+grep -qE '^[[:space:]*>-]*VERDICT: APPROVE' <<<"$body" && out "  ✓ has the line 'VERDICT: APPROVE'" || out "  ✗ no 'VERDICT: APPROVE' line in the description"
+grep -q 'VERDICT: CHANGES NEEDED' <<<"$body" && echo "  · mentions a CHANGES NEEDED round (read how it was resolved)"
 echo "  --- description (first 45 lines) ---"; head -45 <<<"$body" | sed 's/^/  | /'
 
 printf '\n%s flag(s). Mechanical checks only: read the diff for logic, and decide any ambiguity listed in the description.\n' "$flags"

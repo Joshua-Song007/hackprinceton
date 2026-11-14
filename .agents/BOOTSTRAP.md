@@ -23,7 +23,7 @@ The human's prompt to follow this file is the explicit request for the git comma
 1. `.agents/scripts/setup.sh <laptop>`: installs whatever is missing (Homebrew, tmux, gh, jq, node, python on Mac; gh, jq, node, python through winget on Windows).
 2. **HUMAN** items that setup reports:
    - `gh` login: in this session's prompt, type `! gh auth login -h github.com` (HTTPS, repo scope). A fine-grained token limited to this repo is safer: orchestrators push and merge with it.
-   - `claude` login, if setup says the CLI is not logged in.
+   - `claude` login, if setup says it is not logged in: start `claude` once and sign in. `setup.sh` and `loop.sh` both check this with a one-cent Haiku call.
    - Mac only: Xcode 16+ from the App Store, and the `xcode-select --install` dialog.
    - Windows only: set sleep to Never while plugged in.
    - Mac only: keep the laptop on power with the lid open. `caffeinate -i` stops idle sleep, not lid sleep.
@@ -61,3 +61,7 @@ A cycle takes several minutes. Check once after it ends; do not poll in a loop.
 - **Stop all laptops:** add a file named `STOP` to `main` (the web UI works from a phone). **Stop one laptop:** add `STOP-<laptop>`. The loop exits at its next cycle, and workers in flight finish first.
 - **Hard stop here:** `tmux kill-session -t omni-loop` on a Mac, or close the window on Windows. This kills workers mid-task; their worktrees stay in `../omni.worktrees/`.
 - **After merges:** `.agents/scripts/cleanup.sh --dry-run`, then run it without `--dry-run`.
+- **Is it alive?** Mac: `tmux ls` lists `omni-loop`. Windows: only the Git Bash window and `tail -f ../omni.worktrees/logs/loop.out` tell you. No `omni-loop` session means the loop exited on its own (STOP, `STATUS: done` or a failed preflight): read the tail of `loop.out`.
+- **Restart after STOP or done:** delete the `STOP` / `STOP-<laptop>` file on `main`, check that `git show origin/main:STOP` now fails, rerun step 5.
+- **Update the scripts on a running laptop:** `loop.sh` and `run.sh` run from the clone's own checkout and the loop never pulls it, and pulling under a running script can corrupt it. Add `STOP-<laptop>`, wait for the loop to exit, `git pull --ff-only` in the clone, delete the STOP file, restart.
+- **Folder names:** `omni.worktrees` in these docs is `<clone folder name>.worktrees`, next to the clone.

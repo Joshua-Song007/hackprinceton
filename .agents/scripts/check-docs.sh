@@ -6,7 +6,7 @@ cd "$(dirname "$0")/../.."
 bad=0; flag() { echo "stale: $1"; bad=1; }
 docs=$(ls .agents/*.md docs/agents/*.md 2>/dev/null | grep -v 'agent-playbook\.md')
 for d in $docs; do   # every .agents/ file a doc names must exist
-  for p in $(grep -oE '\.agents/(scripts/)?[A-Za-z0-9_.-]+\.(sh|md|json)' "$d" | sort -u); do [ -e "$p" ] || flag "$d names $p, which does not exist"; done
+  for p in $(grep -oE '\.agents/(scripts/)?[A-Za-z0-9_.-]+\.(sh|md|json)' "$d" | sort -u); do [ -e "$p" ] || [ "$p" = .agents/HUMAN.md ] || flag "$d names $p, which does not exist"; done   # HUMAN.md is hidden in agent worktrees, so it may legitimately be absent
 done
 for s in .agents/scripts/*.sh; do grep -q "$(basename "$s")" .agents/README.md || flag "$s is not listed in .agents/README.md"; done
 for f in .agents/*.json; do grep -q "$(basename "$f")" .agents/README.md || flag "$f is not listed in .agents/README.md"; done

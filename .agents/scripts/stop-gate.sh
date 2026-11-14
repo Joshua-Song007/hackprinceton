@@ -36,6 +36,6 @@ grep -Eq '^(Games|Schema|Recordings)/|\.(js|json|jsonl)$' <<<"$changed" && run .
 
 if [ -z "$fail" ]; then rm -f "$count_file"; exit 0; fi
 n=$(( $(cat "$count_file" 2>/dev/null || echo 0) + 1 )); echo "$n" > "$count_file"
-[ "$n" -gt "$max_blocks" ] && exit 0
+[ "$n" -gt "$max_blocks" ] && { rm -f "$count_file"; exit 0; }   # let it stop, and start counting afresh next time
 printf 'Checks failed (block %s/%s). Fix and finish again:\n%s' "$n" "$max_blocks" "$fail" >&2
 exit 2

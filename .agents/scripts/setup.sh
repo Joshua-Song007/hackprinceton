@@ -7,6 +7,7 @@
 set -uo pipefail
 laptop=${1:?usage: setup.sh <laptop-name> [--check]}; mode=${2:-install}
 [[ "$laptop" =~ ^[a-z0-9-]+$ ]] || { echo "laptop name must match [a-z0-9-]+" >&2; exit 2; }
+[ "$mode" = install ] || [ "$mode" = --check ] || { echo "usage: setup.sh <laptop-name> [--check]" >&2; exit 2; }
 case "$(uname -s)" in Darwin) plat=mac;; MINGW*|MSYS*|CYGWIN*) plat=win;; *) echo "unsupported OS: $(uname -s)" >&2; exit 2;; esac
 for b in /opt/homebrew/bin/brew /usr/local/bin/brew; do [ -x "$b" ] && eval "$("$b" shellenv)"; done
 miss=(); have() { command -v "$1" >/dev/null 2>&1; }
@@ -19,7 +20,7 @@ need() {   # need <command> <brew package> <winget id>
   if [ "$plat" = mac ]; then brew install "$2" >/dev/null 2>&1; else winget.exe install --id "$3" -e --silent --accept-package-agreements --accept-source-agreements >/dev/null 2>&1; fi
   if have "$1"; then ok "$1 (installed)"; else bad "$1 (install failed, or installed but not on PATH yet: open a new shell and rerun)"; fi
 }
-pyok() { for c in python3 python; do "$c" -c 'import json' >/dev/null 2>&1 && return 0; done; return 1; }
+pyok() { for c in $([ "$plat" = win ] && echo "python python3" || echo "python3 python"); do "$c" -c 'import json' >/dev/null 2>&1 && return 0; done; return 1; }   # on Windows python3 is often a Store stub, so try python first
 
 echo "Omni setup for '$laptop' on $plat ($mode)"
 if [ "$plat" = mac ]; then
@@ -54,8 +55,9 @@ elif [ "$mode" = --check ]; then bad claude
 else echo "  installing Claude Code (official installer) ..."; if [ "$plat" = mac ]; then curl -fsSL https://claude.ai/install.sh | bash; else powershell.exe -NoProfile -Command "irm https://claude.ai/install.ps1 | iex"; fi; have claude && ok "claude (installed)" || bad "claude (not on PATH yet: open a new shell)"; fi
 echo "[logins]"
 gh auth status >/dev/null 2>&1 && ok "gh logged in" || bad "gh not logged in: run  gh auth login  (scope: repo)"
+if have claude && have jq; then claude -p "reply ok" --model claude-haiku-5-5 --max-turns 1 --max-budget-usd 0.05 --output-format json 2>/dev/null | jq -e '.is_error == false' >/dev/null 2>&1 && ok "claude logged in" || bad "claude not logged in: start  claude  once and sign in"; fi
 echo "[repo]"
-case "$PWD" in *OneDrive*|*iCloud*|*Dropbox*) bad "repo is inside a synced folder ($PWD): clone it elsewhere, e.g. ~/hack/omni";; *) ok "repo location";; esac
+case "$PWD" in *OneDrive*|*iCloud*|*Dropbox*|*Mobile\ Documents*) bad "repo is inside a synced folder ($PWD): clone it elsewhere, e.g. ~/hack/omni";; *) ok "repo location";; esac
 echo
 if [ "${#miss[@]}" -eq 0 ]; then echo "READY. Add to your shell profile:  export OMNI_LAPTOP=$laptop"; echo "Start the loop (inside tmux on a Mac):  caffeinate -i env OMNI_LAPTOP=$laptop .agents/scripts/loop.sh"; exit 0
 else echo "NOT READY. ${#miss[@]} item(s) missing:"; printf '  - %s\n' "${miss[@]}"; exit 1; fi
