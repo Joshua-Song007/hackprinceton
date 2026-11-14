@@ -4,6 +4,7 @@
 # OMNI_ROLE=orch (default) runs the orchestrator; OMNI_ROLE=integrator runs the tooling integrator (INTEGRATOR.md): fast cycles in the build phase, then slow ones in maintain.
 # Usage limit hit or warned: OUT + handoff, sleep until the reset + 60 s (LIMIT_WINDOW=18000 s fallback), resume, BACK.
 # Optional: NIGHT_BUDGET_USD=<n> stops the loop (after posting OUT + handoff) once this loop's own cycles spent NEAR_PCT (default 90) % of it today.
+# Orchestrator only: each tick writes <logs>/snapshot.md (snapshot.sh) and skips the model when it matches the last cycle's end state; FORCE_CYCLE=<s> (default 3600) forces a real cycle anyway, for time-based rules (dead claims, idle merges).
 # Needs git, gh, jq, claude. The agents raise needs-tien / needs-human issues themselves; this script only covers "the agent cannot run at all" and denied commands.
 set -uo pipefail
 cd "$(dirname "$0")/../.."
@@ -72,6 +73,12 @@ while true; do
   for stopfile in STOP "STOP-$laptop" "STOP-$slug"; do
     if git cat-file -e "origin/main:$stopfile" 2>/dev/null; then notify "$stopfile found; $slug loop ended"; exit 0; fi
   done
+  if [ "$role" = orch ]; then   # quiet-cycle skip: no model call when GitHub and the workers look exactly as the last cycle left them
+    if .agents/scripts/snapshot.sh --out "$logs/snapshot.md" 2>/dev/null; then fp=$(cksum < "$logs/snapshot.md"); else fp=""; fi
+    if [ -n "$fp" ] && [ "$fp" = "${last_fp:-}" ] && [ $(( $(date +%s) - ${last_run:-0} )) -lt "${FORCE_CYCLE:-3600}" ]; then
+      echo "$(date +%H:%M) no change since the last cycle; skipped (next in ${delay}s)"; sleep "$delay"; continue
+    fi
+  fi
   rm -f "$logs/$slug.json"   # a stale success from an earlier cycle must not mask a launch failure
   if [ "$role" = integrator ]; then ph=$(phase); OMNI_PHASE=$ph .agents/scripts/run.sh --integrator integrator "Run one integrator cycle in $ph mode." || true
   else .agents/scripts/run.sh --orch orch "Run one orchestrator cycle." || true; fi   # run.sh swallows claude's exit code; read the JSON result instead
@@ -85,6 +92,9 @@ while true; do
   near_limit && { pause_until_reset "near-usage-limit"; continue; }
   if jq -e '.is_error == false' "$logs/$slug.json" >/dev/null 2>&1; then
     fails=0; rm -f "$flag"; cap_fails=0; [ -n "$window_start" ] || window_start=$(date +%s)
+    if [ "$role" = orch ]; then   # fingerprint the world as this cycle left it, so its own comments and launches do not count as news
+      last_run=$(date +%s); if .agents/scripts/snapshot.sh --out "$logs/snapshot.md" 2>/dev/null; then last_fp=$(cksum < "$logs/snapshot.md"); else last_fp=""; fi
+    fi
     if [ "$out_posted" = 1 ]; then post_capacity BACK ""; out_posted=0; notify "credits are back; told the Loop capacity issue"; fi
     st=$(jq -r '.result // ""' "$logs/$slug.json" | grep -oE '^[*]*STATUS: (worked|idle|blocked|done)' | tail -1 | sed 's/.*STATUS: //')   # every cycle ends with one STATUS line, alone on its line
     if [ "$role" = integrator ]; then
