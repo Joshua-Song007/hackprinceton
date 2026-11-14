@@ -1,0 +1,54 @@
+<!-- @dsCard height=288 -->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Omni</title>
+<style>
+  html, body { margin:0; height:100%; }
+  body { background:var(--bg-window); color:var(--text); font-family:var(--font-sans); overflow:hidden; }
+  .cover { position:relative; height:288px; overflow:hidden; }
+  .art { position:absolute; top:0; left:480px; width:480px; height:288px; overflow:hidden; }
+  .art svg { display:block; width:480px; height:288px; }
+  .vp { fill:var(--viewport); }
+  .grid { fill:var(--viewport-grid); }
+  .acc { fill:var(--accent); }
+  .ax { fill:var(--axis-x); } .ay { fill:var(--axis-y); } .az { fill:var(--axis-z); }
+  .blk { rx:var(--radius-window); }
+  .words { position:absolute; left:var(--space-6); bottom:var(--space-6); max-width:440px; }
+  .name { margin:0; font-family:var(--font-display); font-size:120px; line-height:.92; font-weight:600; letter-spacing:-.045em; color:var(--text); }
+  .tag { margin:var(--space-2) 0 0 6px; font-size:14px; line-height:20px; color:var(--text-secondary); }
+</style>
+</head>
+<body>
+<div class="cover">
+<div class="art" aria-hidden="true">
+<svg viewBox="0 0 480 288" width="480" height="288">
+<!--
+  blocks      viewport 300×232 slab bled off the top (the Studio's own ground, largest) · accent 164×176 bled off the right edge (selection and controls) · axis-x 120×12, axis-y 12×96, axis-z disc 28 (the gizmo) ≈ 33% of 960×288
+  arrangement one viewport slab with an accent satellite, bottoms on one line at 222; the gizmo drawn on the slab, z as a disc because it points at the viewer
+  pattern     dot grid, from "precise, technical, a 4px grid": 1.5px dots at a space-12 pitch across the slab, like the viewport floor seen from above
+  scales      pitch space-12; gutter space-4; insets space-6; corners radius-window; bar thickness space-3
+-->
+<defs><clipPath id="slab"><rect x="16" y="-10" width="300" height="232" rx="10"/></clipPath></defs>
+<rect class="vp blk" x="16" y="-10" width="300" height="232" rx="10"/>
+<g clip-path="url(#slab)" class="grid">
+  <circle cx="40" cy="14" r="1.5"/><circle cx="88" cy="14" r="1.5"/><circle cx="136" cy="14" r="1.5"/><circle cx="184" cy="14" r="1.5"/><circle cx="232" cy="14" r="1.5"/><circle cx="280" cy="14" r="1.5"/>
+  <circle cx="40" cy="62" r="1.5"/><circle cx="88" cy="62" r="1.5"/><circle cx="136" cy="62" r="1.5"/><circle cx="184" cy="62" r="1.5"/><circle cx="232" cy="62" r="1.5"/><circle cx="280" cy="62" r="1.5"/>
+  <circle cx="136" cy="110" r="1.5"/><circle cx="184" cy="110" r="1.5"/><circle cx="232" cy="110" r="1.5"/><circle cx="280" cy="110" r="1.5"/>
+  <circle cx="232" cy="158" r="1.5"/><circle cx="280" cy="158" r="1.5"/>
+  <circle cx="40" cy="206" r="1.5"/><circle cx="88" cy="206" r="1.5"/><circle cx="136" cy="206" r="1.5"/><circle cx="184" cy="206" r="1.5"/><circle cx="232" cy="206" r="1.5"/><circle cx="280" cy="206" r="1.5"/>
+</g>
+<rect class="ay" x="82" y="62" width="12" height="102" rx="6"/>
+<rect class="ax" x="88" y="152" width="120" height="12" rx="6"/>
+<circle class="az" cx="88" cy="158" r="14"/>
+<rect class="acc blk" x="332" y="46" width="164" height="176" rx="10"/>
+</svg>
+</div>
+<div class="words">
+<h1 class="name">Omni</h1>
+<p class="tag">Spatial input from every Apple device you carry.</p>
+</div>
+</div>
+</body>
+</html>

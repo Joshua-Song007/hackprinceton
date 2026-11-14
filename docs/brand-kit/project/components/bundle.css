@@ -1,0 +1,129 @@
+/* Omni Studio component styles. Every color and length comes from tokens.css. Native macOS scale: 13px body, 11px dense panels. */
+body { margin: 0; background: var(--bg-panel); color: var(--text); font-family: var(--font-sans); font-size: 13px; line-height: 16px; -webkit-font-smoothing: antialiased; }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.om-num { font-variant-numeric: tabular-nums; }
+.om-secondary { color: var(--text-secondary); }
+.om-pad { padding: var(--space-3); }
+.om-stack { display: flex; flex-direction: column; gap: var(--space-2); }
+.om-inline { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
+.om-icon { width: 14px; height: 14px; flex: none; fill: currentColor; }
+.om-icon--line { fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+
+/* Button: macOS push button */
+.om-btn { display: inline-flex; align-items: center; justify-content: center; gap: var(--space-1); height: var(--control-height); padding: 0 10px; font: 400 13px/1 var(--font-sans); color: var(--text); background: var(--bg-hover); border: 1px solid var(--line-control); border-radius: var(--radius-control); cursor: default; white-space: nowrap; }
+.om-btn:hover { background: var(--bg-selected); }
+.om-btn:active { filter: brightness(.92); }
+.om-btn--default { background: var(--accent); border-color: var(--accent); color: var(--on-accent); font-weight: 500; }
+.om-btn--default:hover { background: var(--accent); filter: brightness(1.08); }
+.om-btn--borderless { background: transparent; border-color: transparent; color: var(--text-secondary); padding: 0 6px; }
+.om-btn--borderless:hover { background: var(--bg-hover); color: var(--text); }
+.om-btn--icon { width: 28px; padding: 0; }
+.om-btn:disabled { opacity: .4; pointer-events: none; }
+.om-btn--small { height: 20px; font-size: 11px; padding: 0 8px; }
+
+/* Segmented control */
+.om-seg { display: inline-flex; height: var(--control-height); padding: 1px; border: 1px solid var(--line-control); border-radius: var(--radius-control); background: var(--bg-field); box-sizing: border-box; }
+.om-seg button { font: 400 12px/1 var(--font-sans); color: var(--text-secondary); background: transparent; border: 0; border-radius: 4px; padding: 0 12px; display: inline-flex; align-items: center; gap: 6px; cursor: default; }
+.om-seg button:hover { color: var(--text); }
+.om-seg button[aria-checked="true"] { background: var(--bg-hover); color: var(--text); font-weight: 500; box-shadow: 0 0 0 1px var(--line); }
+.om-seg button.is-live[aria-checked="true"] { background: var(--live); color: var(--on-live); box-shadow: none; }
+
+/* Text and number fields */
+.om-field { display: flex; align-items: center; height: var(--control-height); min-width: 0; background: var(--bg-field); border: 1px solid var(--line-control); border-radius: var(--radius-control); box-sizing: border-box; font-size: 11px; }
+.om-field:focus-within { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.om-field input { flex: 1; min-width: 0; width: 100%; background: transparent; border: 0; outline: 0; color: var(--text); font: 400 11px/1 var(--font-sans); font-variant-numeric: tabular-nums; padding: 0 6px 0 2px; }
+.om-field .om-unit { color: var(--text-secondary); padding-right: 6px; }
+.om-field .om-axis { width: 18px; align-self: stretch; display: grid; place-items: center; font-weight: 600; cursor: ew-resize; user-select: none; }
+.om-axis--x { color: var(--axis-x); } .om-axis--y { color: var(--axis-y); } .om-axis--z { color: var(--axis-z); }
+.om-prop { display: grid; grid-template-columns: 72px minmax(0, 1fr); align-items: center; gap: var(--space-2); min-height: var(--row-height); font-size: 11px; color: var(--text-secondary); }
+.om-vec { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-1); }
+/* Vectors stack their label above the three fields so values never truncate in a 240-280px panel. */
+.om-prop--vec { grid-template-columns: minmax(0, 1fr); gap: 4px; padding: 4px 0; }
+.om-prop--vec .om-prop-label { display: flex; justify-content: space-between; }
+
+/* Inspector section */
+.om-section { border-bottom: 1px solid var(--line); }
+.om-section > button { all: unset; box-sizing: border-box; display: flex; align-items: center; gap: 6px; width: 100%; height: 32px; padding: 0 var(--space-3); font: 600 13px/1 var(--font-sans); color: var(--text); }
+.om-section > button:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+.om-section > button .om-chev { transition: transform 120ms ease-out; color: var(--text-secondary); }
+.om-section > button[aria-expanded="false"] .om-chev { transform: rotate(-90deg); }
+.om-section > button .om-trail { margin-left: auto; font-weight: 400; font-size: 11px; color: var(--text-secondary); }
+.om-section-body { padding: 0 var(--space-3) var(--space-3); }
+.om-section-body[hidden] { display: none; }
+@media (prefers-reduced-motion: reduce) { .om-section .om-chev { transition: none; } }
+
+/* Source list (device sidebar) */
+.om-list { list-style: none; margin: 0; padding: 4px; }
+.om-list li { display: grid; grid-template-columns: 18px minmax(0, 1fr) auto; align-items: center; gap: var(--space-2); min-height: var(--row-height); padding: 3px 8px; border-radius: var(--radius-control); }
+.om-list li:hover { background: var(--bg-hover); }
+.om-list li[aria-selected="true"] { background: var(--accent); color: var(--on-accent); }
+.om-list li[aria-selected="true"] .om-secondary, .om-list li[aria-selected="true"] .om-sub, .om-list li[aria-selected="true"] .om-state { color: var(--on-accent); }
+.om-list .om-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.om-list .om-sub { display: block; font-size: 11px; line-height: 13px; color: var(--text-secondary); }
+.om-list .om-icon { color: var(--text-secondary); width: 16px; height: 16px; }
+.om-list li[aria-selected="true"] .om-icon { color: var(--on-accent); }
+.om-list li[aria-selected="true"] .om-state::before { background: var(--on-accent); }
+.om-state { font-size: 11px; font-variant-numeric: tabular-nums; color: var(--text-secondary); display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+.om-state::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--ok); }
+.om-state--stale::before { background: transparent; box-shadow: inset 0 0 0 1.5px var(--text-secondary); }
+.om-state--error { color: var(--error); }
+.om-state--error::before { background: var(--error); border-radius: 1px; }
+.om-list li[data-stale] .om-name { color: var(--text-secondary); }
+
+/* Packet log: DevTools-style table + detail */
+.om-log { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); height: 100%; min-height: 0; background: var(--bg-field); font-size: 11px; }
+.om-log-table { overflow: auto; min-width: 0; border-right: 1px solid var(--line); }
+.om-log table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.om-log th { position: sticky; top: 0; background: var(--bg-panel); color: var(--text-secondary); font-weight: 400; text-align: left; height: var(--table-row-height); padding: 0 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.om-log td { height: var(--table-row-height); padding: 0 8px; white-space: nowrap; border-bottom: 1px solid var(--line); }
+.om-log td.r, .om-log th.r { text-align: right; }
+.om-log tbody tr { cursor: default; }
+.om-log tbody tr:hover { background: var(--bg-hover); }
+.om-log tbody tr[aria-selected="true"] { background: var(--bg-selected); }
+.om-log tr.is-warn td:first-child { box-shadow: inset 2px 0 var(--warn); }
+.om-log tr.is-error td { color: var(--error); }
+.om-log pre { margin: 0; padding: 8px 12px; font: 400 12px/18px var(--font-mono); color: var(--text); overflow: auto; height: 100%; box-sizing: border-box; }
+.om-log pre .k { color: var(--text-secondary); }
+.om-log pre .x { color: var(--axis-x); } .om-log pre .y { color: var(--axis-y); } .om-log pre .z { color: var(--axis-z); }
+.om-log pre .e { color: var(--error); }
+
+/* Tabs (debug area) */
+.om-tabs { display: flex; align-items: center; gap: 2px; height: 28px; padding: 0 6px; background: var(--bg-panel); border-bottom: 1px solid var(--line); }
+.om-tabs [role="tab"] { all: unset; font-size: 11px; padding: 3px 8px; border-radius: 4px; color: var(--text-secondary); }
+.om-tabs [role="tab"][aria-selected="true"] { background: var(--bg-hover); color: var(--text); }
+.om-tabs [role="tab"]:focus-visible { outline: 2px solid var(--focus); }
+.om-tabs .om-count { margin-left: 4px; color: var(--warn); }
+.om-tabs .om-filter { margin-left: auto; width: 180px; height: 20px; }
+
+/* Toolbar */
+.om-toolbar { display: flex; align-items: center; gap: var(--space-2); height: 44px; padding: 0 var(--space-3); background: var(--bg-window); border-bottom: 1px solid var(--line); position: relative; }
+.om-toolbar[data-mode="live"] { box-shadow: inset 0 -2px var(--live); }
+.om-lights { display: flex; gap: 8px; margin-right: var(--space-3); }
+.om-lights i { width: 12px; height: 12px; border-radius: 50%; background: var(--line-control); opacity: .6; }
+.om-scheme { display: inline-flex; align-items: center; gap: 6px; font-weight: 500; padding: 0 6px; height: var(--control-height); border-radius: var(--radius-control); }
+.om-scheme:hover { background: var(--bg-hover); }
+.om-activity { flex: 1; max-width: 460px; margin: 0 auto; height: var(--control-height); display: flex; align-items: center; gap: var(--space-2); padding: 0 10px; background: var(--bg-field); border: 1px solid var(--line); border-radius: var(--radius-control); font-size: 12px; color: var(--text-secondary); min-width: 0; }
+.om-activity b { font-weight: 500; color: var(--text); }
+.om-activity .om-spacer { flex: 1; }
+.om-issue-count { display: inline-flex; align-items: center; gap: 3px; color: var(--warn); }
+
+/* Status bar */
+.om-statusbar { display: flex; align-items: center; gap: var(--space-4); height: 22px; padding: 0 var(--space-3); background: var(--bg-window); border-top: 1px solid var(--line); font-size: 11px; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+.om-statusbar .om-spacer { flex: 1; }
+.om-statusbar[data-mode="live"] { background: var(--live); color: var(--on-live); border-top-color: var(--live); }
+.om-statusbar[data-mode="live"] .om-warn-text { color: var(--on-live); }
+.om-warn-text { color: var(--warn); }
+
+/* Issue banner: Xcode-style inline issue */
+.om-issue { display: flex; align-items: center; gap: var(--space-2); padding: 6px var(--space-3); background: var(--warn-soft); border-bottom: 1px solid var(--line); font-size: 12px; }
+.om-issue .om-icon { color: var(--warn); }
+.om-issue p { margin: 0; flex: 1; min-width: 0; }
+
+/* Haptic feedback ring on a virtual device in the viewport */
+.om-haptic { position: relative; width: 48px; height: 48px; display: grid; place-items: center; color: var(--text); }
+.om-haptic svg { width: 22px; height: 22px; }
+.om-haptic::after { content: ""; position: absolute; inset: 6px; border-radius: 50%; border: 2px solid var(--accent); opacity: 0; }
+.om-haptic.is-firing::after { animation: om-ring var(--om-dur, 120ms) ease-out 2; }
+@keyframes om-ring { from { transform: scale(.7); opacity: 1; } to { transform: scale(1.4); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .om-haptic.is-firing::after { animation: om-hold var(--om-dur, 120ms) linear 1; } }
+@keyframes om-hold { from, to { opacity: 1; transform: scale(1.2); } }
