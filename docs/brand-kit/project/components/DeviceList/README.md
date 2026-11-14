@@ -1,0 +1,3 @@
+# DeviceList
+
+The sidebar list of input devices, styled as a macOS source list. Each row: device icon, name with its `slot` underneath, and on the right its measured rate or its problem. Healthy rows show a green dot and the rate ("50 Hz"). A stale device keeps its row, greys its name, swaps the dot for a hollow ring and says "Stale 1.2 s"; a device sending bad packets shows a square red marker and a count. Virtual and live devices sit in separate groups, which is the only place the packet source shows outside the debug area. Native glyphs are SF Symbols (`airpodspro`, `applewatch`, `iphone`, `applepencil`); the drawn ones here stand in on the web.
