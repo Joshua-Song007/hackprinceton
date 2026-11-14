@@ -123,6 +123,28 @@ public struct FetchedGame: Codable, Sendable, Equatable {
     }
 }
 
+/// One game in the public library, as `GET /api/library` returns it. No scene or scripts: those come from a fetch.
+public struct CatalogEntry: Codable, Sendable, Equatable, Hashable, Identifiable {
+    public var id: String
+    public var title: String
+    public var author: String
+    public var latestVersion: Int
+    /// `screen` or `device` (overview.md Module 7).
+    public var runMode: String
+    /// 1...3, the capability tier the game needs.
+    public var requiredTier: Int
+    public init(
+        id: String, title: String, author: String, latestVersion: Int, runMode: String, requiredTier: Int
+    ) {
+        self.id = id
+        self.title = title
+        self.author = author
+        self.latestVersion = latestVersion
+        self.runMode = runMode
+        self.requiredTier = requiredTier
+    }
+}
+
 public enum CloudError: Error, Sendable, Equatable {
     case notSignedIn
     /// HTTP 401: token missing, expired or rejected. The stored session is cleared.
@@ -166,6 +188,35 @@ public actor CloudClient {
         sessionToken = response.sessionToken
         account = response.account
         return response.account
+    }
+
+    /// Sign in with Apple: exchanges Apple's identity token for a session (`POST /api/accounts/apple`).
+    /// Apple sends the name only at first authorization, so pass it when you have it; the backend keeps the
+    /// stored name when this is nil or blank. Uses the backend's real routes, not the provisional `/v1` ones.
+    @discardableResult
+    public func signInWithApple(identityToken: String, displayName: String? = nil) async throws -> Account {
+        struct Request: Encodable { let identityToken: String; let displayName: String? }
+        struct Response: Decodable {
+            struct Wire: Decodable {
+                let id: String
+                let displayName: String
+                enum CodingKeys: String, CodingKey { case id; case displayName = "display_name" }
+            }
+            let token: String
+            let account: Wire
+        }
+        let response: Response = try await send(
+            "POST", ["api", "accounts", "apple"],
+            body: Request(identityToken: identityToken, displayName: displayName), authorized: false)
+        let signedIn = Account(id: response.account.id, displayName: response.account.displayName)
+        sessionToken = response.token
+        account = signedIn
+        return signedIn
+    }
+
+    /// The public library: every published game, newest publish first (`GET /api/library`).
+    public func listCatalog() async throws -> [CatalogEntry] {
+        try await send("GET", ["api", "library"], body: Optional<GameBundle>.none)
     }
 
     /// Publishes a new version. With `gameId == nil` a new game is created first.
