@@ -20,5 +20,6 @@ let package = Package(
                 .copy("Resources/prelude.js"),
             ]
         ),
+        .testTarget(name: "OmniScriptTests", dependencies: ["OmniScript", .product(name: "OmniRuntime", package: "OmniRuntime")]),
     ]
 )
