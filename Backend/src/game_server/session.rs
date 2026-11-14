@@ -73,7 +73,7 @@ struct Frame {
     data: Value,
 }
 
-type HostFactory = Box<dyn Fn(&str) -> Box<dyn ScriptHost> + Send + Sync>;
+pub type HostFactory =Box<dyn Fn(&str) -> Box<dyn ScriptHost> + Send + Sync>;
 
 struct Player {
     conn: u64,
@@ -186,7 +186,7 @@ impl Registry {
 
 fn registry() -> &'static Registry {
     static R: OnceLock<Registry> = OnceLock::new();
-    R.get_or_init(|| Registry::new(Box::new(|_| Box::new(NoopHost))))
+    R.get_or_init(|| Registry::new(super::script_host::factory()))
 }
 
 async fn play(
