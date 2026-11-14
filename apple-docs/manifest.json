@@ -1,0 +1,652 @@
+[
+  {
+    "file": "raw/coremotion.md",
+    "url": "https://developer.apple.com/documentation/coremotion.md",
+    "retrieved_at": "2026-11-14T03:17:06.388862+00:00",
+    "http_status": 200,
+    "sha256": "6b8ab50a238b6319c81da78030dfe99413cc908a8f50a18ca2c9fa0e2a7a1b65",
+    "source_type": "official-doc",
+    "method": "md",
+    "availability": [],
+    "note": "availability from page header JSON; empty = none listed in file"
+  },
+  {
+    "file": "raw/coremotion__cmattitude.md",
+    "url": "https://developer.apple.com/documentation/coremotion/cmattitude.md",
+    "retrieved_at": "2026-11-14T03:17:11.632789+00:00",
+    "http_status": 200,
+    "sha256": "7d9c6bc31ca50cd5f6d06c6c0aa4a1a9d04d8b14b816fb373e1adc21ce4ed4e2",
+    "source_type": "official-doc",
+    "method": "md",
+    "availability": [
+      "iOS: 4.0.0 -",
+      "iPadOS: 4.0.0 -",
+      "macCatalyst: 13.1.0 -",
+      "macOS: 10.15.0 -",
+      "visionOS: 1.0.0 -",
+      "watchOS: 2.0.0 -"
+    ],
+    "note": "availability from page header JSON; empty = none listed in file"
+  },
+  {
+    "file": "raw/coremotion__cmbatchedsensormanager.md",
+    "url": "https://developer.apple.com/documentation/coremotion/cmbatchedsensormanager.md",
+    "retrieved_at": "2026-11-14T03:17:13.434398+00:00",
+    "http_status": 200,
+    "sha256": "9636ed2ae73dcb3430f7d8d335dbdeef2277a2fe28a5f63a6aee83e46ddf6798",
+    "source_type": "official-doc",
+    "method": "md",
+    "availability": [
+      "iOS: 4.0.0 -",
+      "iPadOS: 4.0.0 -",
+      "macCatalyst: 13.0.0 -",
+      "visionOS: 1.0.0 -",
+      "watchOS: 10.0.0 -"
+    ],
+    "note": "availability from page header JSON; empty = none listed in file"
+  },
+  {
+    "file": "raw/coremotion__cmdevicemotion.md",
+    "url": "https://developer.apple.com/documentation/coremotion/cmdevicemotion.md",
+    "retrieved_at": "2026-11-14T03:17:09.089752+00:00",
+    "http_status": 200,
+    "sha256": "01d687033380a65d071b9bc6afd278aa7f084618054abea40a8fce2cabee3f8e",
+    "source_type": "official-doc",
+    "method": "md",
+    "availability": [
+      "iOS: 4.0.0 -",
+      "iPadOS: 4.0.0 -",
+      "macCatalyst: 13.1.0 -",
+      "macOS: 10.15.0 -",
+      "visionOS: 1.0.0 -",
+      "watchOS: 2.0.0 -"
+    ],
+    "note": "availability from page header JSON; empty = none listed in file"
+  },
+  {
+    "file": "raw/CoreMotion__CMDeviceMotion__attitude.md",
+    "url": "https://developer.apple.com/documentation/CoreMotion/CMDeviceMotion/attitude.md",
+    "retrieved_at": "2026-11-14T03:17:35.501853+00:00",
+    "http_status": 200,
+    "sha256": "1e64c4d0bbe85a6978706adc6be440be3e4ee666ec3e5d700374e2cda9ef5c2e",
+    "source_type": "official-doc",
+    "method": "md",
+    "availability": [
+      "iOS: 4.0.0 -",
+      "iPadOS: 4.0.0 -",
+      "macCatalyst: 13.1.0 -",
+      "macOS: 10.15.0 -",
+      "visionOS: 1.0.0 -",
+      "watchOS: 2.0.0 -"
+    ],
+    "note": "availability from page header JSON; empty = none listed in file"
+  },
+  {
+    "file": "raw/CoreMotion__CMDeviceMotion__gravity.md",
+    "url": "https://developer.apple.com/documentation/CoreMotion/CMDeviceMotion/gravity.md",
+    "retrieved_at": "2026-11-14T03:17:36.366599+00:00",
+    "http_status": 200,
+    "sha256": "ac94ba3868bbe0180679b37c0e59e4ea63001b8132e9b878ce32f1ebdc3ab465",
+    "source_type": "official-doc",
+    "method": "md",
+    "availability": [
+      "iOS: 4.0.0 -",
+      "iPadOS: 4.0.0 -",
+      "macCatalyst: 13.1.0 -",
+      "macOS: 10.15.0 -",
+      "visionOS: 1.0.0 -",
+      "watchOS: 2.0.0 -"
+    ],
+    "note": "availability from page header JSON; empty = none listed in file"
+  },
+  {
+    "file": "raw/CoreMotion__CMDeviceMotion__heading.md",
+    "url": "https://developer.apple.com/documentation/CoreMotion/CMDeviceMotion/heading.md",
+    "retrieved_at": "2026-11-14T03:17:37.314103+00:00",
+    "http_status": 200,
+    "sha256": "81aac8e4d2422f4838bbb88904f198dbe4e6854953c388d8c4c8711749ad346f",
+    "source_type": "official-doc",
+    "method": "md",
+    "availability": [
+      "iOS: 11.0.0 -",
+      "iPadOS: 11.0.0 -",
+      "macCatalyst: 13.1.0 -",
+      "macOS: 10.15.0 -",
+      "watchOS: 4.0.0 -"
+    ],
+    "note": "availability from page header JSON; empty = none listed in file"
+  },
+  {
+    "file": "raw/CoreMotion__CMDeviceMotion__headingAccuracy.md",
+    "url": "https://developer.apple.com/documentation/CoreMotion/CMDeviceMotion/headingAccuracy.md",
+    "retrieved_at": "2026-11-14T03:17:38.168258+00:00",
+    "http_status": 200,
+    "sha256": "b349a57aef77c1e19b239d32d01aaf9967ba282321f980566571996201409b24",
+    "source_type": "official-doc",
+    "method": "md",
+    "availability": [
+      "iOS: 27.0.0 -",
+      "iPadOS: 27.0.0 -",
+      "macCatalyst: 27.0.0 -",
+      "macOS: 10.15.0 -",
+      "visionOS: 27.0.0 -",
+      "watchOS: 27.0.0 -"
+    ],
+    "note": "availability from page header JSON; empty = none listed in file"
+  },
+  {
+    "file": "raw/CoreMotion__CMDeviceMotion__magneticField.md",
+    "url": "https://developer.apple.com/documentation/CoreMotion/CMDeviceMotion/magneticField.md",
+    "retrieved_at": "2026-11-14T03:17:38.922752+00:00",
+    "http_status": 200,
+    "sha256": "0a9426006c5b02c6bb3eb0176d672e35070b77db40a1c44694abb2c1313c1897",
+    "source_type": "official-doc",
+    "method": "md",
+    "availability": [
+      "iOS: 5.0.0 -",
+      "iPadOS: 5.0.0 -",
+      "macCatalyst: 13.1.0 -",
+      "macOS: 10.15.0 -",
+      "visionOS: 1.0.0 -",
+      "watchOS: 2.0.0 -"
+    ],
+    "note": "availability from page header JSON; empty = none listed in file"
+  },
+  {
+    "file": "raw/CoreMotion__CMDeviceMotion__rotationRate.md",
+    "url": "https://developer.apple.com/documentation/CoreMotion/CMDeviceMotion/rotationRate.md",
+    "retrieved_at": "2026-11-14T03:17:39.676182+00:00",
+    "http_status": 200,
+    "sha256": "fb3fec903eb2ba1bff65fb35f2b5a82ec3949d1967c3ca2b66c6030606d71daa",
+    "source_type": "official-doc",
+    "method": "md",
+    "availability": [
+      "iOS: 4.0.0 -",
+      "iPadOS: 4.0.0 -",
+      "macCatalyst: 13.1.0 -",
+      "macOS: 10.15.0 -",
+      "visionOS: 1.0.0 -",
+      "watchOS: 2.0.0 -"
+    ],
+    "note": "availability from page header JSON; empty = none listed in file"
+  },
+  {
+    "file": "raw/coremotion__cmdevicemotion__SensorLocation-swift.enum.md",
+    "url": "https://developer.apple.com/documentation/CoreMotion/CMDeviceMotion/SensorLocation-swift.enum.md",
+    "retrieved_at": "2026-11-14T03:17:34.627910+00:00",
+    "http_status": 200,
+    "sha256": "4628ffbb2a33b4b5c51664baa1b325819b909bae2a24a3b3fdd48e6ce37f5d22",
+    "source_type": "official-doc",
+    "method": "md",
+    "availability": [
+      "iOS: 4.0.0 -",
+      "iPadOS: 4.0.0 -",
+      "macCatalyst: 13.0.0 -",
+      "macOS: 10.15.0 -",
+      "visionOS: 1.0.0 -",
+      "watchOS: 2.0.0 -"
+    ],
+    "note": "availability from page header JSON; empty = none listed in file"
+  },
+  {
+    "file": "raw/CoreMotion__CMDeviceMotion__sensorLocation-swift.property.md",
+    "url": "https://developer.apple.com/documentation/CoreMotion/CMDeviceMotion/sensorLocation-swift.property.md",
+    "retrieved_at": "2026-11-14T03:17:40.519423+00:00",
+    "http_status": 200,
+    "sha256": "6046d4fe506a5c19c0a9be05f15e1e110a39646cc880d9cbf89aa260b79dd3f1",
+    "source_type": "official-doc",
+    "method": "md",
+    "availability": [
+      "iOS: 14.0.0 -",
+      "iPadOS: 14.0.0 -",
+      "macCatalyst: 14.0.0 -",
+      "macOS: 10.15.0 -",
+      "visionOS: 1.0.0 -",
+      "watchOS: 7.0.0 -"
+    ],
+    "note": "availability from page header JSON; empty = none listed in file"
+  },
+  {
+    "file": "raw/CoreMotion__CMDeviceMotion__userAcceleration.md",
+    "url": "https://developer.apple.com/documentation/CoreMotion/CMDeviceMotion/userAcceleration.md",
+    "retrieved_at": "2026-11-14T03:17:41.248614+00:00",
+    "http_status": 200,
+    "sha256": "e09245e634e47f06a117a28e587397f49d2f4784dbc78b8ec3292fbb8efb5220",
+    "source_type": "official-doc",
+    "method": "md",
+    "availability": [
+      "iOS: 4.0.0 -",
+      "iPadOS: 4.0.0 -",
+      "macCatalyst: 13.1.0 -",
+      "macOS: 10.15.0 -",
+      "visionOS: 1.0.0 -",
+      "watchOS: 2.0.0 -"
+    ],
+    "note": "availability from page header JSON; empty = none listed in file"
+  },
+  {
+    "file": "raw/coremotion__cmheadphonemotionmanager.md",
+    "url": "https://developer.apple.com/documentation/coremotion/cmheadphonemotionmanager.md",
+    "retrieved_at": "2026-11-14T03:17:07.349015+00:00",
+    "http_status": 200,
+    "sha256": "8168ef23013938f855df03c2743b81fb8fcc35d17c3034139757065f2f35e534",
+    "source_type": "official-doc",
+    "method": "md",
+    "availability": [
+      "iOS: 14.0.0 -",
+      "iPadOS: 14.0.0 -",
+      "macCatalyst: 14.0.0 -",
+      "macOS: 14.0.0 -",
+      "watchOS: 7.0.0 -"
+    ],
+    "note": "availability from page header JSON; empty = none listed in file"
+  },
+  {
+    "file": "raw/CoreMotion__CMHeadphoneMotionManager__authorizationStatus__.md",
+    "url": "https://developer.apple.com/documentation/CoreMotion/CMHeadphoneMotionManager/authorizationStatus().md",
+    "retrieved_at": "2026-11-14T03:17:42.364264+00:00",
+    "http_status": 200,
+    "sha256": "1247aea4693eeab20be1bc22196ba63560ec2323534824ae043b823d0ea98765",
+    "source_type": "official-doc",
+    "method": "md",
+    "availability": [
+      "iOS: 14.0.0 -",
+      "iPadOS: 14.0.0 -",
+      "macCatalyst: 14.0.0 -",
+      "macOS: 14.0.0 -",
+      "watchOS: 7.0.0 -"
+    ],
+    "note": "availability from page header JSON; empty = none listed in file"
+  },
+  {
+    "file": "raw/CoreMotion__CMHeadphoneMotionManager__delegate.md",
+    "url": "https://developer.apple.com/documentation/CoreMotion/CMHeadphoneMotionManager/delegate.md",
+    "retrieved_at": "2026-11-14T03:17:43.356838+00:00",
+    "http_status": 200,
+    "sha256": "ffd74ec4c92f68244951b9c9651e801d2bd2fd5ff4c0ae772ff5361d845b34cd",
+    "source_type": "official-doc",
+    "method": "md",
+    "availability": [
+      "iOS: 14.0.0 -",
+      "iPadOS: 14.0.0 -",
+      "macCatalyst: 14.0.0 -",
+      "macOS: 14.0.0 -",
+      "watchOS: 7.0.0 -"
+    ],
+    "note": "availability from page header JSON; empty = none listed in file"
+  },
+  {
+    "file": "raw/CoreMotion__CMHeadphoneMotionManager__deviceMotion.md",
+    "url": "https://developer.apple.com/documentation/CoreMotion/CMHeadphoneMotionManager/deviceMotion.md",
+    "retrieved_at": "2026-11-14T03:17:44.250600+00:00",
+    "http_status": 200,
+    "sha256": "99e9f0f2b95f91a4a837907e49a87a1df8e113def4929f02781a53165a4bb98f",
+    "source_type": "official-doc",
+    "method": "md",
+    "availability": [
+      "iOS: 14.0.0 -",
+      "iPadOS: 14.0.0 -",
+      "macCatalyst: 14.0.0 -",
+      "macOS: 14.0.0 -",
+      "watchOS: 7.0.0 -"
+    ],
+    "note": "availability from page header JSON; empty = none listed in file"
+  },
+  {
+    "file": "raw/CoreMotion__CMHeadphoneMotionManager__isConnectionStatusActive.md",
+    "url": "https://developer.apple.com/documentation/CoreMotion/CMHeadphoneMotionManager/isConnectionStatusActive.md",
+    "retrieved_at": "2026-11-14T03:17:44.990734+00:00",
+    "http_status": 200,
+    "sha256": "18bea8bb7d8dbb338a08f0dd5a338b13711775ad7c58578da66aaf557047bbca",
+    "source_type": "official-doc",
+    "method": "md",
+    "availability": [
+      "iOS: 14.0.0 -",
+      "iPadOS: 14.0.0 -",
+      "macCatalyst: 14.0.0 -",
+      "macOS: 14.0.0 -",
+      "watchOS: 7.0.0 -"
+    ],
+    "note": "availability from page header JSON; empty = none listed in file"
+  },
+  {
+    "file": "raw/CoreMotion__CMHeadphoneMotionManager__isDeviceMotionActive.md",
+    "url": "https://developer.apple.com/documentation/CoreMotion/CMHeadphoneMotionManager/isDeviceMotionActive.md",
+    "retrieved_at": "2026-11-14T03:17:45.840878+00:00",
+    "http_status": 200,
+    "sha256": "191553efa933a09b5b1ac430982507e9f74a1a1e0102d18e9a140aec02c9704f",
+    "source_type": "official-doc",
+    "method": "md",
+    "availability": [
+      "iOS: 14.0.0 -",
+      "iPadOS: 14.0.0 -",
+      "macCatalyst: 14.0.0 -",
+      "macOS: 14.0.0 -",
+      "watchOS: 7.0.0 -"
+    ],
+    "note": "availability from page header JSON; empty = none listed in file"
+  },
+  {
+    "file": "raw/CoreMotion__CMHeadphoneMotionManager__isDeviceMotionAvailable.md",
+    "url": "https://developer.apple.com/documentation/CoreMotion/CMHeadphoneMotionManager/isDeviceMotionAvailable.md",
+    "retrieved_at": "2026-11-14T03:17:46.763072+00:00",
+    "http_status": 200,
+    "sha256": "e0dbf0a7e3307d5564699cd08647617150d8eacd518575e79b4f2f2eff6a4cfd",
+    "source_type": "official-doc",
+    "method": "md",
+    "availability": [
+      "iOS: 14.0.0 -",
+      "iPadOS: 14.0.0 -",
+      "macCatalyst: 14.0.0 -",
+      "macOS: 14.0.0 -",
+      "watchOS: 7.0.0 -"
+    ],
+    "note": "availability from page header JSON; empty = none listed in file"
+  },
+  {
+    "file": "raw/CoreMotion__CMHeadphoneMotionManager__startConnectionStatusUpdates__.md",
+    "url": "https://developer.apple.com/documentation/CoreMotion/CMHeadphoneMotionManager/startConnectionStatusUpdates().md",
+    "retrieved_at": "2026-11-14T03:17:47.846502+00:00",
+    "http_status": 200,
+    "sha256": "6eb5d008471111fd5b356b000fbdf5bd9e32c518870edfa96bd007623ab83f6a",
+    "source_type": "official-doc",
+    "method": "md",
+    "availability": [
+      "iOS: 14.0.0 -",
+      "iPadOS: 14.0.0 -",
+      "macCatalyst: 14.0.0 -",
+      "macOS: 14.0.0 -",
+      "watchOS: 7.0.0 -"
+    ],
+    "note": "availability from page header JSON; empty = none listed in file"
+  },
+  {
+    "file": "raw/CoreMotion__CMHeadphoneMotionManager__startDeviceMotionUpdates__.md",
+    "url": "https://developer.apple.com/documentation/CoreMotion/CMHeadphoneMotionManager/startDeviceMotionUpdates().md",
+    "retrieved_at": "2026-11-14T03:17:48.702634+00:00",
+    "http_status": 200,
+    "sha256": "86d6899bb2e64f96e075932286556dff176c204b30a8baf24b02df2ef58737b9",
+    "source_type": "official-doc",
+    "method": "md",
+    "availability": [
+      "iOS: 14.0.0 -",
+      "iPadOS: 14.0.0 -",
+      "macCatalyst: 14.0.0 -",
+      "macOS: 14.0.0 -",
+      "watchOS: 7.0.0 -"
+    ],
+    "note": "availability from page header JSON; empty = none listed in file"
+  },
+  {
+    "file": "raw/CoreMotion__CMHeadphoneMotionManager__startDeviceMotionUpdates_to_withHandler__.md",
+    "url": "https://developer.apple.com/documentation/CoreMotion/CMHeadphoneMotionManager/startDeviceMotionUpdates(to:withHandler:).md",
+    "retrieved_at": "2026-11-14T03:17:49.698433+00:00",
+    "http_status": 200,
+    "sha256": "d025fb4119c45af3b37730ae30786bb6a5d16523bc9db3a86a616831e530c219",
+    "source_type": "official-doc",
+    "method": "md",
+    "availability": [
+      "iOS: 14.0.0 -",
+      "iPadOS: 14.0.0 -",
+      "macCatalyst: 14.0.0 -",
+      "macOS: 14.0.0 -",
+      "watchOS: 7.0.0 -"
+    ],
+    "note": "availability from page header JSON; empty = none listed in file"
+  },
+  {
+    "file": "raw/CoreMotion__CMHeadphoneMotionManager__stopConnectionStatusUpdates__.md",
+    "url": "https://developer.apple.com/documentation/CoreMotion/CMHeadphoneMotionManager/stopConnectionStatusUpdates().md",
+    "retrieved_at": "2026-11-14T03:17:50.471061+00:00",
+    "http_status": 200,
+    "sha256": "5c2a8ef7a5eb2c32437037e2a1c6f0da670e9a0e551069023991540d143a020a",
+    "source_type": "official-doc",
+    "method": "md",
+    "availability": [
+      "iOS: 14.0.0 -",
+      "iPadOS: 14.0.0 -",
+      "macCatalyst: 14.0.0 -",
+      "macOS: 14.0.0 -",
+      "watchOS: 7.0.0 -"
+    ],
+    "note": "availability from page header JSON; empty = none listed in file"
+  },
+  {
+    "file": "raw/CoreMotion__CMHeadphoneMotionManager__stopDeviceMotionUpdates__.md",
+    "url": "https://developer.apple.com/documentation/CoreMotion/CMHeadphoneMotionManager/stopDeviceMotionUpdates().md",
+    "retrieved_at": "2026-11-14T03:17:51.211537+00:00",
+    "http_status": 200,
+    "sha256": "28ced21e6fe8e801879056b8d5f5d1ecebbc80e52e7e0b6f9ddaa7807f299172",
+    "source_type": "official-doc",
+    "method": "md",
+    "availability": [
+      "iOS: 14.0.0 -",
+      "iPadOS: 14.0.0 -",
+      "macCatalyst: 14.0.0 -",
+      "macOS: 14.0.0 -",
+      "watchOS: 7.0.0 -"
+    ],
+    "note": "availability from page header JSON; empty = none listed in file"
+  },
+  {
+    "file": "raw/coremotion__cmheadphonemotionmanagerdelegate.md",
+    "url": "https://developer.apple.com/documentation/coremotion/cmheadphonemotionmanagerdelegate.md",
+    "retrieved_at": "2026-11-14T03:17:08.249619+00:00",
+    "http_status": 200,
+    "sha256": "d8bea21635fc6e0408b71ae656efe8b1669839b86a0b02ba153aec9e048bdb05",
+    "source_type": "official-doc",
+    "method": "md",
+    "availability": [
+      "iOS: 14.0.0 -",
+      "iPadOS: 14.0.0 -",
+      "macCatalyst: 14.0.0 -",
+      "macOS: 14.0.0 -",
+      "watchOS: 7.0.0 -"
+    ],
+    "note": "availability from page header JSON; empty = none listed in file"
+  },
+  {
+    "file": "raw/coremotion__cmmotionmanager.md",
+    "url": "https://developer.apple.com/documentation/coremotion/cmmotionmanager.md",
+    "retrieved_at": "2026-11-14T03:17:12.527226+00:00",
+    "http_status": 200,
+    "sha256": "f7e89b45460f691691608f6e49a449c3b9b5e5d8847f830744be5524bd432edc",
+    "source_type": "official-doc",
+    "method": "md",
+    "availability": [
+      "iOS: 4.0.0 -",
+      "iPadOS: 4.0.0 -",
+      "macCatalyst: 13.1.0 -",
+      "visionOS: 1.0.0 -",
+      "watchOS: 2.0.0 -"
+    ],
+    "note": "availability from page header JSON; empty = none listed in file"
+  },
+  {
+    "file": "raw/coremotion__getting-motion-activity-data-from-headphones.md",
+    "url": "https://developer.apple.com/documentation/coremotion/getting-motion-activity-data-from-headphones.md",
+    "retrieved_at": "2026-11-14T03:17:14.319809+00:00",
+    "http_status": 200,
+    "sha256": "2ea91f3b231c04ccfbc1c9c47b9d4f08a638f47e6ab8892255dc7bc62de88859",
+    "source_type": "official-doc",
+    "method": "md",
+    "availability": [
+      "Xcode: 16.1.0 -",
+      "iOS: 18.0.0 -"
+    ],
+    "note": "availability from page header JSON; empty = none listed in file"
+  },
+  {
+    "file": "raw/gamecontroller.md",
+    "url": "https://developer.apple.com/documentation/gamecontroller.md",
+    "retrieved_at": "2026-11-14T03:17:19.401503+00:00",
+    "http_status": 200,
+    "sha256": "bf0142a6653503184b97dd2365edfa19065294c963e96bf14016a1edfde3b2c1",
+    "source_type": "official-doc",
+    "method": "md",
+    "availability": [
+      "iOS: 7.0.0 -",
+      "iPadOS: 7.0.0 -",
+      "macCatalyst: 13.1.0 -",
+      "macOS: 10.9.0 -",
+      "tvOS: 9.0.0 -",
+      "visionOS: 1.0.0 -"
+    ],
+    "note": "availability from page header JSON; empty = none listed in file"
+  },
+  {
+    "file": "raw/healthkit__hkworkoutsession.md",
+    "url": "https://developer.apple.com/documentation/healthkit/hkworkoutsession.md",
+    "retrieved_at": "2026-11-14T03:17:18.384707+00:00",
+    "http_status": 200,
+    "sha256": "9219277d29a142cf88897f7f242f3cf939c2d9481555fbc278933f4e72a6b9bb",
+    "source_type": "official-doc",
+    "method": "md",
+    "availability": [
+      "iOS: 17.0.0 -",
+      "iPadOS: 17.0.0 -",
+      "macCatalyst: 17.0.0 -",
+      "macOS: -",
+      "visionOS: 1.0.0 -",
+      "watchOS: 2.0.0 -"
+    ],
+    "note": "availability from page header JSON; empty = none listed in file"
+  },
+  {
+    "file": "raw/ios-ipados-release-notes_ios-ipados-27-release-notes.md",
+    "url": "https://developer.apple.com/documentation/ios-ipados-release-notes/ios-ipados-27-release-notes.md",
+    "retrieved_at": "2026-11-14T03:18:00.736563+00:00",
+    "http_status": 200,
+    "sha256": "c544e3d8fee60d339135a0f53a4910d43e5255a62bb2ef066c73d9b36f5f05f3",
+    "source_type": "official-doc",
+    "method": "md",
+    "availability": [],
+    "note": "availability from page header JSON; empty = none listed in file"
+  },
+  {
+    "file": "raw/macos-release-notes_macos-27-release-notes.md",
+    "url": "https://developer.apple.com/documentation/macos-release-notes/macos-27-release-notes.md",
+    "retrieved_at": "2026-11-14T03:18:01.649547+00:00",
+    "http_status": 200,
+    "sha256": "0616186e80cae8071deee10b3010c97b1a07f128b68f340d3497d01f424c118a",
+    "source_type": "official-doc",
+    "method": "md",
+    "availability": [],
+    "note": "availability from page header JSON; empty = none listed in file"
+  },
+  {
+    "file": "raw/nearbyinteraction.md",
+    "url": "https://developer.apple.com/documentation/nearbyinteraction.md",
+    "retrieved_at": "2026-11-14T03:17:20.295410+00:00",
+    "http_status": 200,
+    "sha256": "21fe0b895c89391cd090e89d0a3bedf06d959de8f095c8ff445912b15009c3f1",
+    "source_type": "official-doc",
+    "method": "md",
+    "availability": [
+      "Mac Catalyst: 14.0.0 -",
+      "iOS: 14.0.0 -",
+      "iPadOS: 14.0.0 -",
+      "macOS: 11.0.0 -",
+      "watchOS: 8.0.0 -"
+    ],
+    "note": "availability from page header JSON; empty = none listed in file"
+  },
+  {
+    "file": "raw/vision__vndetecthumanbodypose3drequest.md",
+    "url": "https://developer.apple.com/documentation/vision/vndetecthumanbodypose3drequest.md",
+    "retrieved_at": "2026-11-14T03:17:15.935798+00:00",
+    "http_status": 200,
+    "sha256": "b8070d4a5ec24c05465fcc51f5dd5d737b700fcb257572d360a98568e7afa0aa",
+    "source_type": "official-doc",
+    "method": "md",
+    "availability": [
+      "iOS: 17.0.0 -",
+      "iPadOS: 17.0.0 -",
+      "macCatalyst: 17.0.0 -",
+      "macOS: 14.0.0 -",
+      "tvOS: 17.0.0 -",
+      "visionOS: 1.0.0 -"
+    ],
+    "note": "availability from page header JSON; empty = none listed in file"
+  },
+  {
+    "file": "raw/vision__vndetecthumanbodyposerequest.md",
+    "url": "https://developer.apple.com/documentation/vision/vndetecthumanbodyposerequest.md",
+    "retrieved_at": "2026-11-14T03:17:15.084141+00:00",
+    "http_status": 200,
+    "sha256": "cb7acfca991b287435b2d7e128715d40489977597037d8dff585b5ac0e7fcd53",
+    "source_type": "official-doc",
+    "method": "md",
+    "availability": [
+      "iOS: 14.0.0 -",
+      "iPadOS: 14.0.0 -",
+      "macCatalyst: 14.0.0 -",
+      "macOS: 11.0.0 -",
+      "tvOS: 14.0.0 -",
+      "visionOS: 1.0.0 -"
+    ],
+    "note": "availability from page header JSON; empty = none listed in file"
+  },
+  {
+    "file": "raw/watchconnectivity.md",
+    "url": "https://developer.apple.com/documentation/watchconnectivity.md",
+    "retrieved_at": "2026-11-14T03:17:16.810324+00:00",
+    "http_status": 200,
+    "sha256": "3ec11ad80da94ea3fe3814ca3912713ce56b63f297ad0da48de809eb6c5ea014",
+    "source_type": "official-doc",
+    "method": "md",
+    "availability": [],
+    "note": "availability from page header JSON; empty = none listed in file"
+  },
+  {
+    "file": "raw/watchconnectivity__wcsession.md",
+    "url": "https://developer.apple.com/documentation/watchconnectivity/wcsession.md",
+    "retrieved_at": "2026-11-14T03:17:17.679162+00:00",
+    "http_status": 200,
+    "sha256": "4d024bd8a38a7a063b7da6b0223b4854d849828e8d89fb97d0a9007a5c3513fc",
+    "source_type": "official-doc",
+    "method": "md",
+    "availability": [
+      "iOS: 9.0.0 -",
+      "iPadOS: 9.0.0 -",
+      "macCatalyst: 9.0.0 -",
+      "visionOS: 1.0.0 -",
+      "watchOS: 2.0.0 -"
+    ],
+    "note": "availability from page header JSON; empty = none listed in file"
+  },
+  {
+    "file": "raw/wwdc2023_10179.html",
+    "url": "https://developer.apple.com/videos/play/wwdc2023/10179/",
+    "retrieved_at": "2026-11-14T03:17:57.276751+00:00",
+    "http_status": 200,
+    "sha256": "a1f113dca2aa1e4a59007d00ae6874933d2eb920b14ff86f577ab85d0070677c",
+    "source_type": "wwdc",
+    "method": "html page incl. full transcript",
+    "availability": [],
+    "note": ""
+  },
+  {
+    "file": null,
+    "url": "https://developer.apple.com/forums/thread/844940",
+    "source_type": "forum",
+    "label": "NON-OFFICIAL",
+    "http_status": 200,
+    "status": "FAILED: served 'Security Verification' bot-challenge page, not saved"
+  },
+  {
+    "file": null,
+    "url": "https://developer.apple.com/forums/thread/113537",
+    "source_type": "forum",
+    "label": "NON-OFFICIAL",
+    "http_status": 200,
+    "status": "FAILED: served 'Security Verification' bot-challenge page, not saved"
+  },
+  {
+    "file": null,
+    "url": "https://developer.apple.com/documentation/coremotion/cmdevicemotion/sensorlocation.md",
+    "source_type": "official-doc",
+    "http_status": 404,
+    "status": "FAILED: wrong path; correct path is .../cmdevicemotion/SensorLocation-swift.enum (saved)"
+  }
+]
