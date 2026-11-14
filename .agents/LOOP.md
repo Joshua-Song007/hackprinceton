@@ -37,7 +37,7 @@ Models: orchestrator `claude-opus-5-5`, workers and all subagents `claude-sonnet
 2. Worker builds, tests, reviews, commits, pushes its branch. Report format is fixed in `AGENTS.md`.
 3. Orchestrator confirms the push (pushes itself only if the worker did not), opens the PR, runs `review-pr.sh`, posts the output as a comment.
 4. Flags or CHANGES NEEDED: the worker is relaunched on the same branch with the findings. Maximum 3 rounds (REV-08); after that the issue gets `needs-human` and the dead ends are written in an issue comment (HAR-06, kept per issue so parallel agents never share a file).
-5. Green, 0 flags, APPROVE: the orchestrator merges its own PR (squash), closes the issue with `done`, and batches the `docs/agents/plan.md` tick and any divergence note into a `plan-sync` PR. Only the orchestrator edits `plan.md`; `.claude/` stays human-only.
+5. Green, 0 flags, APPROVE: the orchestrator merges its own PR (squash), closes the issue with `done`, and adds the `plan.md` tick and any divergence note to the `Plan sync` issue. `.claude/` is human-only: no agent ever edits it, so Tien applies the ticks.
 
 ## Discrepancies: when the user is told, and how
 Rows are raised as GitHub issues. The orchestrator's issues mention `@tienvu-lol`; the two that `loop.sh` opens itself (`[permission]` and `[loop]`) carry the `needs-human` label and an `@tienvu-lol` mention in the body. GitHub notifies by email and mobile only if Tien watches the repo. Mac laptops also show a local banner from `loop.sh`; Windows laptops only print a `NOTIFY:` line in `loop.out`. The agent keeps working on something else (smallest reversible default marked `[provisional: needs-tien-review]`).
@@ -74,7 +74,7 @@ Verified here means checked against the installed CLI (2.1.322) or the Claude Co
 | SEC-01/05: deterministic boundaries, deny rules not prompts | **Adopted** |
 | SEC-02/03: sandbox/VM, credentials outside | **Not met.** Laptops, real `gh` tokens. See limits |
 | SEC-15: protect `main` | **Not verified** (see limits) |
-| HAR-01/02: initializer plus JSON feature list | **Rejected.** `plan.md` already is the feature list; only the orchestrator ticks boxes, in `plan-sync` PRs, which is close to "change only `passes`" |
+| HAR-01/02: initializer plus JSON feature list | **Rejected.** `plan.md` already is the feature list; agents cannot edit it at all, which is stronger than "change only `passes`" |
 | HAR-05: standard session start routine | **Adopted** in `AGENTS.md` (read spec, check item against `plan.md`, run verify) |
 | HAR-13: worktree per task | **Adopted** (`run.sh`) |
 | CTX-05: `CLAUDE.md` under 200 lines | **Violated**, see limits |

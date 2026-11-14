@@ -5,7 +5,7 @@
 
 # Development Status
 - **Current Task:** @.claude/currentDev.md
-- **Active Plan:** @docs/agents/plan.md
+- **Active Plan:** @.claude/plan.md
 
 - **Autonomous Agents:** .agents/AGENTS.md (autonomous runs only; manual sessions skip it)
 
