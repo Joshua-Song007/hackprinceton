@@ -35,8 +35,9 @@ fn sessions() -> &'static Mutex<HashMap<String, Session>> {
     S.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
-/// 256-bit opaque token (hex). Each `RandomState` has fresh OS-random SipHash keys; four of them
-/// hash a counter and the clock, so the output is unpredictable without knowing those keys.
+/// 256-bit opaque token (hex). std seeds `RandomState` keys from the OS once per thread and bumps
+/// them per instance; four instances hash a counter and the clock. Not a CSPRNG: dev sign-in only.
+/// Before any real sign-in uses this, switch to `getrandom`/`rand` (OS CSPRNG).
 fn new_token() -> String {
     static COUNTER: AtomicU64 = AtomicU64::new(0);
     let n = COUNTER.fetch_add(1, Ordering::Relaxed);
