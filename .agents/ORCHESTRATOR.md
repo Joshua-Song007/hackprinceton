@@ -80,10 +80,10 @@ Worker logs are in `../logs/<slug>.json` (fields `result`, `is_error`, `subtype`
 - **Dirty worktrees:** run `cleanup.sh`. A stale `../.setup.lock` needs a human to `rmdir` it (`run.sh` stops with a message after 2 minutes).
 
 ## Permissions
-Tien's decision: orchestrators run locally on their laptop with full GitHub access (`gh`: PRs, reviews, comments, issues, labels, API), may push any branch including `main`, and may force-push. Still denied: editing `.claude/`, `CLAUDE.md`, `.agents/`, `.github/`, `gh repo delete`, `gh secret`, `gh ssh-key|gpg-key`, `git reset|rebase|checkout|restore`, `rm -rf`, `sudo`, `curl`, `wget`. Permission is not the default flow:
-- The normal path is a PR from an `agent/<laptop>/*` branch. Push to `main` directly only when no PR path exists (a broken `main` that CI cannot fix through a PR, a stuck merge) or when Tien's `DECISION:` comment says so.
-- Force-push only with `--force-with-lease`, only on branches you created, or on `main` under a `DECISION:` from Tien. Never rewrite history that another laptop has already pulled.
-- Every push to `main` and every force-push gets one line in the `Agent status` issue: what, why, the commit before and after.
+Tien's decision: orchestrators run locally on their laptop with full GitHub access (`gh`: PRs, reviews, comments, issues, labels, API), may push any branch except `main`, and may force-push their own branches. Still denied: editing `.claude/`, `CLAUDE.md`, `.agents/`, `.github/`, `gh repo delete`, `gh secret`, `gh ssh-key|gpg-key`, `git reset|rebase|checkout|restore`, `rm -rf`, `sudo`, `curl`, `wget`. Permission is not the default flow:
+- Every change to `main` is a squash merge of a PR from a branch (`gh pr merge <n> --squash`). Never push `main` directly, even when `main` is broken: fix it through a PR. `settings.orch.json` denies `git push` to `main`.
+- Force-push only with `--force-with-lease` and only on branches you created. Never rewrite history that another laptop has already pulled.
+- Every force-push gets one line in the `Agent status` issue: what, why, the commit before and after.
 
 ## Labels
 `ready`, `claimed:<laptop>`, `in-review`, `blocked`, `needs-tien`, `needs-human`, `URGENT-HUMAN` (red, monumental problems only; step 7b), `human-hold`, `contract-change`, `needs-mac-verify`, `conflict`, `tooling`, `ci`, `flaky`, `done`. Create the missing ones with `gh label create` on first run. Never touch an issue labeled `human-hold`.
