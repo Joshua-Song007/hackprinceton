@@ -12,6 +12,7 @@ final class CompanionModel {
     private let client: BridgeClient
     private let motion = MotionStreamer()
     private let haptics = HapticPlayer()
+    private let watch: WatchConnectivityReceiver
 
     init() {
         let isPad = UIDevice.current.userInterfaceIdiom == .pad
@@ -29,7 +30,9 @@ final class CompanionModel {
             onStatus: { status in Task { @MainActor in box.model?.status = status } },
             onOutput: { command in Task { @MainActor in box.model?.handle(command) } }
         )
+        watch = WatchConnectivityReceiver(client: client)
         box.model = self
+        watch.start()
     }
 
     /// Output commands are addressed to a device id or a slot.

@@ -100,6 +100,16 @@ final class BridgeClient: @unchecked Sendable {
         }
     }
 
+    /// Sends a packet stamped by another device (the Watch, relayed through this phone) as-is.
+    /// Silently dropped while not connected.
+    func forward(_ packet: UsisPacket) {
+        queue.async { [self] in
+            guard let c = connection, c.state == .ready, inFlight < Self.maxInFlight else { return }
+            guard let data = try? encoder.encode(packet) else { return }
+            write(LineFraming.frame(data), on: c)
+        }
+    }
+
     // MARK: Link (queue-confined)
 
     private func teardown() {
