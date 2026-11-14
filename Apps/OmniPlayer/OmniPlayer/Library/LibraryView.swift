@@ -4,9 +4,114 @@ import SwiftUI
 
 struct LibraryView: View {
     let model: PlayerModel
-    @State private var playableOnly = false
+
+    private enum LibraryFilter: Hashable { case all, playable }
+
+    @State private var filter: LibraryFilter? = .all
+    #if os(macOS)
+    @State private var path = NavigationPath()
+    #endif
+
+    private var playableOnly: Bool { filter == .playable }
 
     var body: some View {
+        screen
+            .task { await model.library.load() }
+            .onChange(of: model.library.state) { _, state in
+                if state == .failed(.signedOut) { Task { await model.sessionExpired() } }
+            }
+    }
+
+    #if os(macOS)
+    @ViewBuilder private var screen: some View {
+        NavigationSplitView {
+            sidebar
+        } detail: {
+            NavigationStack(path: $path) {
+                content
+                    .navigationTitle(playableOnly ? "Playable on this device" : "All games")
+                    .navigationDestination(for: CatalogEntry.self) { GameDetailView(entry: $0, model: model) }
+                    .toolbar {
+                        ToolbarItem(placement: .primaryAction) {
+                            Button {
+                                Task { await model.library.refresh() }
+                            } label: {
+                                Label("Refresh", systemImage: "arrow.clockwise")
+                            }
+                            .disabled(model.library.isLoading)
+                            .help("Refresh library")
+                            .keyboardShortcut("r")
+                        }
+                    }
+            }
+        }
+        .frame(minWidth: 760, minHeight: 520)
+        .onChange(of: filter) { path = NavigationPath() }
+        .onChange(of: model.library.query) { path = NavigationPath() }
+    }
+
+    @ViewBuilder private var sidebar: some View {
+        @Bindable var library = model.library
+        List(selection: $filter) {
+            Section("Library") {
+                Label("All games", systemImage: "square.grid.2x2")
+                    .badge(Text("\(library.entries.count)"))
+                    .tag(LibraryFilter.all)
+                Label("Playable here", systemImage: "checkmark.circle")
+                    .badge(Text("\(playableCount)"))
+                    .help("Playable on this device")
+                    .tag(LibraryFilter.playable)
+            }
+        }
+        .listStyle(.sidebar)
+        .searchable(text: $library.query, placement: .sidebar, prompt: "Search games")
+        .navigationSplitViewColumnWidth(min: 220, ideal: 240, max: 300)
+        .safeAreaInset(edge: .bottom, spacing: 0) { accountRow }
+    }
+
+    private var playableCount: Int {
+        let library = model.library
+        return library.entries.filter { library.playability(of: $0).isPlayable }.count
+    }
+
+    private var accountName: String {
+        if case .signedIn(let account) = model.phase, !account.displayName.isEmpty { return account.displayName }
+        return "Signed in"
+    }
+
+    private var accountRow: some View {
+        VStack(spacing: 0) {
+            Divider()
+            Menu {
+                Text(accountName)
+                Button("Sign out", role: .destructive) { Task { await model.signOut() } }
+            } label: {
+                HStack(spacing: 10) {
+                    Text(String(accountName.prefix(1)).uppercased())
+                        .font(.caption.bold())
+                        .frame(width: 24, height: 24)
+                        .background(Color.accentColor.opacity(0.2), in: Circle())
+                        .accessibilityHidden(true)
+                    Text(accountName).lineLimit(1)
+                    Spacer()
+                    Image(systemName: "chevron.up.chevron.down")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .accessibilityHidden(true)
+                }
+                .contentShape(Rectangle())
+            }
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .accessibilityLabel("Account, \(accountName)")
+        }
+        .background(.bar)
+    }
+    #else
+    @ViewBuilder private var screen: some View {
         @Bindable var library = model.library
         NavigationStack {
             content
@@ -28,7 +133,7 @@ struct LibraryView: View {
                             "Playable only",
                             systemImage: playableOnly
                                 ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle",
-                            isOn: $playableOnly
+                            isOn: Binding(get: { playableOnly }, set: { filter = $0 ? .playable : .all })
                         )
                         .toggleStyle(.button)
                         .labelStyle(.titleAndIcon)
@@ -47,11 +152,8 @@ struct LibraryView: View {
                     }
                 }
         }
-        .task { await model.library.load() }
-        .onChange(of: model.library.state) { _, state in
-            if state == .failed(.signedOut) { Task { await model.sessionExpired() } }
-        }
     }
+    #endif
 
     /// Search matches, playable games first; server order is kept inside each group.
     private var visible: [CatalogEntry] {
@@ -94,7 +196,7 @@ struct LibraryView: View {
                     ? "Games that need a controller or an iPhone are hidden."
                     : "No playable game matches “\(query)”.")
             } actions: {
-                Button("Show all games") { playableOnly = false }
+                Button("Show all games") { filter = .all }
             }
         } else {
             ScrollView {
