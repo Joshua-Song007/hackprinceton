@@ -1,18 +1,78 @@
 name: verify
 on:
   pull_request:
-  push:
-    branches: [main]
+permissions:
+  contents: read
+concurrency:
+  group: verify-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
 jobs:
-  swift:
-    runs-on: macos-15
-    steps:
-      - uses: actions/checkout@v4
-      - run: bash .agents/scripts/verify-swift.sh
-      - run: bash .agents/scripts/verify-nonswift.sh
-      - run: bash .agents/scripts/check-docs.sh
-  backend:
+  changes:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      swift: ${{ steps.scope.outputs.swift }}
+      backend: ${{ steps.scope.outputs.backend }}
+      nonswift: ${{ steps.scope.outputs.nonswift }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - id: scope
+        run: python3 .agents/scripts/ci-scope.py
+  swift:
+    needs: changes
+    if: needs.changes.outputs.swift == 'true'
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/cache@v4
+        with:
+          path: Packages/*/.build
+          key: ${{ runner.os }}-swift-${{ hashFiles('Packages/**/*.swift', 'Packages/**/Package.resolved') }}
+          restore-keys: ${{ runner.os }}-swift-
+      - run: bash .agents/scripts/verify-swift.sh
+  backend:
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: Backend -> target
       - run: bash .agents/scripts/verify-backend.sh
+  nonswift:
+    needs: changes
+    if: needs.changes.outputs.nonswift == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - run: bash .agents/scripts/verify-nonswift.sh
+  verify:
+    if: always()
+    needs: [changes, swift, backend, nonswift]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: |
+          python3 - <<'PY'
+          import json, os
+          jobs = json.loads(os.environ['NEEDS'])
+          assert jobs['changes']['result'] == 'success', 'Scope selection failed'
+          for name in ('swift', 'backend', 'nonswift'):
+              selected = jobs['changes']['outputs'][name] == 'true'
+              assert jobs[name]['result'] == ('success' if selected else 'skipped'), name + ' did not complete as selected'
+          PY
