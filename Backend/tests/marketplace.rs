@@ -93,3 +93,32 @@ async fn seeded_plugin_is_listed_bundled_without_skipped_files_and_counts_instal
     }
     let _ = std::fs::remove_dir_all(&seed_dir);
 }
+
+#[tokio::test]
+async fn bundle_keeps_lockfile_up_to_1_mib() {
+    let seed_dir = std::env::temp_dir().join(format!("omni-plugin-limit-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&seed_dir);
+    let plugin = seed_dir.join("limit-plugin");
+    let manifest = json!({"id": "limit-plugin", "name": "Limit", "version": "0.1.0",
+        "author": "Omni", "category": "agents", "description": "size limit"});
+    write(&plugin, "omni-plugin.json", manifest.to_string().as_bytes());
+    write(&plugin, "uv.lock", &vec![b'a'; 400 * 1024]);
+    write(&plugin, "exact.txt", &vec![b'a'; 1024 * 1024]);
+    write(&plugin, "over.txt", &vec![b'a'; 1024 * 1024 + 1]);
+
+    let db = Db::Mem(MemStore::default());
+    seed(&db, &seed_dir).await;
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    let router = app_with_studio(Some(db), None);
+    tokio::spawn(async move {
+        let _ = axum::serve(listener, router).await;
+    });
+
+    let (st, bundle) = call(addr, "GET", "/api/plugins/limit-plugin/bundle").await;
+    assert_eq!(st, 200);
+    let mut names: Vec<&str> = bundle["files"].as_object().unwrap().keys().map(String::as_str).collect();
+    names.sort();
+    assert_eq!(names, ["exact.txt", "omni-plugin.json", "uv.lock"]);
+    let _ = std::fs::remove_dir_all(&seed_dir);
+}
