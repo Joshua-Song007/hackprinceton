@@ -1,6 +1,7 @@
 // Starts the HTTP API; the WebSocket game server (/play) and /api routes are added by later 4.2 items.
 mod api;
 mod db;
+mod game_server;
 
 use axum::{routing::get, Router};
 use sqlx::postgres::{PgPool, PgPoolOptions};
@@ -22,6 +23,7 @@ pub fn app(db: Option<PgPool>) -> Router {
         .route("/health", get(health))
         .merge(api::accounts::routes())
         .merge(api::games::routes())
+        .merge(game_server::session::routes())
         .with_state(AppState { db })
 }
 
