@@ -21,6 +21,7 @@ Instructions and tooling for autonomous agents. `.claude/` is human-only: agents
 - `scripts/verify-backend.sh` — Rust backend (`Backend/`): `cargo build` + `cargo test`; any OS; passes while `Backend/Cargo.toml` does not exist. Database tests skip without `DATABASE_URL`.
 - `scripts/verify-swift.sh` — the checks (`swift build` + `swift test` per package). Same script runs in CI, the stop-hook, and by hand.
 - `scripts/stop-gate.sh` — stop-hook: agent can't finish while checks fail for the packages it changed and their dependents.
+- `scripts/health.sh [--only main|prs|claims|issues|mission|labels] [--hours N]` — repo health from GitHub alone: CI on `main`, open agent PRs per laptop, dead `claimed:*` issues (no open PR names them, idle N h, default 3), `needs-tien` / `needs-human` / `URGENT-HUMAN` counts, the `Mission` issue, missing labels. Read-only; exits 1 when something needs attention.
 - `scripts/verify-pr.sh <n>` — verifies a PR's exact head commit in a throwaway worktree (Mac: Swift + non-Swift checks; Windows: non-Swift only); last line `MAC-VERIFIED <sha>`, `VERIFIED <sha>` or `VERIFY-FAILED <sha>`.
 - `scripts/review-pr.sh <n>` — mechanical first-pass review of an agent PR (scope, deps vs graph, purity, hardware-blind rule, comments, tests, CI). Read-only.
 - `scripts/cleanup.sh [--dry-run] [--closed]` — remove worktrees and branches of merged agent PRs (skips dirty or unmerged work).
