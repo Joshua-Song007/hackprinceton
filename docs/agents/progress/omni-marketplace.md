@@ -95,3 +95,4 @@ DEMO-TIMED: pending - human step. No browser automation on this machine and no m
 - 2026-11-14 P3-demo (headless Run-local check of the fake scripts) launched via lanes-loop on ws4; prespawn 0.68 override (brief names other files only as read inputs), route medium.
 - 2026-11-14 P3-demo test: Run local with the real sandbox pulses the Blank Cube and sends remote 'tag' {entity:'Cube',tag:'looked'}; review APPROVE, Jev 0.94, merged 8e4e923.
 - 2026-11-14 dod.sh on e0e1825: ok backend, web, typecheck, tauri, plugin, health, demo-path, tests; FAIL demo-timed only (human step).
+- 2026-11-14 Merged origin/main c44e6ce (Swift only, no overlap) -> 6ba3063. hygiene.sh OK. Issue #160, integration PR #161 -> main opened for human review. Teardown deferred: dod.sh stays red on DEMO-TIMED until the human demo; after merge a worker adds the WISHLIST to .claude/plan.md (user-authorized, in that order).
