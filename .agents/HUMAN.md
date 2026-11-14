@@ -59,7 +59,7 @@ gh pr diff <n>                            # read the logic yourself; nothing aut
 gh pr checkout <n>                        # try the branch locally
 gh pr merge <n> --squash --delete-branch  # merge ONE at a time when you're happy
 Orchestrators merge their own PRs when CI is green, review-pr.sh has 0 flags and the reviewer approved (ORCHESTRATOR.md step 2), review every laptop's PRs, and have full gh plus push to main and force-push rights (ORCHESTRATOR.md Permissions). To stop merging, add "Bash(gh pr merge*)" to the deny list in .agents/settings.orch.json, or label the PR human-hold.
-.claude/ is human-only: agents never edit it. The orchestrator lists plan.md ticks and divergence notes in the "Plan sync" issue; you apply them. Design decisions go in overview.md, by you only.
+.claude/ is human-only: agents never edit it. The orchestrators tick `docs/agents/plan.md` boxes and add divergence notes themselves, in `plan-sync` PRs; you review them. Design decisions go in overview.md, by you only.
 
 Running the checks by hand
 
