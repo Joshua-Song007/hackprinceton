@@ -6,7 +6,8 @@ import OmniInput
 /// Simulated Apple Pencil, slot `stylus`. In contact it emits at 240 Hz with pressure 0–1 and barrel roll; hovering it
 /// emits at 60 Hz with roll 0 (a real Pencil reports no roll while hovering; the `PencilState.roll` field is not optional).
 /// Units follow `PencilState` today: `tip` and `hover` in meters, `roll` in radians (plan.md flags the real units as undecided).
-public final class VirtualPencil: VirtualDevice, @unchecked Sendable {
+// @unchecked Sendable: all mutable state lives behind a Mutex; the justification in VirtualDevice.swift applies.
+public final class VirtualPencil:VirtualDevice, @unchecked Sendable {
     private struct PencilData {
         var inContact = false
         var tip = Vector3(0, 0, 0)

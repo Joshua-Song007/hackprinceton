@@ -5,7 +5,8 @@ import OmniInput
 
 /// Simulated iPhone: orientation, acceleration (m/s², device frame in Omni axes) and touch, slot `pocket` by default, 100 Hz.
 /// Touch events are queued and delivered in the next packet(s); coordinates are clamped to 0–1.
-public final class VirtualPhone: VirtualDevice, @unchecked Sendable {
+// @unchecked Sendable: all mutable state lives behind a Mutex; the justification in VirtualDevice.swift applies.
+public final class VirtualPhone:VirtualDevice, @unchecked Sendable {
     private struct PhoneState {
         var accel = Vector3(0, 0, 0)
         var touches: [TouchPoint] = []
