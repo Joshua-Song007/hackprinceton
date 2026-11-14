@@ -14,6 +14,16 @@ First time on a laptop (installs missing tools, reports what only you can do; --
 
 .agents/scripts/setup.sh <laptop>
 
+Overnight launch (paste into a Claude Code session opened on each laptop, after the Mission issue exists; Macs first)
+
+follow .agents/BOOTSTRAP.md
+Laptop: <github handle, lowercase>       # must be a row in the ORCHESTRATOR.md table
+OS: <mac | windows>                      # must match uname -s
+Clone: <~/hack/omni>                     # outside OneDrive / iCloud / Dropbox
+Night settings: LOOP_DELAY=<300> IDLE_DELAY=<1800>      # add these to the loop.sh start command
+If a step fails: <stop and report | fix what is listed as fixable, retry once, then report>
+Report back: laptop, OS, lane, setup and verify results, where the loop runs, and the first cycle's STATUS line
+
 Running agents (one clone per laptop, outside OneDrive; Swift work needs a Mac, Windows laptops run the non-Swift lane only)
 
 export OMNI_LAPTOP=<name>                                               # lowercase letters, digits, dashes

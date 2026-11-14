@@ -88,9 +88,21 @@ The goal per laptop: every `plan.md` item of its lane in phases 1 to 5 merged wi
 | Start or restart the loop on a laptop (manual Claude session) | "follow .agents/BOOTSTRAP.md" | `BOOTSTRAP.md`, then the files it names |
 | A laptop looks stuck or wrong | "read .agents/LOOP.md and the Debugging section of .agents/ORCHESTRATOR.md, then check the logs in ../omni.worktrees/logs" | `LOOP.md`, `ORCHESTRATOR.md`, the logs |
 | Change a rule or a permission | edit `AGENTS.md`, `ORCHESTRATOR.md` or `settings*.json`, run `check-docs.sh`, push | the file itself |
+| Set tonight's goals and limits | create or edit the issue titled `Mission` (template below) | GitHub only; every orchestrator reads it each cycle |
 | Steer a running agent | a `DECISION:` comment on its issue, or the `human-hold` label | GitHub only |
 | Stop | add `STOP` or `STOP-<laptop>` to `main` | nothing |
 Agents themselves are never pointed at anything by hand: `run.sh` appends `AGENTS.md` (and `ORCHESTRATOR.md` for the orchestrator) to their system prompt.
+
+## Mission issue template
+One open issue titled `Mission`, written by a listed handle. Orchestrators read it every cycle (ORCHESTRATOR.md step 1a). Edit it to change course; add `DECISION:` comments for one-off rulings.
+```
+**Goal tonight:** <what "done" means, e.g. all Phase 1.5 OmniRuntime items merged with CI green>
+**Priority order:** <plan.md items or sections, first to last; per laptop if they differ>
+**Do not touch:** <paths, items, or packages that stay off limits tonight>
+**Merge policy:** <auto-merge as ORCHESTRATOR.md says | open PRs only, nobody merges | merge only: <items>>
+**Stop and escalate if:** <e.g. main red twice in a row, three needs-human issues, anything touching Package.swift edges>
+**Notes agents cannot read from the repo:** <decisions made outside GitHub>
+```
 
 ## How to prompt the loop
 The orchestrator's launch prompt is fixed (`Run one orchestrator cycle.`). Do not customize it. Steer with GitHub, not chat:
