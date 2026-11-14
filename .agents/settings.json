@@ -5,6 +5,7 @@
       "Edit",
       "Write",
       "Bash(swift *)",
+      "Bash(cargo *)",
       "Bash(.agents/scripts/*)",
       "Bash(git status*)",
       "Bash(git diff*)",
@@ -57,14 +58,22 @@
       "Bash(sudo*)",
       "Bash(curl*)",
       "Bash(wget*)",
-      "Read(**/.agents/HUMAN.md)"
+      "Read(**/.agents/HUMAN.md)",
+      "Bash(cargo install*)",
+      "Bash(cargo publish*)",
+      "Bash(cargo login*)",
+      "Read(**/.env*)"
     ]
   },
   "hooks": {
     "Stop": [
       {
         "hooks": [
-          { "type": "command", "command": "\"$CLAUDE_PROJECT_DIR\"/.agents/scripts/stop-gate.sh", "timeout": 900 }
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.agents/scripts/stop-gate.sh",
+            "timeout": 900
+          }
         ]
       }
     ]

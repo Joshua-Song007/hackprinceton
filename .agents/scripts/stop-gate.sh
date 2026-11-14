@@ -10,7 +10,7 @@ if git rev-parse --verify -q origin/main >/dev/null; then
 else
   changed='Packages/OmniCore/x'   # no baseline: OmniCore pulls in every dependent
 fi
-changed=$(grep -v '/\.build/' <<<"$changed")   # build output is never a source change
+changed=$(grep -v -E '/\.build/|^Backend/target/' <<<"$changed")   # build output is never a source change
 
 fail=""
 run() { out=$("$@" 2>&1) || fail+="== $* ==
@@ -33,6 +33,7 @@ if [ "$(uname -s)" = Darwin ]; then
   fi
 fi
 grep -Eq '^(Games|Schema|Recordings)/|\.(js|json|jsonl)$' <<<"$changed" && run .agents/scripts/verify-nonswift.sh
+grep -q '^Backend/' <<<"$changed" && run .agents/scripts/verify-backend.sh
 
 if [ -z "$fail" ]; then rm -f "$count_file"; exit 0; fi
 n=$(( $(cat "$count_file" 2>/dev/null || echo 0) + 1 )); echo "$n" > "$count_file"

@@ -18,13 +18,14 @@ Instructions and tooling for autonomous agents. `.claude/` is human-only: agents
 - `scripts/loop.sh` — per-laptop overnight loop (`OMNI_ROLE=orch|integrator`): agent cycle, backoff, STOP check, build-to-maintain phase switch for the integrator, failure issue + local notification.
 - `scripts/setup.sh <laptop> [--check]` — installs and checks the tools the loop needs (Homebrew on macOS, winget on Windows); lists what only a human can do.
 - `scripts/verify-nonswift.sh` — JSON / JSONL validity and JS syntax; runs on macOS and Windows (the Windows lanes' check, also run in CI).
+- `scripts/verify-backend.sh` — Rust backend (`Backend/`): `cargo build` + `cargo test`; any OS; passes while `Backend/Cargo.toml` does not exist. Database tests skip without `DATABASE_URL`.
 - `scripts/verify-swift.sh` — the checks (`swift build` + `swift test` per package). Same script runs in CI, the stop-hook, and by hand.
 - `scripts/stop-gate.sh` — stop-hook: agent can't finish while checks fail for the packages it changed and their dependents.
 - `scripts/verify-pr.sh <n>` — macOS: verifies a PR's exact head commit in a throwaway worktree; last line `MAC-VERIFIED <sha>` or `VERIFY-FAILED <sha>`.
 - `scripts/review-pr.sh <n>` — mechanical first-pass review of an agent PR (scope, deps vs graph, purity, hardware-blind rule, comments, tests, CI). Read-only.
 - `scripts/cleanup.sh [--dry-run] [--closed]` — remove worktrees and branches of merged agent PRs (skips dirty or unmerged work).
 - `scripts/check-docs.sh` — last step before a push: fails when `.agents/*.md` or `docs/agents/` notes point at missing files, a script is not listed here, or retired wording is still there.
-- `../.github/workflows/verify.yml` — on macOS for every PR and push to `main`: `verify-swift.sh`, `verify-nonswift.sh`, `check-docs.sh`.
+- `../.github/workflows/verify.yml` — on macOS for every PR and push to `main`: `verify-swift.sh`, `verify-nonswift.sh`, `check-docs.sh`; on Linux: `verify-backend.sh`.
 
 Roles and models (same for everyone): orchestrator `claude-opus-5-5`; workers and every subagent `claude-sonnet-5-5`.
 

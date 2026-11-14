@@ -37,6 +37,7 @@ else run bash .agents/scripts/setup.sh "$laptop" --check || die "setup.sh is not
 step "verify"
 run bash .agents/scripts/check-docs.sh || die "check-docs.sh failed"
 run bash .agents/scripts/verify-nonswift.sh || die "verify-nonswift.sh failed"
+run bash .agents/scripts/verify-backend.sh || die "verify-backend.sh failed"
 if [ "$plat" = mac ] && [ "$role" = orch ]; then run bash .agents/scripts/verify-swift.sh || die "verify-swift.sh failed"; fi
 
 step "mission issue"
