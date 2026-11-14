@@ -46,6 +46,7 @@ Rows are raised as GitHub issues. The orchestrator's issues mention `@tienvu-lol
 |---|---|---|
 | A command was denied by `dontAsk` | `[permission] <command>` | The exact denied command and the exact `settings*.json` line that would allow it |
 | Plan contradicts `overview.md` or `architecture.md` | `[contract] ...` + `contract-change`, `needs-tien` | Both quotes and the smallest default taken |
+| A PR conflicts with `main` or another laptop's PR and the fix is not mechanical | `[conflict] #<a> vs #<b>: <files>` + `conflict`, mentioning the other owner | Both PR links, the hunks, what each side intends, a proposed resolution; the other orchestrator answers with a `RESOLUTION:` comment (ORCHESTRATOR.md step 2d) |
 | Needs a new third-party dependency | `[dependency] <name>` + `needs-tien` | Why, which package, alternatives |
 | Same failure 3 times | `[stuck] <item>` + `needs-human` | What was tried, evidence (DOD-12: next step is a bigger model or a human) |
 | An agent cannot run 5 cycles | `[loop] <laptop> orch failing` or `[loop] <laptop> integrator failing` (by `loop.sh`) | Path of the last result JSON |
