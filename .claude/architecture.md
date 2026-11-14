@@ -107,6 +107,7 @@ Full paths and per-file responsibilities are in `plan.md`. Phase tag in brackets
 ```
 Omni.xcworkspace/
   contents.xcworkspacedata                          [P1]
+.gitignore                                          [P1]
 Schema/
   usis.schema.json                                  [P1]
 Recordings/
@@ -156,6 +157,8 @@ Packages/
     Tests/OmniRuntimeTests/
       SceneRunnerTriggerTests.swift                                                   [P1]
       LookAtDetectorTests.swift  HeartRateIntensityTests.swift                        [P2]
+      GestureEventMapperTests.swift  RaycastHitDetectorTests.swift                    [P2]
+      AudioListenerSystemTests.swift  SceneLoaderTests.swift                          [P2]
 
   OmniScript/
     Package.swift                                   [P1]
@@ -181,6 +184,7 @@ Packages/
       Feedback/    SimOutputSink.swift                                                [P2]
     Tests/OmniSimTests/
       UsisRecorderPlayerTests.swift  NoiseModelTests.swift                            [P2]
+      SimPipelineTests.swift                                                          [P2]
 
   OmniBridge/
     Package.swift                                   [P1]
@@ -207,6 +211,7 @@ Apps/
     OmniStudio.xcodeproj/project.pbxproj            [P1]
     OmniStudio/
       OmniStudioApp.swift                                                             [P1]
+      AppModel.swift                                                                  [P1]
       Viewport/    ViewportView.swift                                                 [P1]
       Sim/         SimulatorPanelView.swift                                           [P2]
       Debug/       DebugOverlayView.swift  CapabilityWarningView.swift                [P2]
@@ -233,6 +238,9 @@ Games/
 
 ## Placement Notes
 
-- `OmniStudio` is the composition root: it constructs the `InputPipeline`, the active `InputSource` / `OutputSink` pair, the `ScriptEngine` and the `SceneRunner`, and wires them together. No package does this wiring.
+- `OmniStudio` is the composition root: it constructs the `InputPipeline`, the active `InputSource` / `OutputSink` pair, the `ScriptEngine` and the `SceneRunner`, and wires them together, in `AppModel.swift`. No package does this wiring. `AppModel` also drains the runtime's `OutputQueue` into the active sink each frame; `ModeController` (P3) takes over choosing the source/sink pair.
+- **(plan decision)** `SceneDescription.requiredTier` is a plain `Int` (1…3), so `OmniRuntime` stays off `CapabilityTier`; Studio maps it to `CapabilityTier` for the capability warning.
 - `BridgeClient` is shared by the iOS and watchOS targets under `Apps/OmniCompanion/Shared/`; the Watch reaches the Mac through the phone via `WatchRelay` → `WatchConnectivityReceiver`.
 - `Games/Flagship` holds data (scene + JS) only, so it cannot import Swift packages by construction; it reaches the engine through `OmniScript`'s `self` / `ctx` API.
+- Cloud game hosting (`overview.md` Module 11) has no package yet, so no package, file or dependency edge is added above. Published games are data only (scene + scripts + assets + metadata), the same shape as `Games/Flagship`, and are stored in a cloud database; sensor data (USIS) and output commands never go there.
+- **(plan decision)** Boundary to apply when a cloud client is added: only `OmniStudio` (the composition root) may depend on it. It fetches a published game and hands the scene and script sources to `OmniRuntime` / `OmniScript`. `OmniRuntime`, `OmniScript` and `Games/*` must never depend on it, and it carries game content only, never input, so the hardware-blind property holds. Add the package, its row in the dependency table and the matching Forbidden Edges rows when Module 11 is scheduled.

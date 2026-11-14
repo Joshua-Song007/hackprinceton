@@ -11,21 +11,22 @@
 Goal: every package exists with its dependency boundary enforced, USIS v1 is defined, and a RealityKit trigger fires from a hard-coded packet.
 
 ### 1.1 Workspace & package scaffold
-- [x] `Omni.xcworkspace/contents.xcworkspacedata` — workspace referencing every local package and both app projects (Xcode-generated; commit as-is).
+- [x] `Omni.xcworkspace/contents.xcworkspacedata` — workspace referencing every local package and both app projects (Xcode-generated; commit as-is). (Refs to `Apps/OmniStudio/OmniStudio.xcodeproj` (1.6) and `Apps/OmniCompanion/OmniCompanion.xcodeproj` (3.3) dangle until those files are created; no revisit needed.)
 - [x] `Packages/OmniCore/Package.swift` — OmniCore manifest, no dependencies. (testTarget `OmniCoreTests` added in Phase 1.2 so `swift test` can run; no other package has a testTarget yet.)
-- [x] `Packages/OmniInput/Package.swift` — OmniInput manifest, depends on OmniCore.
+- [x] `Packages/OmniInput/Package.swift` — OmniInput manifest, depends on OmniCore. (testTarget `OmniInputTests` to be added when the first test file lands, 1.3.)
 - [x] `Packages/OmniOutput/Package.swift` — OmniOutput manifest, depends on OmniCore.
-- [x] `Packages/OmniRuntime/Package.swift` — OmniRuntime manifest, depends on OmniCore and OmniInput only.
-- [x] `Packages/OmniScript/Package.swift` — OmniScript manifest, depends on OmniRuntime.
+- [x] `Packages/OmniRuntime/Package.swift` — OmniRuntime manifest, depends on OmniCore and OmniInput only. (testTarget `OmniRuntimeTests` to be added when the first test file lands, 1.5.)
+- [x] `Packages/OmniScript/Package.swift` — OmniScript manifest, depends on OmniRuntime. (testTarget `OmniScriptTests` to be added when the first test file lands, 2.3; declare `Resources/prelude.js` as a resource when it lands, 2.3.)
 - [x] `Packages/OmniScript/Sources/OmniScript/Module.swift` — empty module marker so the target compiles; removed when the first real OmniScript file lands (Phase 2).
-- [x] `Packages/OmniSim/Package.swift` — OmniSim manifest, depends on OmniCore, OmniInput, OmniOutput.
+- [x] `Packages/OmniSim/Package.swift` — OmniSim manifest, depends on OmniCore, OmniInput, OmniOutput. (testTarget `OmniSimTests` to be added when the first test file lands, 2.2; declare the four `Presets/*.usis.jsonl` as resources, one explicit entry per file so `PresetLibrary.swift` stays a compiled source — verify when added, 2.2.)
 - [x] `Packages/OmniSim/Sources/OmniSim/Module.swift` — empty module marker; removed in Phase 2.
-- [x] `Packages/OmniBridge/Package.swift` — OmniBridge manifest, depends on OmniCore, OmniInput, OmniOutput.
+- [x] `Packages/OmniBridge/Package.swift` — OmniBridge manifest, depends on OmniCore, OmniInput, OmniOutput. (testTarget `OmniBridgeTests` to be added when the first test file lands, 3.2.)
 - [x] `Packages/OmniBridge/Sources/OmniBridge/Module.swift` — empty module marker; removed in Phase 3.
 - [x] `Packages/OmniCollab/Package.swift` — OmniCollab manifest (stretch), depends on OmniCore.
 - [x] `Packages/OmniCollab/Sources/OmniCollab/Module.swift` — empty module marker; removed in Phase 6.
 - [x] `Packages/OmniAdapters/Package.swift` — OmniAdapters manifest (stretch), depends on OmniCore and OmniInput.
 - [x] `Packages/OmniAdapters/Sources/OmniAdapters/Module.swift` — empty module marker; stays until Phase 7.
+- [ ] `.gitignore` — ignores `.build/`, `.swiftpm/`, `xcuserdata/` and `.DS_Store` so SwiftPM and Xcode output stays out of the repo (the file already existed but was empty, so only its contents are added; git itself is not touched).
 
 ### 1.2 OmniCore — math and USIS types (pure, no I/O)
 - [x] `Schema/usis.schema.json` — USIS v1 JSON Schema: envelope (`v`, `deviceId`, `kind`, `slot`, `source`, `t`, `seq`) and channels (orientation, position, accel, touch, gesture, heartRate, pencil). Source of truth for companions, sim and adapters.
@@ -43,7 +44,7 @@ Goal: every package exists with its dependency boundary enforced, USIS v1 is def
 ### 1.3 OmniInput — protocols, validation, pipeline
 - [ ] `Packages/OmniInput/Sources/OmniInput/InputSource.swift` — `InputSource` protocol: emits `UsisPacket`s, declares device descriptor (kind, slot, sample rate).
 - [ ] `Packages/OmniInput/Sources/OmniInput/InputBus.swift` — `InputBus` protocol: accepts packets from any source, serves `InputFrame`s.
-- [ ] `Packages/OmniInput/Sources/OmniInput/PacketValidator.swift` — decode + schema-conformance check of raw JSON; invalid packets dropped and counted (hand-written Swift mirror of `Schema/usis.schema.json`, kept honest by the validator test).
+- [ ] `Packages/OmniInput/Sources/OmniInput/PacketValidator.swift` — decode + schema-conformance check of raw JSON; invalid packets dropped and counted (hand-written Swift mirror of `Schema/usis.schema.json`, kept honest by the validator test). (Enforces the schema rules `UsisPacket` decoding does not: `v == 1`, `t`/`seq` ≥ 0, non-empty `deviceId`, unit-norm quaternion within tolerance, touch `x`/`y` in 0–1, pencil `pressure` in 0–1, `heartRate` ≥ 0.)
 - [ ] `Packages/OmniInput/Sources/OmniInput/ClockSync.swift` — ping-exchange offset estimate `t_host − (t_send + rtt/2)`, periodic re-estimate, device→host time conversion.
 - [ ] `Packages/OmniInput/Sources/OmniInput/JitterBuffer.swift` — per-device ring buffer; sample at `t_render = now − D` (D=50 ms default, tunable); slerp orientation, lerp vectors, sample-and-hold + EMA scalars; stale after 500 ms.
 - [ ] `Packages/OmniInput/Sources/OmniInput/Calibration.swift` — capture `q_cal`, apply `q_world = q_cal⁻¹ · q_raw`; yaw-only mode for AirPods.
@@ -66,35 +67,40 @@ Goal: every package exists with its dependency boundary enforced, USIS v1 is def
 - [ ] `Packages/OmniRuntime/Sources/OmniRuntime/Events/GameEvent.swift` — `onLookAt`, `onGesture`, `onHeartRate`, `onRaycastHit` event enum.
 - [ ] `Packages/OmniRuntime/Sources/OmniRuntime/Events/EventDispatcher.swift` — protocol the runtime calls to deliver events to a script backend (lets OmniScript plug in without the runtime depending on it).
 - [ ] `Packages/OmniRuntime/Sources/OmniRuntime/Systems/TriggerSystem.swift` — RealityKit system resolving trigger overlaps each update.
-- [ ] `Packages/OmniRuntime/Sources/OmniRuntime/Output/OutputQueue.swift` — collects `OutputCommand`s during a frame; flushed once at end of frame.
-- [ ] `Packages/OmniRuntime/Sources/OmniRuntime/SceneRunner.swift` — per-frame loop: take `InputFrame` → derive events → dispatch → resolve triggers → flush output queue. Never reads sockets, device APIs or sim state.
+- [ ] `Packages/OmniRuntime/Sources/OmniRuntime/Output/OutputQueue.swift` — collects `OutputCommand`s during a frame; drained once at end of frame by the caller (Studio), never by the runtime.
+- [ ] `Packages/OmniRuntime/Sources/OmniRuntime/SceneRunner.swift` — per-frame loop: take `InputFrame` → derive events → dispatch → resolve triggers → expose queued `OutputCommand`s for the caller to drain (the runtime never sees a sink). Never reads sockets, device APIs or sim state.
 - [ ] `Packages/OmniRuntime/Tests/OmniRuntimeTests/SceneRunnerTriggerTests.swift` — hard-coded USIS packet through `InputPipeline` into `SceneRunner` fires a trigger (Phase 1 exit test).
 
 ### 1.6 OmniStudio shell
 - [ ] `Apps/OmniStudio/OmniStudio.xcodeproj/project.pbxproj` — macOS app project linking the local packages (Xcode-generated).
 - [ ] `Apps/OmniStudio/OmniStudio/OmniStudioApp.swift` — SwiftUI app entry, single window.
-- [ ] `Apps/OmniStudio/OmniStudio/Viewport/ViewportView.swift` — `RealityView` hosting the `SceneRunner` scene; shows the hard-coded-packet trigger firing.
+- [ ] `Apps/OmniStudio/OmniStudio/AppModel.swift` — composition root: builds `InputPipeline`, `SceneRunner` (plus `ScriptEngine` once it exists, 2.3) and the sim `InputSource` / `OutputSink` pair for Phase 2; runs the per-frame loop and drains `OutputQueue` into the active sink (name and placement are a plan decision; `ModeController` takes over source/sink selection in 3.5).
+- [ ] `Apps/OmniStudio/OmniStudio/Viewport/ViewportView.swift` — `RealityView` hosting the `SceneRunner` scene; shows the hard-coded-packet trigger firing; reads its scene from `AppModel`.
 
 ---
 
 ## Phase 2: 3D Device Simulator
 
-Goal: a creator can exercise every mechanic on a Mac alone; jitter buffer and derived events are proven against simulated input before any live device exists. Also covers OmniScript, which `overview.md` does not assign to a phase (scheduled here so Phase 4 builds on a finished API; revisit only if scope forces it later).
+Goal: a creator can exercise every mechanic on a Mac alone; the jitter buffer is proven against simulated input (OmniSim tests) and derived events against hand-built `InputFrame`s (OmniRuntime tests) before any live device exists; OmniSim cannot depend on OmniRuntime, so no single sim-to-events test is scheduled. Also covers OmniScript, which `overview.md` does not assign to a phase (scheduled here so Phase 4 builds on a finished API; revisit only if scope forces it later).
 
 ### 2.1 OmniRuntime — derived events
-- [ ] `Packages/OmniRuntime/Sources/OmniRuntime/Events/LookAtDetector.swift` — head forward `f` vs direction to entity `ŝ`; fires `onLookAt` when `acos(f·ŝ) < θ_lock` (15°) held for 0.5 s.
+- [ ] `Packages/OmniRuntime/Sources/OmniRuntime/Events/LookAtDetector.swift` — head forward `f` vs direction to entity `ŝ`; fires `onLookAt` when `acos(f·ŝ) < θ_lock` (15°) held for 0.5 s. (Head position = the head sample's `position` when present, else `SceneDescription.playerOrigin` — plan decision, overview.md is silent.)
 - [ ] `Packages/OmniRuntime/Sources/OmniRuntime/Events/GestureEventMapper.swift` — maps gesture channels from any device to `onGesture(type, dir?)`.
 - [ ] `Packages/OmniRuntime/Sources/OmniRuntime/Events/HeartRateIntensity.swift` — `d = clamp((HR − HR_rest)/(HR_max − HR_rest), 0, 1)` and `onHeartRate` emission.
 - [ ] `Packages/OmniRuntime/Sources/OmniRuntime/Events/RaycastHitDetector.swift` — `onRaycastHit` from phone aim or simulator gaze via RealityKit raycast.
-- [ ] `Packages/OmniRuntime/Sources/OmniRuntime/Systems/AudioListenerSystem.swift` — moves the RealityKit audio listener with head pose from `InputFrame`.
-- [ ] `Packages/OmniRuntime/Sources/OmniRuntime/Scene/SceneDescription.swift` — Codable declarative scene (entities, transforms, components, script names) (scene file format is not specified in overview.md; proposed here, confirm before building on it).
+- [ ] `Packages/OmniRuntime/Sources/OmniRuntime/Systems/AudioListenerSystem.swift` — moves the RealityKit audio listener with head pose from `InputFrame`. (Head position = the head sample's `position` when present, else `SceneDescription.playerOrigin` — plan decision, overview.md is silent.)
+- [ ] `Packages/OmniRuntime/Sources/OmniRuntime/Scene/SceneDescription.swift` — Codable declarative scene (entities, transforms, components, script names) (scene file format is not specified in overview.md; proposed here, confirm before building on it). (Also carries `requiredTier: Int` (1…3, default 1; an Int so OmniRuntime stays off `CapabilityTier`) and `playerOrigin` — plan decisions, overview.md specifies neither.)
 - [ ] `Packages/OmniRuntime/Sources/OmniRuntime/Scene/SceneLoader.swift` — builds RealityKit entities and components from a `SceneDescription`.
 - [ ] `Packages/OmniRuntime/Tests/OmniRuntimeTests/LookAtDetectorTests.swift` — threshold, dwell time, reset when gaze leaves.
 - [ ] `Packages/OmniRuntime/Tests/OmniRuntimeTests/HeartRateIntensityTests.swift` — clamping and normalization.
+- [ ] `Packages/OmniRuntime/Tests/OmniRuntimeTests/GestureEventMapperTests.swift` — each gesture type, with and without `dir`, maps to `onGesture` from any device; a stale device emits nothing (added after the plan.md audit; overview.md does not require it).
+- [ ] `Packages/OmniRuntime/Tests/OmniRuntimeTests/RaycastHitDetectorTests.swift` — aim ray hits and misses a collision entity; nearest hit only; fires once per hit (added after the plan.md audit; overview.md does not require it; if RealityKit cannot run headless under `swift test`, the hit logic is tested as a pure function).
+- [ ] `Packages/OmniRuntime/Tests/OmniRuntimeTests/AudioListenerSystemTests.swift` — listener transform follows head orientation and position; uses `SceneDescription.playerOrigin` when the head has no position (added after the plan.md audit; overview.md does not require it; same headless caveat as above).
+- [ ] `Packages/OmniRuntime/Tests/OmniRuntimeTests/SceneLoaderTests.swift` — `SceneDescription` → entities, transforms, components and script names; `requiredTier` and `playerOrigin` parsed; unknown component rejected cleanly (added after the plan.md audit; overview.md does not require it).
 
 ### 2.2 OmniSim — virtual devices and recording
-- [ ] `Packages/OmniSim/Sources/OmniSim/NoiseModel.swift` — per-device sample rate and noise parameters roughly matching real hardware (AirPods ~50 Hz, Watch 1–10 Hz, phone 60–120 Hz).
-- [ ] `Packages/OmniSim/Sources/OmniSim/VirtualDevice.swift` — base `InputSource` + `OutputSink`-receiving virtual device; stamps `source: "sim"`, advances `seq`, emits at its sample rate.
+- [ ] `Packages/OmniSim/Sources/OmniSim/NoiseModel.swift` — per-device sample rate and noise parameters roughly matching real hardware (AirPods ~50 Hz, Watch 1–10 Hz, phone 60–120 Hz). (Also deletes `Module.swift`.)
+- [ ] `Packages/OmniSim/Sources/OmniSim/VirtualDevice.swift` — base `InputSource` virtual device that exposes a feedback hook driven by `SimOutputSink` (only `SimOutputSink` conforms to `OutputSink`); stamps `source: "sim"`, advances `seq`, emits at its sample rate.
 - [ ] `Packages/OmniSim/Sources/OmniSim/Devices/VirtualAirPods.swift` — head orientation source, slot `head`.
 - [ ] `Packages/OmniSim/Sources/OmniSim/Devices/VirtualWatch.swift` — wrist orientation, heart rate, gesture source.
 - [ ] `Packages/OmniSim/Sources/OmniSim/Devices/VirtualPhone.swift` — orientation, accel, touch source.
@@ -112,10 +118,11 @@ Goal: a creator can exercise every mechanic on a Mac alone; jitter buffer and de
 - [ ] `Packages/OmniSim/Sources/OmniSim/Feedback/SimOutputSink.swift` — `OutputSink` that shows haptic and audio commands on the virtual device (pulse ring, vibration icon, sound cone).
 - [ ] `Packages/OmniSim/Tests/OmniSimTests/UsisRecorderPlayerTests.swift` — record → replay round-trip preserves packets and timing.
 - [ ] `Packages/OmniSim/Tests/OmniSimTests/NoiseModelTests.swift` — emitted rates and noise within tolerance of the declared model (exercises the jitter buffer in Sim mode).
+- [ ] `Packages/OmniSim/Tests/OmniSimTests/SimPipelineTests.swift` — virtual devices and `UsisPlayer` through `InputPipeline`: jitter-buffer interpolation at mixed rates, stale-freeze, calibration, and an `InputFrame` that carries no source (added after the plan.md audit; overview.md does not require it).
 
 ### 2.3 OmniScript — creator scripting API
 - [ ] `Packages/OmniScript/Sources/OmniScript/Resources/prelude.js` — defines `script({...})` and handles `export default` for JavaScriptCore (which has no ES module loader).
-- [ ] `Packages/OmniScript/Sources/OmniScript/SelfBridge.swift` — `JSExport` surface for `self` (audio, speed, entity state).
+- [ ] `Packages/OmniScript/Sources/OmniScript/SelfBridge.swift` — `JSExport` surface for `self` (audio, speed, entity state). (Also deletes `Module.swift`.)
 - [ ] `Packages/OmniScript/Sources/OmniScript/ContextBridge.swift` — `JSExport` surface for `ctx` (`spawn`, `intensity`, output commands); no file, network or raw USIS access.
 - [ ] `Packages/OmniScript/Sources/OmniScript/ScriptEngine.swift` — sandboxed `JSContext`; implements `EventDispatcher` to call `onLookAt`/`onGesture`/`onHeartRate`/`onRaycastHit` handlers.
 - [ ] `Packages/OmniScript/Sources/OmniScript/ScriptReloader.swift` — recompiles a script on source change without restarting the scene.
@@ -124,7 +131,7 @@ Goal: a creator can exercise every mechanic on a Mac alone; jitter buffer and de
 ### 2.4 OmniStudio — simulator UI
 - [ ] `Apps/OmniStudio/OmniStudio/Sim/SimulatorPanelView.swift` — device slot picker, gizmos/sliders, heart-rate slider, "spike" button, preset buttons, record/replay controls.
 - [ ] `Apps/OmniStudio/OmniStudio/Debug/DebugOverlayView.swift` — live raw USIS JSON per device: rate, latency, stale flags, source, schema errors.
-- [ ] `Apps/OmniStudio/OmniStudio/Debug/CapabilityWarningView.swift` — warns when connected or simulated devices cannot satisfy the game's declared capability tier.
+- [ ] `Apps/OmniStudio/OmniStudio/Debug/CapabilityWarningView.swift` — warns when connected or simulated devices cannot satisfy the game's declared capability tier (`SceneDescription.requiredTier`, mapped to `CapabilityTier`).
 
 ---
 
@@ -138,7 +145,7 @@ Goal: real devices stream USIS into the same pipeline; Sim ↔ Live is a one-cli
 - [ ] `Packages/OmniCore/Tests/OmniCoreTests/LineFramingTests.swift` — partial reads, multiple messages per read, oversized lines.
 
 ### 3.2 OmniBridge — Mac side
-- [ ] `Packages/OmniBridge/Sources/OmniBridge/BonjourListener.swift` — `NWListener` advertising the Omni Bonjour service on the local network only.
+- [ ] `Packages/OmniBridge/Sources/OmniBridge/BonjourListener.swift` — `NWListener` advertising the Omni Bonjour service on the local network only. (Also deletes `Module.swift`.)
 - [ ] `Packages/OmniBridge/Sources/OmniBridge/DeviceSession.swift` — one `NWConnection` per device: framing, `hello`, ping/pong for clock sync, packet decode, seq-gap reporting.
 - [ ] `Packages/OmniBridge/Sources/OmniBridge/BridgeInputSource.swift` — `InputSource` merging all device sessions onto the `InputBus` (stamps `source: "live"`).
 - [ ] `Packages/OmniBridge/Sources/OmniBridge/BridgeOutputSink.swift` — `OutputSink` forwarding `OutputCommand`s to the addressed device session.
@@ -161,7 +168,7 @@ Goal: real devices stream USIS into the same pipeline; Sim ↔ Live is a one-cli
 - [ ] `Apps/OmniCompanion/iOS/WatchConnectivityReceiver.swift` — receives Watch packets on the phone and forwards them over `BridgeClient`.
 
 ### 3.5 OmniStudio — Live mode
-- [ ] `Apps/OmniStudio/OmniStudio/Mode/ModeController.swift` — Sim / Live toggle: swaps the active `InputSource`/`OutputSink` pair on the `InputBus`; nothing in the runtime changes.
+- [ ] `Apps/OmniStudio/OmniStudio/Mode/ModeController.swift` — Sim / Live toggle: swaps the active `InputSource`/`OutputSink` pair on the `InputBus`; nothing in the runtime changes. (Source/sink selection moves here from `AppModel`'s default sim pair.)
 - [ ] `Apps/OmniStudio/OmniStudio/Mode/ModeToggleView.swift` — toolbar toggle bound to `ModeController`.
 - [ ] `Apps/OmniStudio/OmniStudio/Devices/DeviceStatusView.swift` — connected devices, battery/rate/latency, stale indicators.
 - [ ] `Apps/OmniStudio/OmniStudio/Devices/CalibrationControls.swift` — "face forward and tap" calibration flow; yaw-only for AirPods.
@@ -172,7 +179,7 @@ Goal: real devices stream USIS into the same pipeline; Sim ↔ Live is a one-cli
 
 Goal: a game playable by a stranger in under 60 s using at least two input types, built only through the public runtime and script API. Name and design are unscheduled (`<Flagship>` placeholder).
 
-- [ ] `Games/Flagship/scene.json` — `SceneDescription` for the game world.
+- [ ] `Games/Flagship/scene.json` — `SceneDescription` for the game world. (Sets `requiredTier`.)
 - [ ] `Games/Flagship/scripts/enemy.js` — enemy behavior: `onLookAt` audio lock-on, `onHeartRate` aggression scaling.
 - [ ] `Games/Flagship/scripts/player.js` — player abilities: `onGesture` actions, haptic feedback via `ctx`.
 - [ ] `Games/Flagship/scripts/game.js` — win/lose flow and difficulty tuning.
@@ -194,7 +201,7 @@ Not file-bound: local hotspot setup, pre-paired devices, recorded fallback video
 
 ## Phase 6: Collaborative Coding Space (stretch)
 
-- [ ] `Packages/OmniCollab/Sources/OmniCollab/ProjectDocument.swift` — CRDT document holding scene graph and every script's source (Automerge for Swift; track version in `branchDep.md` when added).
+- [ ] `Packages/OmniCollab/Sources/OmniCollab/ProjectDocument.swift` — CRDT document holding scene graph and every script's source (Automerge for Swift; track version in `branchDep.md` when added). (Also deletes `Module.swift`.)
 - [ ] `Packages/OmniCollab/Sources/OmniCollab/PeerSync.swift` — Bonjour peer discovery and change exchange.
 - [ ] `Packages/OmniCollab/Sources/OmniCollab/Presence.swift` — collaborator cursors, selections, "who's editing" state. Syncs the project only; never touches input.
 - [ ] `Apps/OmniStudio/OmniStudio/Collab/PresenceOverlayView.swift` — cursors in the script editor, selection highlights in the viewport, entity badges.
@@ -203,4 +210,4 @@ Not file-bound: local hotspot setup, pre-paired devices, recorded fallback video
 
 ## Phase 7: After the Hackathon (unscheduled — no checklist)
 
-Open, not scheduled: Lua scripting backend; third-party Bluetooth adapters (Joy-Cons, haptic gloves, ESP32 bands) via `OmniAdapters`; iPad / Pencil and Vision Pro input; player apps on iOS / visionOS; relay server for remote collaboration; multiplayer gameplay; publishing.
+Open, not scheduled: Lua scripting backend; third-party Bluetooth adapters (Joy-Cons, haptic gloves, ESP32 bands) via `OmniAdapters`; iPad / Pencil and Vision Pro input; player apps on iOS / visionOS; relay server for remote collaboration; multiplayer gameplay; publishing games to the cloud game host (overview.md Module 11: published games are hosted in a cloud database, like Roblox). The backend, package boundary, accounts, version history and moderation are undecided, so no files are planned yet; when scheduled it gets its own checklist section.

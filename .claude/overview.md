@@ -1,4 +1,4 @@
-This document outlines the system architecture, package boundaries, and operational concepts for a native, omni-modal AR game platform (working title Omni). It is a macOS creator app where every Apple device a player carries is a spatial sensor node, all streaming one standardized JSON input format into a shared 3D coordinate system. A built-in 3D Device Simulator lets creators build and test without owning the hardware.
+This document outlines the system architecture, package boundaries, and operational concepts for a native, omni-modal AR game platform (working title Omni). It is a macOS creator app where every Apple device a player carries is a spatial sensor node, all streaming one standardized JSON input format into a shared 3D coordinate system. A built-in 3D Device Simulator lets creators build and test without owning the hardware. Games built on the platform are hosted in the cloud, like Roblox: once a creator publishes a game, it lives in a cloud database and is no longer tied to the creator's Mac. Only game content goes to the cloud; live sensor data stays on the local network.
 The PRD defines what we ship and why; this blueprint defines how it is built. If code drifts from the boundaries here, flag the mismatch rather than assuming the code has quietly redefined the design.
 Technical Stack Overview
 Subsystem
@@ -28,11 +28,14 @@ Sandboxed creator scripts without shipping a VM.
 Collaboration (stretch)
 CRDT project document (e.g. Automerge for Swift) synced between Bonjour peers; relay server later
 Conflict-free shared editing of scenes and scripts.
+Game Hosting
+Cloud database (backend to be chosen)
+Published games (scene, scripts, assets, metadata) are stored in and served from the cloud, like Roblox. Only game content goes to the cloud; sensor data never does.
 Repo
 Xcode workspace + local Swift packages
 Module boundaries enforced by package dependencies, not by network services.
 Modular Workspace Architecture
-The platform is one Xcode workspace of local Swift packages, not a distributed system. Modularity is enforced by package dependencies and protocol seams. That way live ↔ simulated input, device transports and scripting backends can be swapped without touching game code.
+The platform is one Xcode workspace of local Swift packages, not a distributed system. Modularity is enforced by package dependencies and protocol seams. That way live ↔ simulated input, device transports and scripting backends can be swapped without touching game code. The one cloud-facing part is game hosting (Module 11); the input and runtime path stays entirely local.
 Package
 Owns
 May depend on
@@ -196,7 +199,7 @@ Module 5: Hardware Bridge & Companion Apps
     ◦ AirPods (P1): read directly on the Mac with CMHeadphoneMotionManager when paired to it, so no companion is needed.
     ◦ Apple Watch (P1): watchOS app reads heart rate (workout session) and wrist gestures, relayed through the phone with WatchConnectivity.
 • Discovery: the Mac advertises a Bonjour service; companions find it and connect over local Wi-Fi or a hotspot.
-• Network Rule: never route sensor data through the cloud.
+• Network Rule: never route sensor data through the cloud. Only published game content is cloud-hosted (Module 11).
 • Resilience: auto-reconnect with backoff; per-device seq gap detection; a dropped device goes stale instead of stopping the game.
 Module 6: Output & Feedback Layer
 • Package: OmniOutput
@@ -223,6 +226,14 @@ Module 10: Peripheral Adapters (stretch)
 • Package: OmniAdapters
 • Contract: func parse(_ bytes: Data) -> USISChannels plus a device descriptor (kind, slot, sample rate), over CoreBluetooth. An adapter's only job is to emit standard USIS JSON, so nothing downstream changes when a device is added.
 • Not this weekend: shipping any third-party adapter. The protocol is documented so Joy-Cons, haptic gloves or ESP32 motion bands can be added later.
+Module 11: Cloud Game Hosting
+• Package: not yet assigned. The package boundary is decided before anything is built.
+• Core Responsibility: Stores and serves the games creators build, like Roblox. Publishing from Studio saves a game version to a cloud database; a game is loaded from there, not from the creator's machine.
+• What is hosted: a game is data only: its scene description, scripts, assets and metadata (title, author, version). This is the same shape Games/<Flagship> already has, so no Swift code or device-specific content is ever uploaded.
+• What is not hosted: live sensor data (USIS packets) and output commands. They stay on the local network, so the Network Rule in Module 5 is unchanged.
+• Flow: Studio publishes a game version to the cloud database. To play or edit, Studio fetches that version and hands the scene and script sources to OmniRuntime and OmniScript. From there the runtime reads input only through the InputBus, as usual.
+• Boundary: hosting carries game content only and never touches input, so the hardware-blind property holds and a hosted game runs the same on simulated or live input. OmniRuntime, OmniScript and games do not depend on the cloud client; Studio, the composition root, does the fetching.
+• Not decided yet: which cloud database or backend, accounts and permissions, version history, and moderation.
 Frame Loop & Event Processing
 Asynchronous ingest (as packets arrive):
 1.  A source (live bridge or simulator) emits a UsisPacket onto the InputBus.
@@ -258,4 +269,4 @@ Roadmap & Operational Phases
     ◦ OmniCollab: CRDT project document, Bonjour peer sync, presence in the editor and viewport.
 7.  Phase 7: After the Hackathon
     ◦ Lua scripting backend, third-party Bluetooth adapters, iPad / Pencil and Vision Pro input.
-    ◦ Player apps on iOS / visionOS, a relay server for remote collaboration, multiplayer gameplay, publishing.
+    ◦ Player apps on iOS / visionOS, a relay server for remote collaboration, multiplayer gameplay, publishing games to the cloud host (Module 11).
