@@ -9,6 +9,7 @@
 - `scripts/dry-run.sh` runs `scripts/test_autonomy.py`: real local Git and mocked model/GitHub delivery, zero model spend.
 - `settings.worker.json` is the slim V2 worker permission set without the legacy Stop hook.
 - `scripts/ci-dod.py` runs independent brief build/tests/lint on the hosted `agent-dod` CI job, never on the merge-credential machine.
+- `scripts/ci-scope.py` selects only relevant manual-PR component checks; managed PRs use independent DoD instead of duplicate product builds.
 - `scripts/legacy-loop.sh` preserves the prior loop, accessible only through explicit `OMNI_LEGACY=1`; never run both architectures concurrently.
 - The generated context pack and small role prompts are under `docs/agents/`. V2 does not read the full-doc rules below.
 
