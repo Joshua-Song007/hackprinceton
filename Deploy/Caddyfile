@@ -1,0 +1,14 @@
+# OMNI_DOMAIN is a DNS name (Let's Encrypt certificate) or an IP. An IP cannot get a public
+# certificate, so vultr-bootstrap.sh sets OMNI_CADDY_GLOBAL=local_certs (Caddy's internal CA,
+# i.e. `tls internal` for every site). reverse_proxy forwards WebSocket upgrades as-is,
+# which covers /play/* and /debug/*.
+{
+	{$OMNI_CADDY_GLOBAL}
+}
+
+{$OMNI_DOMAIN:localhost} {
+	reverse_proxy backend:8080 {
+		health_uri /health
+		health_interval 10s
+	}
+}

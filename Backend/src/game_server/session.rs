@@ -12,22 +12,33 @@
 // - Game ids are not checked against the database here; length-limited only.
 // - Outbound queues are unbounded; inbound frames are limited to MAX_MESSAGE_BYTES; malformed
 //   frames are ignored, not fatal.
+// - 8.1: before a session starts, `play` fetches the game's latest published version (or `?version=n`)
+//   from the database and builds the host from its `server_scripts`; a game id that is not a uuid, or a
+//   game with no versions, runs without scripts. Publishing a newer version restarts a live session's
+//   host (`reload`): players get `{"name":"_reload","data":{"version":n}}`, then the new host gets
+//   `on_player_join` for everyone already connected (its `ctx.state` starts empty). A player joining
+//   an already-live session joins that session whatever version they asked for.
+//   Every join, leave, inbound and outbound frame is also published to the debug bus (debug.rs).
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Mutex, OnceLock};
 
 use axum::extract::ws::{rejection::WebSocketUpgradeRejection, Message, WebSocket, WebSocketUpgrade};
-use axum::extract::Path;
-use axum::http::{HeaderMap, StatusCode};
+use axum::extract::{Path, State};
+use axum::http::{HeaderMap, StatusCode, Uri};
 use axum::response::{IntoResponse, Response};
 use axum::routing::get;
 use axum::Router;
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{json, Value};
 use tokio::sync::mpsc::{unbounded_channel, UnboundedSender};
 
+use super::debug::bus;
+use super::script_host::sources_of;
 use crate::api::accounts;
+use crate::api::games::valid_uuid;
+use crate::db::{self, GameVersion};
 use crate::AppState;
 
 const MAX_MESSAGE_BYTES: usize = 64 * 1024;
@@ -73,7 +84,20 @@ struct Frame {
     data: Value,
 }
 
-pub type HostFactory = Box<dyn Fn(&str) -> Box<dyn ScriptHost> + Send + Sync>;
+/// Builds a host from (game id, server-script sources).
+pub type HostFactory = Box<dyn Fn(&str, &[String]) -> Box<dyn ScriptHost> + Send + Sync>;
+
+/// The published version a session's host is built from.
+pub struct Release {
+    pub version: i32,
+    pub sources: Vec<String>,
+}
+
+impl From<&GameVersion> for Release {
+    fn from(v: &GameVersion) -> Self {
+        Release { version: v.version, sources: sources_of(&v.server_scripts) }
+    }
+}
 
 struct Player {
     conn: u64,
@@ -86,15 +110,17 @@ struct Session {
 }
 
 impl Session {
-    fn deliver(&self, events: Vec<Outgoing>) {
+    fn deliver(&self, game_id: &str, events: Vec<Outgoing>) {
         for ev in events {
             match ev {
                 Outgoing::Fire { player, name, data } => {
+                    bus().publish(game_id, "out", json!({ "player": player, "name": name, "data": data }));
                     if let (Some(p), Some(text)) = (self.players.get(&player), encode(name, data)) {
                         let _ = p.tx.send(text);
                     }
                 }
                 Outgoing::FireAll { name, data } => {
+                    bus().publish(game_id, "out", json!({ "player": null, "name": name, "data": data }));
                     if let Some(text) = encode(name, data) {
                         for p in self.players.values() {
                             let _ = p.tx.send(text.clone());
@@ -132,12 +158,14 @@ impl Registry {
 
     /// Adds a player; frames for them arrive on `tx`. Returns the connection id to pass to
     /// `remote` / `leave`. A repeat join by the same player replaces the old connection (its
-    /// sender is dropped, which ends that socket).
-    pub fn join(&self, game_id: &str, player: &str, tx: UnboundedSender<String>) -> u64 {
+    /// sender is dropped, which ends that socket). `release` builds the host when this join starts
+    /// the session; None (no published version) means no server scripts.
+    pub fn join(&self, game_id: &str, player: &str, tx: UnboundedSender<String>, release: Option<Release>) -> u64 {
         let conn = self.next_conn.fetch_add(1, Ordering::Relaxed);
         let mut map = self.lock();
+        let created = !map.contains_key(game_id);
         let session = map.entry(game_id.to_string()).or_insert_with(|| Session {
-            host: (self.factory)(game_id),
+            host: (self.factory)(game_id, release.as_ref().map_or(&[][..], |r| r.sources.as_slice())),
             players: HashMap::new(),
         });
         let replaced = session
@@ -145,10 +173,32 @@ impl Registry {
             .insert(player.to_string(), Player { conn, tx })
             .is_some();
         if !replaced {
+            bus().publish(game_id, "join", json!({ "player": player }));
+            if let (true, Some(r)) = (created, &release) {
+                bus().set_version(game_id, r.version);
+            }
             let out = session.host.on_player_join(player);
-            session.deliver(out);
+            session.deliver(game_id, out);
         }
         conn
+    }
+
+    /// Restarts a live session's host from a newly published version. Players get a `_reload` frame,
+    /// then the new host sees every connected player join. No live session: nothing to do.
+    pub fn reload(&self, game_id: &str, release: Release) {
+        let mut map = self.lock();
+        let Some(session) = map.get_mut(game_id) else { return };
+        bus().publish(game_id, "reload", json!({ "version": release.version }));
+        session.host = (self.factory)(game_id, &release.sources);
+        session.deliver(
+            game_id,
+            vec![Outgoing::FireAll { name: "_reload".into(), data: json!({ "version": release.version }) }],
+        );
+        let players: Vec<String> = session.players.keys().cloned().collect();
+        for player in players {
+            let out = session.host.on_player_join(&player);
+            session.deliver(game_id, out);
+        }
     }
 
     /// Removes the player if `conn` is still their current connection; drops an empty session.
@@ -159,10 +209,12 @@ impl Registry {
             return;
         }
         session.players.remove(player);
+        bus().publish(game_id, "leave", json!({ "player": player }));
         let out = session.host.on_player_leave(player);
-        session.deliver(out);
+        session.deliver(game_id, out);
         if session.players.is_empty() {
             map.remove(game_id);
+            bus().end(game_id);
         }
     }
 
@@ -174,8 +226,9 @@ impl Registry {
         if session.players.get(player).map(|p| p.conn) != Some(conn) {
             return;
         }
+        bus().publish(game_id, "in", json!({ "player": player, "name": frame.name, "data": frame.data }));
         let out = session.host.on_remote(player, &frame.name, &frame.data);
-        session.deliver(out);
+        session.deliver(game_id, out);
     }
 
     #[cfg(test)]
@@ -189,29 +242,56 @@ fn registry() -> &'static Registry {
     R.get_or_init(|| Registry::new(super::script_host::factory()))
 }
 
+/// Reloads a live session of the game onto a freshly published version (called by games.rs).
+pub fn reload(game_id: &str, version: &GameVersion) {
+    registry().reload(game_id, Release::from(version));
+}
+
 async fn play(
+    State(state): State<AppState>,
     Path(game_id): Path<String>,
+    uri: Uri,
     headers: HeaderMap,
     ws: Result<WebSocketUpgrade, WebSocketUpgradeRejection>,
 ) -> Response {
-    let Some(account) = accounts::authenticate(&headers) else {
+    let Some(account) = accounts::authenticate_request(&headers, uri.query()) else {
         return StatusCode::UNAUTHORIZED.into_response();
     };
     if game_id.is_empty() || game_id.len() > MAX_GAME_ID_LEN {
         return StatusCode::BAD_REQUEST.into_response();
     }
+    let version = match accounts::query_param(uri.query(), "version") {
+        None => None,
+        Some(v) => match v.parse::<i32>() {
+            Ok(n) if n >= 1 => Some(n),
+            _ => return StatusCode::BAD_REQUEST.into_response(),
+        },
+    };
+    let release = match &state.db {
+        Some(pool) if valid_uuid(&game_id) => match db::fetch_game_version(pool, &game_id, version).await {
+            Ok(found) => found.as_ref().map(Release::from),
+            Err(e) => {
+                eprintln!("play: fetch version: db error: {e}");
+                return StatusCode::SERVICE_UNAVAILABLE.into_response();
+            }
+        },
+        _ => None,
+    };
+    if version.is_some() && release.is_none() {
+        return StatusCode::NOT_FOUND.into_response();
+    }
     match ws {
         Ok(ws) => ws
             .max_message_size(MAX_MESSAGE_BYTES)
-            .on_upgrade(move |socket| run_socket(socket, game_id, account.id)),
+            .on_upgrade(move |socket| run_socket(socket, game_id, account.id, release)),
         Err(rej) => rej.into_response(),
     }
 }
 
-async fn run_socket(mut socket: WebSocket, game_id: String, player: String) {
+async fn run_socket(mut socket: WebSocket, game_id: String, player: String, release: Option<Release>) {
     let reg = registry();
     let (tx, mut rx) = unbounded_channel::<String>();
-    let conn = reg.join(&game_id, &player, tx);
+    let conn = reg.join(&game_id, &player, tx, release);
     loop {
         tokio::select! {
             out = rx.recv() => match out {
@@ -275,13 +355,13 @@ mod tests {
     fn reg() -> (Registry, Arc<Mutex<Vec<String>>>) {
         let log = Arc::new(Mutex::new(Vec::new()));
         let l = log.clone();
-        let r = Registry::new(Box::new(move |_| Box::new(FakeHost { log: l.clone() })));
+        let r = Registry::new(Box::new(move |_, _| Box::new(FakeHost { log: l.clone() })));
         (r, log)
     }
 
     fn player(r: &Registry, game: &str, id: &str) -> (u64, UnboundedReceiver<String>) {
         let (tx, rx) = unbounded_channel();
-        (r.join(game, id, tx), rx)
+        (r.join(game, id, tx, None), rx)
     }
 
     fn drain(rx: &mut UnboundedReceiver<String>) -> Vec<Value> {

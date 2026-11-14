@@ -1,0 +1,31 @@
+{
+  "name": "@omni/studio",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "typecheck": "tsc -p . --noEmit",
+    "tauri": "tauri"
+  },
+  "dependencies": {
+    "@codemirror/lang-javascript": "^6.2.0",
+    "@codemirror/language": "^6.10.0",
+    "@codemirror/lint": "^6.8.0",
+    "@codemirror/state": "^6.4.0",
+    "@codemirror/view": "^6.34.0",
+    "@lezer/highlight": "^1.2.0",
+    "@omni/cloud": "*",
+    "@omni/core": "*",
+    "@omni/runtime": "*",
+    "@omni/script": "*",
+    "@omni/sim": "*",
+    "@tauri-apps/plugin-updater": "^2.14.1",
+    "codemirror": "^6.0.1",
+    "dockview-core": "^4.0.0"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2"
+  }
+}

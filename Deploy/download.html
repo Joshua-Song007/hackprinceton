@@ -1,0 +1,98 @@
+<!doctype html>
+<!-- Served at /download. The Dockerfile copies this as download/index.html next to tokens.css
+     (docs/brand-kit/project/tokens.css, unchanged). Cover layout of the brand kit. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Download Omni Studio</title>
+<link rel="stylesheet" href="tokens.css">
+<style>
+  html, body { margin: 0; min-height: 100%; }
+  body { background: var(--bg-window); color: var(--text); font: var(--text-body); }
+  .cover { position: relative; height: 288px; overflow: hidden; }
+  .art { position: absolute; top: 0; left: 480px; width: 480px; height: 288px; }
+  .art svg { display: block; }
+  .vp { fill: var(--viewport); } .grid { fill: var(--viewport-grid); } .acc { fill: var(--accent); }
+  .ax { fill: var(--axis-x); } .ay { fill: var(--axis-y); } .az { fill: var(--axis-z); }
+  .words { position: absolute; left: var(--space-6); bottom: var(--space-6); max-width: 440px; }
+  .name { margin: 0; font-family: var(--font-display); font-size: 120px; line-height: .92; font-weight: 600; letter-spacing: -.045em; }
+  .tag { margin: var(--space-2) 0 0 6px; font-size: 14px; line-height: 20px; color: var(--text-secondary); }
+  main { background: var(--bg-panel); border-top: 1px solid var(--line); padding: var(--space-6); min-height: 40vh; }
+  h2 { margin: 0 0 var(--space-4); font: var(--text-title); }
+  .rows { max-width: 560px; border: 1px solid var(--line); border-radius: var(--radius-window); background: var(--bg-field); }
+  .row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); padding: 0 var(--space-4); min-height: var(--row-height); }
+  .row + .row { border-top: 1px solid var(--line); }
+  .os { font: var(--text-headline); }
+  .file { font: var(--text-small); color: var(--text-secondary); }
+  a { color: var(--accent); }
+  a:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+  .status { margin: var(--space-4) 0 0; color: var(--text-secondary); }
+  .status.error { color: var(--error); }
+</style>
+</head>
+<body>
+<div class="cover">
+  <div class="art" aria-hidden="true">
+    <svg viewBox="0 0 480 288" width="480" height="288">
+      <rect class="vp" x="16" y="-10" width="300" height="232" rx="10"/>
+      <g class="grid"><circle cx="136" cy="110" r="1.5"/><circle cx="184" cy="110" r="1.5"/><circle cx="232" cy="110" r="1.5"/><circle cx="280" cy="110" r="1.5"/><circle cx="232" cy="158" r="1.5"/><circle cx="280" cy="158" r="1.5"/></g>
+      <rect class="ay" x="82" y="62" width="12" height="102" rx="6"/>
+      <rect class="ax" x="88" y="152" width="120" height="12" rx="6"/>
+      <circle class="az" cx="88" cy="158" r="14"/>
+      <rect class="acc" x="332" y="46" width="164" height="176" rx="10"/>
+    </svg>
+  </div>
+  <div class="words">
+    <h1 class="name">Omni</h1>
+    <p class="tag">Download Omni Studio for Windows and macOS.</p>
+  </div>
+</div>
+<main>
+  <h2 id="version">Latest version</h2>
+  <div class="rows" id="rows"></div>
+  <p class="status" id="status" role="status">Loading the latest release.</p>
+  <p class="status"><a href="/">Open Studio in the browser</a></p>
+</main>
+<script>
+  // Releases tagged studio-v* hold the installers (see .github/workflows/studio-release.yml).
+  const REPO = "Joshua-Song007/hackprinceton";
+  const OS = [
+    { name: "Windows", test: (n) => /\.exe$/i.test(n) },
+    { name: "macOS", test: (n) => /\.dmg$/i.test(n) },
+  ];
+  const status = document.getElementById("status");
+  fetch(`https://api.github.com/repos/${REPO}/releases?per_page=30`)
+    .then((r) => { if (!r.ok) throw new Error("GitHub answered " + r.status); return r.json(); })
+    .then((releases) => {
+      const release = releases.find((r) => /^studio-v/.test(r.tag_name) && !r.draft && !r.prerelease);
+      if (!release) throw new Error("No Studio release is published yet.");
+      document.getElementById("version").textContent = "Version " + release.tag_name.replace(/^studio-v/, "");
+      const rows = document.getElementById("rows");
+      for (const os of OS) {
+        const asset = release.assets.find((a) => os.test(a.name));
+        const row = document.createElement("div");
+        row.className = "row";
+        const label = document.createElement("span");
+        label.className = "os";
+        label.textContent = os.name;
+        const link = document.createElement(asset ? "a" : "span");
+        link.className = "file";
+        link.textContent = asset ? `Download ${asset.name}` : "Not in this release";
+        if (asset) { link.href = asset.browser_download_url; link.className = ""; }
+        row.append(label, link);
+        rows.append(row);
+      }
+      status.innerHTML = "";
+      const notes = document.createElement("a");
+      notes.href = release.html_url;
+      notes.textContent = "Release notes";
+      status.append(notes);
+    })
+    .catch((e) => {
+      status.className = "status error";
+      status.textContent = e.message + " Check github.com/" + REPO + "/releases.";
+    });
+</script>
+</body>
+</html>

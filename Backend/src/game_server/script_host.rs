@@ -11,13 +11,17 @@
 // - Each call has a 1 s CPU deadline and the runtime has a 32 MiB heap / 1 MiB stack cap.
 // - Server-script sources are not stored anywhere reachable yet (publish/fetch is a later item), so
 //   `factory()` currently yields `NoopHost` for every game; `factory_with` takes a source lookup.
+// - 8.1: that is superseded. `factory()` now builds the host from the sources session.rs fetched from
+//   the game's published version. `console.log/warn/error` in scripts and handler errors are captured
+//   (capped, truncated) and published to the debug bus (debug.rs) with `ctx.state` after each handler.
 
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use rquickjs::{Context, Function, Object, Runtime};
-use serde_json::Value;
+use serde_json::{json, Value};
 
+use super::debug::bus;
 use super::session::{HostFactory, NoopHost, Outgoing, ScriptHost};
 
 const PRELUDE: &str = include_str!("../../../Packages/OmniScript/Sources/OmniScript/Resources/prelude.js");
@@ -25,12 +29,23 @@ const CALL_DEADLINE: Duration = Duration::from_secs(1);
 const MEMORY_LIMIT: usize = 32 * 1024 * 1024;
 const STACK_LIMIT: usize = 1024 * 1024;
 const MAX_ERRORS: usize = 100;
+const MAX_PENDING: usize = 100; // console/error events kept between two debug publishes
+const MAX_LOG_CHARS: usize = 2000;
 
 const GLUE: &str = r#"
-(function (fire, fireAll, report) {
+(function (fire, fireAll, report, log) {
   "use strict";
   var scripts = [];
   var state = {};
+  function show(value) {
+    if (typeof value === "string") { return value; }
+    try { var text = JSON.stringify(value); return text === undefined ? String(value) : text; }
+    catch (e) { return String(value); }
+  }
+  function logger(level) {
+    return function () { log(level, Array.prototype.map.call(arguments, show).join(" ")); };
+  }
+  globalThis.console = Object.freeze({ log: logger("log"), warn: logger("warn"), error: logger("error") });
   function encode(value) {
     var text = JSON.stringify(value);
     return text === undefined ? "null" : text;
@@ -68,29 +83,63 @@ pub struct QuickJsHost {
     out: Arc<Mutex<Vec<Outgoing>>>,
     errors: Arc<Mutex<Vec<String>>>,
     deadline: Arc<Mutex<Option<Instant>>>,
+    game_id: String,
+    /// Debug events (kind, fields) captured since the last publish.
+    pending: Arc<Mutex<Vec<(&'static str, Value)>>>,
+    last_state: String,
 }
 
-fn push_error(errors: &Mutex<Vec<String>>, msg: String) {
+fn push_error(errors: &Mutex<Vec<String>>, pending: &Mutex<Vec<(&'static str, Value)>>, msg: String) {
     let mut e = errors.lock().unwrap_or_else(|p| p.into_inner());
     if e.len() < MAX_ERRORS {
-        e.push(msg);
+        e.push(msg.clone());
+    }
+    drop(e);
+    push_pending(pending, "error", json!({ "msg": msg }));
+}
+
+fn push_pending(pending: &Mutex<Vec<(&'static str, Value)>>, kind: &'static str, mut fields: Value) {
+    if let Some(Value::String(msg)) = fields.get_mut("msg") {
+        if let Some((i, _)) = msg.char_indices().nth(MAX_LOG_CHARS) {
+            msg.truncate(i);
+        }
+    }
+    let mut p = pending.lock().unwrap_or_else(|p| p.into_inner());
+    if p.len() < MAX_PENDING {
+        p.push((kind, fields));
     }
 }
 
-/// Turns a leading `export default X;` into `__omniExportDefault(X)` (see prelude.js).
+/// Offset in `line` just past a line-leading `export default `, if it has one.
+fn export_default_body_at(line: &str) -> Option<usize> {
+    let after_export = line.trim_start().strip_prefix("export")?;
+    let after_ws = after_export.trim_start();
+    let after_default = after_ws.strip_prefix("default")?;
+    let body = after_default.trim_start();
+    // each keyword must be followed by whitespace (regex `\s+`)
+    (after_ws.len() < after_export.len() && body.len() < after_default.len()).then(|| line.len() - body.len())
+}
+
+/// Turns the first line-leading `export default X;` into `__omniExportDefault(X);` (see prelude.js),
+/// keeping what precedes it (comments). Same rule as the client engines' `^\s*export\s+default\s+`;
+/// shortcut: `export` and `default` must share a line, upgrade if a script splits them.
 fn rewrite_export_default(source: &str) -> String {
-    let trimmed = source.trim();
-    let Some(rest) = trimmed.strip_prefix("export default") else {
-        return source.to_string();
-    };
-    let body = rest.trim_end_matches(|c: char| c == ';' || c.is_whitespace());
-    format!("__omniExportDefault({body}\n)")
+    let mut offset = 0;
+    for line in source.split_inclusive('\n') {
+        if let Some(at) = export_default_body_at(line) {
+            let body = source[offset + at..].trim_end_matches(|c: char| c == ';' || c.is_whitespace());
+            return format!("{}__omniExportDefault({body}\n);", &source[..offset]);
+        }
+        offset += line.len();
+    }
+    source.to_string()
 }
 
 impl QuickJsHost {
-    /// Builds a host and loads every source in order. Fails on engine setup or a script that does
-    /// not compile or `export default serverScript({...})`.
-    pub fn new(sources: &[String]) -> Result<Self, String> {
+    /// Builds a host for `game_id` (debug events go to that game's stream) and loads every source in
+    /// order. Fails on engine setup or a script that does not compile or
+    /// `export default serverScript({...})`.
+    pub fn new(game_id: &str, sources: &[String]) -> Result<Self, String> {
         let runtime = Runtime::new().map_err(|e| e.to_string())?;
         runtime.set_memory_limit(MEMORY_LIMIT);
         runtime.set_max_stack_size(STACK_LIMIT);
@@ -103,7 +152,16 @@ impl QuickJsHost {
         let context = Context::full(&runtime).map_err(|e| e.to_string())?;
         let out = Arc::new(Mutex::new(Vec::new()));
         let errors = Arc::new(Mutex::new(Vec::new()));
-        let host = QuickJsHost { context, _runtime: runtime, out, errors, deadline };
+        let host = QuickJsHost {
+            context,
+            _runtime: runtime,
+            out,
+            errors,
+            deadline,
+            game_id: game_id.to_string(),
+            pending: Arc::new(Mutex::new(Vec::new())),
+            last_state: "{}".to_string(),
+        };
         host.bootstrap()?;
         for s in sources {
             host.load(s)?;
@@ -120,6 +178,8 @@ impl QuickJsHost {
         let out = self.out.clone();
         let out2 = self.out.clone();
         let errors = self.errors.clone();
+        let pending = self.pending.clone();
+        let pending2 = self.pending.clone();
         self.context.with(|ctx| {
             let fail = |e: rquickjs::Error| format!("{e}");
             ctx.eval::<(), _>(PRELUDE).map_err(fail)?;
@@ -133,9 +193,19 @@ impl QuickJsHost {
                 out2.lock().unwrap_or_else(|p| p.into_inner()).push(Outgoing::FireAll { name, data });
             })
             .map_err(fail)?;
-            let report = Function::new(ctx.clone(), move |msg: String| push_error(&errors, msg)).map_err(fail)?;
+            let report = Function::new(ctx.clone(), move |msg: String| push_error(&errors, &pending, msg))
+                .map_err(fail)?;
+            let log = Function::new(ctx.clone(), move |level: String, msg: String| {
+                let level = match level.as_str() {
+                    "warn" => "warn",
+                    "error" => "error",
+                    _ => "log",
+                };
+                push_pending(&pending2, "log", json!({ "level": level, "msg": msg }));
+            })
+            .map_err(fail)?;
             let glue: Function = ctx.eval(GLUE).map_err(fail)?;
-            glue.call::<_, ()>((fire, fire_all, report)).map_err(fail)?;
+            glue.call::<_, ()>((fire, fire_all, report, log)).map_err(fail)?;
             Ok(())
         })
     }
@@ -165,6 +235,7 @@ impl QuickJsHost {
         self.arm();
         let data_json = serde_json::to_string(data).unwrap_or_else(|_| "null".into());
         let errors = self.errors.clone();
+        let pending = self.pending.clone();
         self.context.with(|ctx| {
             let res: rquickjs::Result<()> = (|| {
                 let host: Object = ctx.globals().get("__omniHost")?;
@@ -176,15 +247,29 @@ impl QuickJsHost {
                     rquickjs::Error::Exception => format!("{handler}: {:?}", ctx.catch()),
                     other => format!("{handler}: {other}"),
                 };
-                push_error(&errors, msg);
+                push_error(&errors, &pending, msg);
             }
         });
+        self.publish_debug();
         *self.deadline.lock().unwrap_or_else(|p| p.into_inner()) = None;
         std::mem::take(&mut *self.out.lock().unwrap_or_else(|p| p.into_inner()))
     }
 
+    /// Sends captured logs/errors and, when it changed, `ctx.state` to the game's debug stream.
+    fn publish_debug(&mut self) {
+        let events = std::mem::take(&mut *self.pending.lock().unwrap_or_else(|p| p.into_inner()));
+        for (kind, fields) in events {
+            bus().publish(&self.game_id, kind, fields);
+        }
+        let state = self.state_json();
+        if state != self.last_state {
+            let parsed = serde_json::from_str(&state).unwrap_or(Value::Null);
+            bus().publish(&self.game_id, "state", json!({ "state": parsed }));
+            self.last_state = state;
+        }
+    }
+
     /// `ctx.state` as JSON text, for tests and diagnostics.
-    #[allow(dead_code)] // diagnostics; used by tests
     pub fn state_json(&self) -> String {
         self.arm();
         let s = self.context.with(|ctx| {
@@ -214,25 +299,29 @@ impl ScriptHost for QuickJsHost {
     }
 }
 
-/// Host factory: `lookup(game_id)` returns the game's server-script sources. No sources, or sources
-/// that fail to load, give a `NoopHost` so a bad script never takes the session down.
-pub fn factory_with(lookup: impl Fn(&str) -> Vec<String> + Send + Sync + 'static) -> HostFactory {
-    Box::new(move |game_id| {
-        let sources = lookup(game_id);
+/// Server-script sources of a published version: the string values of `server_scripts`, in key order.
+pub fn sources_of(server_scripts: &Value) -> Vec<String> {
+    let Some(files) = server_scripts.as_object() else { return Vec::new() };
+    files.values().filter_map(|v| v.as_str().map(str::to_string)).collect()
+}
+
+/// Factory for the global registry: builds the game's host from the sources the session fetched.
+/// No sources, or sources that fail to load, give a `NoopHost` so a bad script never takes the
+/// session down; a load failure is reported on the game's debug stream.
+pub fn factory() -> HostFactory {
+    Box::new(|game_id, sources| {
         if sources.is_empty() {
             return Box::new(NoopHost);
         }
-        match QuickJsHost::new(&sources) {
+        match QuickJsHost::new(game_id, sources) {
             Ok(h) => Box::new(h),
-            Err(_) => Box::new(NoopHost),
+            Err(e) => {
+                eprintln!("script load failed for game {game_id}: {e}");
+                bus().publish(game_id, "error", json!({ "msg": format!("load: {e}") }));
+                Box::new(NoopHost)
+            }
         }
     })
-}
-
-/// Factory for the global registry. Published server scripts are not reachable from here yet
-/// (later item), so every game gets `NoopHost` for now.
-pub fn factory() -> HostFactory {
-    factory_with(|_| Vec::new())
 }
 
 #[cfg(test)]
@@ -255,7 +344,7 @@ mod tests {
     });"#;
 
     fn host() -> QuickJsHost {
-        QuickJsHost::new(&[SCRIPT.to_string()]).expect("loads")
+        QuickJsHost::new("test", &[SCRIPT.to_string()]).expect("loads")
     }
 
     #[test]
@@ -304,7 +393,7 @@ mod tests {
             });
           },
         });"#;
-        let mut h = QuickJsHost::new(&[probe.to_string()]).unwrap();
+        let mut h = QuickJsHost::new("test", &[probe.to_string()]).unwrap();
         let out = h.on_remote("a", "x", &Value::Null);
         let Outgoing::FireAll { data, .. } = &out[0] else { panic!("expected FireAll") };
         assert_eq!(data["io"], json!(vec!["undefined"; 6]));
@@ -314,25 +403,98 @@ mod tests {
 
     #[test]
     fn bad_sources_fail_to_load() {
-        assert!(QuickJsHost::new(&["export default serverScript({ onNope() {} });".into()]).is_err());
-        assert!(QuickJsHost::new(&["export default (".into()]).is_err());
-        assert!(QuickJsHost::new(&["var x = 1;".into()]).is_err());
+        assert!(QuickJsHost::new("test", &["export default serverScript({ onNope() {} });".into()]).is_err());
+        assert!(QuickJsHost::new("test", &["export default (".into()]).is_err());
+        assert!(QuickJsHost::new("test", &["var x = 1;".into()]).is_err());
     }
 
     #[test]
     fn multiple_scripts_share_state_in_load_order() {
         let a = "export default serverScript({ onPlayerJoin(ctx, p) { ctx.state.n = 1; } });";
         let b = "export default serverScript({ onPlayerJoin(ctx, p) { ctx.state.n += 1; } });";
-        let mut h = QuickJsHost::new(&[a.into(), b.into()]).unwrap();
+        let mut h = QuickJsHost::new("test", &[a.into(), b.into()]).unwrap();
         h.on_player_join("a");
         assert_eq!(serde_json::from_str::<Value>(&h.state_json()).unwrap(), json!({"n":2}));
     }
 
     #[test]
     fn factory_falls_back_to_noop() {
-        let f = factory_with(|id| if id == "good" { vec![SCRIPT.to_string()] } else if id == "bad" { vec!["(".into()] } else { vec![] });
-        assert_eq!(f("good").on_player_join("a").len(), 1);
-        assert!(f("bad").on_player_join("a").is_empty());
-        assert!(f("none").on_player_join("a").is_empty());
+        let f = factory();
+        assert_eq!(f("good", &[SCRIPT.to_string()]).on_player_join("a").len(), 1);
+        assert!(f("bad", &["(".to_string()]).on_player_join("a").is_empty());
+        assert!(f("none", &[]).on_player_join("a").is_empty());
+    }
+
+    #[test]
+    fn sources_come_from_string_values_in_key_order() {
+        let v = json!({"b.js": "two", "a.js": "one", "n": 3});
+        assert_eq!(sources_of(&v), ["one", "two"]);
+        assert!(sources_of(&json!([1])).is_empty());
+    }
+
+    #[test]
+    fn flagship_server_script_loads_unmodified_and_round_is_won() {
+        let src = include_str!("../../../Games/Flagship/scripts/game.js");
+        let mut h = QuickJsHost::new("flagship-test", &[src.to_string()]).expect("flagship script loads");
+        h.on_player_join("p1");
+        let mut last = Vec::new();
+        for enemy in ["WraithLeft", "WraithRight", "WraithAhead"] {
+            last = h.on_remote("p1", "banish", &json!({ "enemy": enemy }));
+        }
+        assert!(last.contains(&Outgoing::FireAll {
+            name: "round".into(),
+            data: json!({ "state": "won", "scores": { "p1": 3 } }),
+        }));
+        let state: Value = serde_json::from_str(&h.state_json()).unwrap();
+        assert_eq!(state["over"], json!(true));
+        assert_eq!(state["score"], json!({ "p1": 3 }));
+        assert!(h.errors().is_empty());
+    }
+
+    #[test]
+    fn leading_comments_before_export_default_load() {
+        let src = "// line comment\n/* block\n   comment */\n  export default serverScript({ onPlayerJoin(ctx, p) { ctx.state.ok = true; } });\n";
+        let mut h = QuickJsHost::new("test", &[src.to_string()]).expect("loads");
+        h.on_player_join("a");
+        assert_eq!(serde_json::from_str::<Value>(&h.state_json()).unwrap(), json!({"ok":true}));
+    }
+
+    #[test]
+    fn load_failure_is_in_a_later_debug_snapshot() {
+        let game = "script-host-load-failure-test";
+        assert!(factory()(game, &["(".to_string()]).on_player_join("a").is_empty());
+        let (_sub, snap) = bus().subscribe(game); // connects after the failure, before any join
+        let logs = snap["logs"].as_array().unwrap();
+        assert_eq!(logs.len(), 1);
+        assert_eq!(logs[0]["kind"], "error");
+        assert!(logs[0]["msg"].as_str().unwrap().starts_with("load: "));
+        bus().end(game);
+    }
+
+    #[test]
+    fn console_logs_errors_and_state_reach_the_debug_bus() {
+        let game = "script-host-debug-test";
+        bus().publish(game, "join", json!({"player": "a"})); // opens the game's debug entry
+        let src = r#"export default serverScript({
+          onPlayerJoin(ctx, player) {
+            console.log("hi", { n: 1 });
+            console.warn("careful");
+            console.error("bad");
+            ctx.state.joined = player.id;
+          },
+          onRemote() { for (let i = 0; i < 50; i++) console.log("spam" + i); throw new Error("boom"); },
+        });"#;
+        let mut h = QuickJsHost::new(game, &[src.to_string()]).unwrap();
+        h.on_player_join("a");
+        h.on_remote("a", "x", &Value::Null);
+        let (_sub, snap) = bus().subscribe(game);
+        assert_eq!(snap["state"], json!({"joined": "a"}));
+        let logs = snap["logs"].as_array().unwrap();
+        assert_eq!(logs[0]["msg"], "hi {\"n\":1}");
+        assert_eq!((logs[1]["level"].clone(), logs[2]["level"].clone()), (json!("warn"), json!("error")));
+        assert_eq!(logs[3]["msg"], "spam0");
+        assert_eq!(logs.len(), 54); // 3 + 50 spam + the "boom" error
+        assert_eq!(logs[53]["kind"], "error");
+        bus().end(game);
     }
 }

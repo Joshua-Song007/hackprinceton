@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Main Studio window: core defaults, updater, window state and the pop-out command.",
+  "windows": ["main"],
+  "permissions": ["core:default", "updater:default", "window-state:default", "allow-open-panel-window"]
+}

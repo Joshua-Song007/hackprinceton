@@ -1,0 +1,364 @@
+// Docking layout manager on dockview-core. Panel ids are stable strings, so saved layouts survive upgrades.
+// Mouse: drag tabs to dock, split or tab; drag sashes to resize; close with the tab's x.
+// Keyboard: F6 / Shift+F6 cycle panels, arrow keys on a focused splitter resize it (Shift = larger step),
+// Ctrl+Alt+arrows move the active panel into the neighbour as a tab, Ctrl+Alt+Shift+arrows split it beside the neighbour,
+// Alt+PageUp/PageDown switch tabs, Ctrl+Alt+M maximizes, Ctrl+Alt+C collapses or expands the active panel's group.
+import { createDockview, type DockviewApi, type DockviewGroupPanel, type IDockviewPanel, type SerializedDockview } from 'dockview-core';
+import { announce, openMenu, type MenuItem } from './ui';
+
+export interface PanelView {
+  element: HTMLElement;
+  /** Move keyboard focus into the panel. Falls back to the first focusable element, then the element itself. */
+  focus?(): void;
+  dispose?(): void;
+}
+
+export interface PanelSpec {
+  id: string;
+  title: string;
+  create(): PanelView;
+}
+
+export const PRESETS = [
+  { id: 'default', label: 'Default' },
+  { id: 'script-focus', label: 'Script focus' },
+  { id: 'debug-focus', label: 'Debug focus' },
+] as const;
+export type PresetId = (typeof PRESETS)[number]['id'];
+
+export interface LayoutHooks {
+  /** Desktop shell: open a panel in its own OS window. Absent in the browser, so the menu item is hidden. */
+  popOut?(panelId: string): void;
+}
+
+const CURRENT_KEY = 'omni.studio.layout.current';
+const NAMED_KEY = 'omni.studio.layouts';
+const SASH_STEP = 16;
+const COLLAPSED_SIZE = 28;
+type Direction = 'left' | 'right' | 'top' | 'bottom';
+const ARROWS: Record<string, Direction> = { ArrowLeft: 'left', ArrowRight: 'right', ArrowUp: 'top', ArrowDown: 'bottom' };
+
+export class LayoutManager {
+  readonly api: DockviewApi;
+  private specs = new Map<string, PanelSpec>();
+  private views = new Map<string, PanelView>();
+  private saveTimer: ReturnType<typeof setTimeout> | undefined;
+  private restoring = false;
+  private collapsed = new Map<string, { width: number; height: number }>();
+
+  constructor(
+    private host: HTMLElement,
+    panels: PanelSpec[],
+    private hooks: LayoutHooks = {},
+    private storage: Pick<Storage, 'getItem' | 'setItem'> = localStorage,
+  ) {
+    for (const p of panels) this.specs.set(p.id, p);
+    this.api = createDockview(host, {
+      theme: { name: 'omni', className: 'dockview-theme-omni' },
+      disableFloatingGroups: true,
+      createComponent: ({ id, name }) => {
+        const view = this.specs.get(name)!.create();
+        this.views.set(id, view);
+        return {
+          element: view.element,
+          init: () => {},
+          dispose: () => {
+            view.dispose?.();
+            this.views.delete(id);
+          },
+        };
+      },
+    });
+    this.api.onDidLayoutChange(() => {
+      if (this.restoring) return;
+      clearTimeout(this.saveTimer);
+      this.saveTimer = setTimeout(() => this.storage.setItem(CURRENT_KEY, JSON.stringify(this.api.toJSON())), 300);
+    });
+    document.addEventListener('keydown', (e) => this.onKey(e));
+    this.makeSashesKeyboardReachable();
+  }
+
+  /** Restores the last layout, or builds the default one. A saved layout naming an unknown panel is discarded. */
+  start(): void {
+    const saved = this.storage.getItem(CURRENT_KEY);
+    if (saved && this.tryLoad(saved)) return;
+    this.applyPreset('default');
+  }
+
+  private tryLoad(json: string): boolean {
+    this.restoring = true;
+    try {
+      const data = JSON.parse(json) as SerializedDockview;
+      const ids = Object.values(data.panels ?? {}).map((p) => (p as { contentComponent?: string }).contentComponent);
+      if (ids.some((id) => !id || !this.specs.has(id))) return false;
+      this.api.fromJSON(data);
+      return true;
+    } catch {
+      this.api.clear();
+      return false;
+    } finally {
+      this.restoring = false;
+      this.storage.setItem(CURRENT_KEY, JSON.stringify(this.api.toJSON()));
+    }
+  }
+
+  private add(id: string, position?: { referencePanel?: string; direction?: 'left' | 'right' | 'above' | 'below' | 'within' }, size: { initialWidth?: number; initialHeight?: number } = {}, inactive = false) {
+    const spec = this.specs.get(id)!;
+    this.api.addPanel({ id, component: id, title: spec.title, inactive, ...(position ? { position: position as never } : {}), ...size });
+  }
+
+  applyPreset(preset: PresetId): void {
+    this.restoring = true;
+    this.api.clear();
+    this.api.layout(this.host.clientWidth, this.host.clientHeight); // sizes below need a measured dock
+    const b = this.add.bind(this);
+    let sizes: Record<string, { width?: number; height?: number }> = {};
+    if (preset === 'script-focus') {
+      b('editor');
+      b('explorer', { referencePanel: 'editor', direction: 'left' });
+      b('devices', { referencePanel: 'explorer', direction: 'within' }, {}, true);
+      b('viewport', { referencePanel: 'editor', direction: 'right' });
+      b('inspector', { referencePanel: 'viewport', direction: 'below' });
+      b('output', { direction: 'below' } as never);
+      sizes = { explorer: { width: 220 }, viewport: { width: 380 }, inspector: { height: 240 }, output: { height: 140 } };
+    } else if (preset === 'debug-focus') {
+      b('viewport');
+      b('editor', { referencePanel: 'viewport', direction: 'within' }, {}, true);
+      b('explorer', { referencePanel: 'viewport', direction: 'left' });
+      b('devices', { referencePanel: 'explorer', direction: 'within' }, {}, true);
+      b('inspector', { referencePanel: 'viewport', direction: 'right' });
+      b('output', { direction: 'below' } as never);
+      sizes = { explorer: { width: 200 }, inspector: { width: 260 }, output: { height: 420 } };
+    } else {
+      // StudioWindow: sidebar 240, inspector 280, debug area 200, viewport takes the rest.
+      b('viewport');
+      b('editor', { referencePanel: 'viewport', direction: 'within' }, {}, true);
+      b('explorer', { referencePanel: 'viewport', direction: 'left' });
+      b('devices', { referencePanel: 'explorer', direction: 'within' }, {}, true);
+      b('inspector', { referencePanel: 'viewport', direction: 'right' });
+      b('output', { direction: 'below' } as never);
+      sizes = { explorer: { width: 240 }, inspector: { width: 280 }, output: { height: 200 } };
+    }
+    for (const id of ['server', 'state', 'packets']) b(id, { referencePanel: 'output', direction: 'within' }, {}, true);
+    // The panel that holds the rest keeps its size; sidebars, inspector and debug area get theirs.
+    for (const [id, size] of Object.entries(sizes)) this.api.getPanel(id)?.api.setSize(size);
+    this.api.getPanel('output')?.api.setActive();
+    this.api.getPanel('viewport')?.api.setActive();
+    this.restoring = false;
+    this.storage.setItem(CURRENT_KEY, JSON.stringify(this.api.toJSON()));
+  }
+
+  reset(): void {
+    this.applyPreset('default');
+  }
+
+  // Named layouts
+  private named(): Record<string, SerializedDockview> {
+    try {
+      return JSON.parse(this.storage.getItem(NAMED_KEY) ?? '{}') as Record<string, SerializedDockview>;
+    } catch {
+      return {};
+    }
+  }
+
+  namedLayouts(): string[] {
+    return Object.keys(this.named()).sort();
+  }
+
+  saveNamed(name: string): void {
+    this.storage.setItem(NAMED_KEY, JSON.stringify({ ...this.named(), [name]: this.api.toJSON() }));
+  }
+
+  loadNamed(name: string): boolean {
+    const layout = this.named()[name];
+    return layout ? this.tryLoad(JSON.stringify(layout)) : false;
+  }
+
+  deleteNamed(name: string): void {
+    const all = this.named();
+    delete all[name];
+    this.storage.setItem(NAMED_KEY, JSON.stringify(all));
+  }
+
+  // Panels
+  panelSpecs(): PanelSpec[] {
+    return [...this.specs.values()];
+  }
+
+  isOpen(id: string): boolean {
+    return !!this.api.getPanel(id);
+  }
+
+  /** Shows a closed panel as a tab in the active group, or closes an open one. */
+  togglePanel(id: string): void {
+    const open = this.api.getPanel(id);
+    if (open) return open.api.close();
+    const group = this.api.activeGroup;
+    this.add(id, group ? ({ referenceGroup: group.id } as never) : undefined);
+  }
+
+  /** Shows (opening it if closed) and activates a panel. */
+  show(id: string): void {
+    if (!this.isOpen(id)) this.togglePanel(id);
+    this.api.getPanel(id)?.api.setActive();
+  }
+
+  focusPanel(id: string): void {
+    this.show(id);
+    this.focusInto(id);
+  }
+
+  private focusInto(id: string): void {
+    const view = this.views.get(id);
+    if (!view) return;
+    if (view.focus) view.focus();
+    else (view.element.querySelector<HTMLElement>('input, button, [tabindex="0"], textarea, select') ?? view.element).focus();
+    announce(`${this.specs.get(id)?.title ?? id} panel`);
+  }
+
+  /** F6: next group in reading order (top to bottom, left to right), wrapping. */
+  cycleFocus(delta: 1 | -1): void {
+    const groups = [...this.api.groups].sort((a, b) => {
+      const ra = a.element.getBoundingClientRect();
+      const rb = b.element.getBoundingClientRect();
+      return Math.round(ra.top / 8) - Math.round(rb.top / 8) || ra.left - rb.left;
+    });
+    if (!groups.length) return;
+    const current = groups.findIndex((g) => g.element.contains(document.activeElement));
+    const from = current >= 0 ? current : groups.findIndex((g) => g === this.api.activeGroup);
+    const next = groups[(from + delta + groups.length) % groups.length]!;
+    const panel = next.activePanel;
+    if (!panel) return;
+    panel.api.setActive();
+    this.focusInto(panel.id);
+  }
+
+  private neighbour(from: HTMLElement, direction: Direction): DockviewGroupPanel | undefined {
+    const r = from.getBoundingClientRect();
+    const cx = r.left + r.width / 2;
+    const cy = r.top + r.height / 2;
+    let best: { score: number; group: DockviewGroupPanel } | undefined;
+    for (const g of this.api.groups) {
+      if (g.element === from) continue;
+      const o = g.element.getBoundingClientRect();
+      const dx = o.left + o.width / 2 - cx;
+      const dy = o.top + o.height / 2 - cy;
+      const ok = direction === 'left' ? dx < 0 : direction === 'right' ? dx > 0 : direction === 'top' ? dy < 0 : dy > 0;
+      const score = Math.hypot(dx, dy);
+      if (ok && (!best || score < best.score)) best = { score, group: g };
+    }
+    return best?.group;
+  }
+
+  /** Moves a panel into the neighbouring group in `direction`, or splits it out to that side when there is none. */
+  movePanel(panel: IDockviewPanel, direction: Direction, split = false): void {
+    const target = this.neighbour(panel.group.element, direction);
+    if (target) panel.api.moveTo({ group: target, position: split ? direction : 'center' });
+    else if (panel.group.panels.length > 1) panel.api.moveTo({ group: panel.group, position: direction });
+    announce(`${panel.title ?? panel.id} moved ${direction}`);
+    this.focusInto(panel.id);
+  }
+
+  private onKey(e: KeyboardEvent): void {
+    if (e.key === 'F6') {
+      e.preventDefault();
+      this.cycleFocus(e.shiftKey ? -1 : 1);
+      return;
+    }
+    const sash = (e.target as HTMLElement).closest?.('.dv-sash');
+    if (sash && e.key in ARROWS && !e.ctrlKey && !e.altKey) {
+      e.preventDefault();
+      this.nudgeSash(sash as HTMLElement, ARROWS[e.key]!, e.shiftKey ? SASH_STEP * 4 : SASH_STEP);
+      return;
+    }
+    const panel = this.api.activePanel;
+    if (!panel) return;
+    if (e.ctrlKey && e.altKey && e.key in ARROWS) {
+      e.preventDefault();
+      this.movePanel(panel, ARROWS[e.key]!, e.shiftKey);
+    } else if (e.ctrlKey && e.altKey && e.key.toLowerCase() === 'c') {
+      e.preventDefault();
+      this.toggleCollapse();
+    } else if (e.ctrlKey && e.altKey && e.key.toLowerCase() === 'm') {
+      e.preventDefault();
+      this.toggleMaximize();
+    } else if (e.altKey && !e.ctrlKey && (e.key === 'PageUp' || e.key === 'PageDown')) {
+      e.preventDefault();
+      const tabs = panel.group.panels;
+      const next = tabs[(tabs.indexOf(panel) + (e.key === 'PageDown' ? 1 : -1) + tabs.length) % tabs.length];
+      next?.api.setActive();
+      if (next) this.focusInto(next.id);
+    }
+  }
+
+  /** Shrinks the active panel's group to its minimum size (dockview clamps it), or restores the size it had. */
+  toggleCollapse(): void {
+    const group = this.api.activePanel?.group;
+    if (!group) return;
+    const before = this.collapsed.get(group.id);
+    if (before) {
+      group.api.setSize(before);
+      this.collapsed.delete(group.id);
+    } else {
+      this.collapsed.set(group.id, { width: group.width, height: group.height });
+      group.api.setSize({ width: COLLAPSED_SIZE, height: COLLAPSED_SIZE });
+    }
+    announce(before ? 'Panel expanded' : 'Panel collapsed');
+  }
+
+  toggleMaximize(): void {
+    const panel = this.api.activePanel;
+    if (this.api.hasMaximizedGroup()) this.api.exitMaximizedGroup();
+    else if (panel) this.api.maximizeGroup(panel);
+  }
+
+  /** Dockview sashes only take pointer input, so a synthetic drag of `delta` px moves the real splitter. */
+  private nudgeSash(sash: HTMLElement, direction: Direction, step: number): void {
+    const horizontal = sash.closest('.dv-split-view-container')?.classList.contains('dv-horizontal') ?? true;
+    if (horizontal !== (direction === 'left' || direction === 'right')) return;
+    const r = sash.getBoundingClientRect();
+    const x = r.left + r.width / 2;
+    const y = r.top + r.height / 2;
+    const delta = direction === 'left' || direction === 'top' ? -step : step;
+    const init = (cx: number, cy: number) => ({ clientX: cx, clientY: cy, pointerId: 1, bubbles: true, cancelable: true });
+    sash.dispatchEvent(new PointerEvent('pointerdown', init(x, y)));
+    document.dispatchEvent(new PointerEvent('pointermove', init(horizontal ? x + delta : x, horizontal ? y : y + delta)));
+    document.dispatchEvent(new PointerEvent('pointerup', init(x, y)));
+  }
+
+  private makeSashesKeyboardReachable(): void {
+    const mark = () => {
+      this.host.querySelectorAll<HTMLElement>('.dv-sash:not([tabindex])').forEach((s) => {
+        const horizontal = s.closest('.dv-split-view-container')?.classList.contains('dv-horizontal') ?? true;
+        s.tabIndex = 0;
+        s.setAttribute('role', 'separator');
+        s.setAttribute('aria-orientation', horizontal ? 'vertical' : 'horizontal');
+        s.setAttribute('aria-label', horizontal ? 'Resize panels, use left and right arrow keys' : 'Resize panels, use up and down arrow keys');
+      });
+    };
+    new MutationObserver(mark).observe(this.host, { childList: true, subtree: true });
+    mark();
+  }
+
+  /** Items for the toolbar's Window menu. */
+  menuItems(onSaveAs: () => void, onDelete: (name: string) => void): MenuItem[] {
+    const items: MenuItem[] = [{ heading: true, label: 'Panels' }];
+    for (const spec of this.specs.values()) items.push({ label: spec.title, checked: this.isOpen(spec.id), run: () => this.togglePanel(spec.id) });
+    items.push({ separator: true }, { heading: true, label: 'Layouts' });
+    for (const p of PRESETS) items.push({ label: p.label, run: () => this.applyPreset(p.id) });
+    for (const name of this.namedLayouts()) items.push({ label: name, run: () => this.loadNamed(name) });
+    items.push({ label: 'Save layout as...', run: onSaveAs });
+    for (const name of this.namedLayouts()) items.push({ label: `Delete layout ${name}`, run: () => onDelete(name) });
+    items.push({ label: 'Reset layout', run: () => this.reset() }, { separator: true });
+    const activeGroup = this.api.activePanel?.group;
+    items.push({ label: activeGroup && this.collapsed.has(activeGroup.id) ? 'Expand panel (Ctrl+Alt+C)' : 'Collapse panel (Ctrl+Alt+C)', run: () => this.toggleCollapse() });
+    items.push({ label: this.api.hasMaximizedGroup() ? 'Restore panel size' : 'Maximize active panel', run: () => this.toggleMaximize() });
+    const active = this.api.activePanel;
+    if (this.hooks.popOut && active) items.push({ label: `Pop out ${active.title ?? active.id}`, run: () => this.hooks.popOut?.(active.id) });
+    return items;
+  }
+
+  openMenu(anchor: HTMLElement, onSaveAs: () => void, onDelete: (name: string) => void): void {
+    openMenu(anchor, this.menuItems(onSaveAs, onDelete));
+  }
+}
