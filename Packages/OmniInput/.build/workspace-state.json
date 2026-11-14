@@ -9,12 +9,12 @@
         "packageRef" : {
           "identity" : "omnicore",
           "kind" : "fileSystem",
-          "location" : "/Users/michaelchung/Documents/Hackathons_and_projects/hackprinceton/Packages/OmniCore",
+          "location" : "/Users/joshuasong/Downloads/hackprinceton/Packages/OmniCore",
           "name" : "OmniCore"
         },
         "state" : {
           "name" : "fileSystem",
-          "path" : "/Users/michaelchung/Documents/Hackathons_and_projects/hackprinceton/Packages/OmniCore"
+          "path" : "/Users/joshuasong/Downloads/hackprinceton/Packages/OmniCore"
         },
         "subpath" : "omnicore"
       }

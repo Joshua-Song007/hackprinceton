@@ -61,7 +61,7 @@ Where one package is swapped for another without the consumer changing. Studio's
 
 | Seam (declared in) | Implemented by | Consumed by |
 |---|---|---|
-| `InputSource` (OmniInput) | OmniSim: `VirtualDevice` subclasses, `UsisPlayer` · OmniBridge: `BridgeInputSource`, `AirPodsMotionSource` · OmniAdapters (stretch) | `InputBus` |
+| `InputSource` (OmniInput) | OmniSim: `VirtualDevice` subclasses, `UsisPlayer` · OmniBridge: `BridgeInputSource`, `AirPodsMotionSource` · OmniAdapters (stretch) | `InputBus` (a source is started with the bus: `start(bus:)`) |
 | `InputBus` (OmniInput) | OmniInput: `InputPipeline` | OmniRuntime `SceneRunner` (via `InputFrame`), OmniStudio |
 | `OutputSink` (OmniOutput) | OmniSim: `SimOutputSink` · OmniBridge: `BridgeOutputSink` | OmniStudio flushes the runtime's `OutputQueue` into the active sink |
 | `EventDispatcher` (OmniRuntime) | OmniScript: `ScriptEngine` | OmniRuntime `SceneRunner` |
@@ -79,6 +79,7 @@ Where one package is swapped for another without the consumer changing. Studio's
 | `OutputType` | OmniCore | **(plan decision)** `haptic` / `audio` for `OutputCommand` |
 | `WireMessage`, `LineFraming` | OmniCore | **(plan decision)** companions depend only on OmniCore |
 | `InputSource`, `InputBus`, `CapabilityTier`, `DeviceStats` | OmniInput | `DeviceStats` is the only place `source` survives |
+| `DeviceDescriptor`, `ChannelKind`, `PacketValidationError`, `HostClock` | OmniInput | **(plan decision)** supporting types for sources, capability tiers, validation and the host clock |
 | `OutputSink` | OmniOutput | |
 | `GameEvent`, `EventDispatcher`, components, systems | OmniRuntime | |
 | `SceneDescription`, `SceneLoader` | OmniRuntime | **(plan decision)** scene file format not in overview.md |
@@ -89,7 +90,8 @@ Where one package is swapped for another without the consumer changing. Studio's
 | Package / target | Frameworks |
 |---|---|
 | OmniCore | Foundation only |
-| OmniInput, OmniOutput | Foundation |
+| OmniInput | Foundation, Synchronization (`Mutex`) |
+| OmniOutput | Foundation |
 | OmniRuntime | RealityKit |
 | OmniScript | JavaScriptCore |
 | OmniSim | RealityKit (sensor rig) |
