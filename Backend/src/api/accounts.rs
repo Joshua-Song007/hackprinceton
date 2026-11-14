@@ -104,6 +104,21 @@ pub fn authenticate(headers: &HeaderMap) -> Option<Account> {
     lookup_session(bearer(headers)?)
 }
 
+/// Value of `key` in a raw query string (no percent-decoding: tokens are hex, versions are digits).
+pub fn query_param<'a>(query: Option<&'a str>, key: &str) -> Option<&'a str> {
+    query?.split('&').find_map(|kv| kv.strip_prefix(key)?.strip_prefix('='))
+}
+
+/// Like `authenticate`, plus a `?token=` query fallback because browsers cannot set headers on a
+/// WebSocket. The header wins when both are present (an invalid header does not fall back).
+/// [provisional: needs-tien-review] A token in a URL can reach proxy logs; serve over TLS (Caddy) only.
+pub fn authenticate_request(headers: &HeaderMap, query: Option<&str>) -> Option<Account> {
+    match bearer(headers) {
+        Some(t) => lookup_session(t),
+        None => lookup_session(query_param(query, "token").filter(|t| !t.is_empty())?),
+    }
+}
+
 /// Test helper for other api modules: a live session token for a fake account with this id.
 #[cfg(test)]
 pub fn test_token(account_id: &str) -> String {
@@ -236,6 +251,19 @@ mod tests {
         assert!(authenticate(&h).is_none());
         h.insert(header::AUTHORIZATION, HeaderValue::from_static("Bearer "));
         assert!(authenticate(&h).is_none());
+    }
+
+    #[test]
+    fn query_token_works_and_header_wins() {
+        let t = store_session(acct("q1"));
+        let other = store_session(acct("q2"));
+        let q = format!("version=2&token={t}");
+        assert_eq!(authenticate_request(&HeaderMap::new(), Some(&q)).unwrap().id, "q1");
+        assert_eq!(authenticate_request(&headers_with(&other), Some(&q)).unwrap().id, "q2");
+        assert!(authenticate_request(&headers_with("nope"), Some(&q)).is_none());
+        assert!(authenticate_request(&HeaderMap::new(), Some("token=")).is_none());
+        assert!(authenticate_request(&HeaderMap::new(), None).is_none());
+        assert_eq!(query_param(Some("a=1&xtoken=2"), "token"), None);
     }
 
     #[test]

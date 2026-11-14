@@ -3,7 +3,7 @@
 // rquickjs host. Keeps the Swift and Rust server-script hosts aligned. No DATABASE_URL needed.
 // [provisional: needs-tien-review]
 
-use omni_backend::game_server::script_host::{factory_with, QuickJsHost};
+use omni_backend::game_server::script_host::{factory, QuickJsHost};
 use omni_backend::game_server::session::{Outgoing, ScriptHost};
 use serde_json::{json, Value};
 
@@ -24,7 +24,7 @@ const SHARED_FIXTURE: &str = r#"export default serverScript({
 });"#;
 
 fn host(source: &str) -> QuickJsHost {
-    QuickJsHost::new(&[source.to_string()]).expect("script loads")
+    QuickJsHost::new("test", &[source.to_string()]).expect("script loads")
 }
 
 fn state(h: &QuickJsHost) -> Value {
@@ -102,24 +102,24 @@ fn handler_error_is_contained() {
 
 #[test]
 fn bad_source_fails_to_load() {
-    assert!(QuickJsHost::new(&["export default serverScript({".to_string()]).is_err());
-    assert!(QuickJsHost::new(&["var x = 1;".to_string()]).is_err());
-    assert!(QuickJsHost::new(&["export default serverScript({ onBogus() {} });".to_string()]).is_err());
+    assert!(QuickJsHost::new("test", &["export default serverScript({".to_string()]).is_err());
+    assert!(QuickJsHost::new("test", &["var x = 1;".to_string()]).is_err());
+    assert!(QuickJsHost::new("test", &["export default serverScript({ onBogus() {} });".to_string()]).is_err());
 }
 
 #[test]
 fn multiple_scripts_share_state() {
     let a = "export default serverScript({ onPlayerJoin(ctx, p) { ctx.state.a = 1; } });";
     let b = "export default serverScript({ onPlayerJoin(ctx, p) { ctx.state.b = ctx.state.a + 1; } });";
-    let mut h = QuickJsHost::new(&[a.to_string(), b.to_string()]).expect("loads");
+    let mut h = QuickJsHost::new("test", &[a.to_string(), b.to_string()]).expect("loads");
     h.on_player_join("p1");
     assert_eq!(state(&h), json!({"a": 1, "b": 2}));
 }
 
 #[test]
 fn factory_runs_fixture_through_public_api() {
-    let f = factory_with(|_| vec![SHARED_FIXTURE.to_string()]);
-    let mut h = f("game");
+    let f = factory();
+    let mut h = f("game", &[SHARED_FIXTURE.to_string()]);
     let out = h.on_remote("p1", "punch", &json!({"dir": [0, 1, 0]}));
     assert_eq!(
         out,

@@ -16,6 +16,7 @@ use axum::{Json, Router};
 use serde::Deserialize;
 
 use crate::api::accounts::authenticate;
+use crate::game_server::session;
 use crate::db::{self, Account, Game, GameVersion, NewGameVersion};
 use crate::AppState;
 
@@ -36,7 +37,7 @@ fn db_err(what: &str, e: sqlx::Error) -> StatusCode {
 }
 
 /// Canonical 8-4-4-4-12 hex uuid; anything else would make the `::uuid` cast fail inside Postgres.
-fn valid_uuid(s: &str) -> bool {
+pub(crate) fn valid_uuid(s: &str) -> bool {
     s.len() == 36
         && s.char_indices().all(|(i, c)| match i {
             8 | 13 | 18 | 23 => c == '-',
@@ -119,6 +120,7 @@ async fn publish_version(
     let v = db::insert_game_version(pool, &game_id, &body)
         .await
         .map_err(|e| db_err("publish", e))?;
+    session::reload(&game_id, &v); // a live session restarts on the new version
     Ok((StatusCode::CREATED, Json(v)))
 }
 

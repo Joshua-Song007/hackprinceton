@@ -9,7 +9,16 @@ use serde_json::Value;
 use sqlx::postgres::{PgPool, PgPoolOptions};
 use sqlx::Row;
 
+use crate::memstore::MemStore;
+
 pub type DbResult<T> = Result<T, sqlx::Error>;
+
+/// Where data lives: TigerData (Postgres) when DATABASE_URL is set, else the in-memory store.
+#[derive(Clone)]
+pub enum Db {
+    Pg(PgPool),
+    Mem(MemStore),
+}
 
 const MIGRATION_0001: &str = include_str!("../migrations/0001_init.sql");
 
@@ -121,11 +130,15 @@ fn version_from_row(row: &sqlx::postgres::PgRow) -> DbResult<GameVersion> {
 /// Finds or creates the account for (provider, subject); an existing row keeps its display name
 /// unless a non-empty one is given.
 pub async fn upsert_account(
-    pool: &PgPool,
+    db: &Db,
     provider: &str,
     subject: &str,
     display_name: &str,
 ) -> DbResult<Account> {
+    let pool = match db {
+        Db::Pg(pool) => pool,
+        Db::Mem(m) => return Ok(m.upsert_account(provider, subject, display_name)),
+    };
     let row = sqlx::query(
         "INSERT INTO accounts (provider, subject, display_name) VALUES ($1, $2, $3) \
          ON CONFLICT (provider, subject) DO UPDATE SET \
@@ -141,7 +154,11 @@ pub async fn upsert_account(
     account_from_row(&row)
 }
 
-pub async fn create_game(pool: &PgPool, owner_id: &str, title: &str) -> DbResult<Game> {
+pub async fn create_game(db: &Db, owner_id: &str, title: &str) -> DbResult<Game> {
+    let pool = match db {
+        Db::Pg(pool) => pool,
+        Db::Mem(m) => return Ok(m.create_game(owner_id, title)),
+    };
     let row = sqlx::query(
         "INSERT INTO games (owner_id, title) VALUES ($1::uuid, $2) \
          RETURNING id::text AS id, owner_id::text AS owner_id, title, \
@@ -154,7 +171,11 @@ pub async fn create_game(pool: &PgPool, owner_id: &str, title: &str) -> DbResult
     game_from_row(&row)
 }
 
-pub async fn list_games_by_owner(pool: &PgPool, owner_id: &str) -> DbResult<Vec<Game>> {
+pub async fn list_games_by_owner(db: &Db, owner_id: &str) -> DbResult<Vec<Game>> {
+    let pool = match db {
+        Db::Pg(pool) => pool,
+        Db::Mem(m) => return Ok(m.list_games_by_owner(owner_id)),
+    };
     let rows = sqlx::query(
         "SELECT id::text AS id, owner_id::text AS owner_id, title, \
          created_at::text AS created_at, updated_at::text AS updated_at \
@@ -167,7 +188,11 @@ pub async fn list_games_by_owner(pool: &PgPool, owner_id: &str) -> DbResult<Vec<
 }
 
 /// Owner account id of a game, or None when the game does not exist.
-pub async fn game_owner(pool: &PgPool, game_id: &str) -> DbResult<Option<String>> {
+pub async fn game_owner(db: &Db, game_id: &str) -> DbResult<Option<String>> {
+    let pool = match db {
+        Db::Pg(pool) => pool,
+        Db::Mem(m) => return Ok(m.game_owner(game_id)),
+    };
     let row = sqlx::query("SELECT owner_id::text AS owner_id FROM games WHERE id = $1::uuid")
         .bind(game_id)
         .fetch_optional(pool)
@@ -181,10 +206,14 @@ pub async fn game_owner(pool: &PgPool, game_id: &str) -> DbResult<Option<String>
 /// Inserts the next version (max + 1, starting at 1) and bumps the game's `updated_at`.
 /// Runs in one transaction with the game row locked, so concurrent publishes get distinct numbers.
 pub async fn insert_game_version(
-    pool: &PgPool,
+    db: &Db,
     game_id: &str,
     v: &NewGameVersion,
 ) -> DbResult<GameVersion> {
+    let pool = match db {
+        Db::Pg(pool) => pool,
+        Db::Mem(m) => return m.insert_game_version(game_id, v).ok_or(sqlx::Error::RowNotFound),
+    };
     let mut tx = pool.begin().await?;
     sqlx::query("SELECT id FROM games WHERE id = $1::uuid FOR UPDATE")
         .bind(game_id)
@@ -216,10 +245,14 @@ pub async fn insert_game_version(
 
 /// Fetches version `version` of a game, or the latest when `version` is None.
 pub async fn fetch_game_version(
-    pool: &PgPool,
+    db: &Db,
     game_id: &str,
     version: Option<i32>,
 ) -> DbResult<Option<GameVersion>> {
+    let pool = match db {
+        Db::Pg(pool) => pool,
+        Db::Mem(m) => return Ok(m.fetch_game_version(game_id, version)),
+    };
     let sql = format!(
         "SELECT {VERSION_COLS} FROM game_versions WHERE game_id = $1::uuid \
          AND ($2::int IS NULL OR version = $2) ORDER BY version DESC LIMIT 1"
@@ -276,14 +309,15 @@ mod tests {
         };
         let pool = connect_lazy(&url).unwrap();
         migrate(&pool).await.unwrap();
+        let db = Db::Pg(pool.clone());
         let subject = format!("test-{}", std::process::id());
-        let a = upsert_account(&pool, "test", &subject, "A").await.unwrap();
-        let a2 = upsert_account(&pool, "test", &subject, "").await.unwrap();
+        let a = upsert_account(&db, "test", &subject, "A").await.unwrap();
+        let a2 = upsert_account(&db, "test", &subject, "").await.unwrap();
         assert_eq!(a.id, a2.id);
         assert_eq!(a2.display_name, "A");
-        let g = create_game(&pool, &a.id, "Game").await.unwrap();
-        assert_eq!(game_owner(&pool, &g.id).await.unwrap(), Some(a.id.clone()));
-        assert!(list_games_by_owner(&pool, &a.id)
+        let g = create_game(&db, &a.id, "Game").await.unwrap();
+        assert_eq!(game_owner(&db, &g.id).await.unwrap(), Some(a.id.clone()));
+        assert!(list_games_by_owner(&db, &a.id)
             .await
             .unwrap()
             .iter()
@@ -296,16 +330,16 @@ mod tests {
             metadata: json!({"title": "Game"}),
             run_mode: "device".into(),
         };
-        let v1 = insert_game_version(&pool, &g.id, &nv).await.unwrap();
-        let v2 = insert_game_version(&pool, &g.id, &nv).await.unwrap();
+        let v1 = insert_game_version(&db, &g.id, &nv).await.unwrap();
+        let v2 = insert_game_version(&db, &g.id, &nv).await.unwrap();
         assert_eq!((v1.version, v2.version), (1, 2));
         assert_eq!(v1.scene, nv.scene);
         assert_eq!(v1.run_mode, "device");
-        let latest = fetch_game_version(&pool, &g.id, None).await.unwrap().unwrap();
+        let latest = fetch_game_version(&db, &g.id, None).await.unwrap().unwrap();
         assert_eq!(latest.version, 2);
-        let first = fetch_game_version(&pool, &g.id, Some(1)).await.unwrap().unwrap();
+        let first = fetch_game_version(&db, &g.id, Some(1)).await.unwrap().unwrap();
         assert_eq!(first.id, v1.id);
-        assert!(fetch_game_version(&pool, &g.id, Some(9)).await.unwrap().is_none());
+        assert!(fetch_game_version(&db, &g.id, Some(9)).await.unwrap().is_none());
         sqlx::query("DELETE FROM accounts WHERE id = $1::uuid")
             .bind(&a.id)
             .execute(&pool)

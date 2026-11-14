@@ -1,5 +1,7 @@
 // Starts the HTTP API; the WebSocket game server (/play) and /api routes are added by later 4.2 items.
-use omni_backend::app;
+use omni_backend::db::Db;
+use omni_backend::memstore::MemStore;
+use omni_backend::{app_with_studio, db as database};
 use sqlx::postgres::PgPoolOptions;
 
 #[tokio::main]
@@ -7,17 +9,28 @@ async fn main() {
     // Pool is lazy: no connection is attempted until a query runs, so startup never panics.
     let db = match std::env::var("DATABASE_URL") {
         Ok(url) => match PgPoolOptions::new().connect_lazy(&url) {
-            Ok(pool) => Some(pool),
+            Ok(pool) => Some(Db::Pg(pool)),
             Err(e) => {
                 eprintln!("DATABASE_URL invalid, starting without a database: {e}");
                 None
             }
         },
         Err(_) => {
-            eprintln!("DATABASE_URL not set, starting without a database");
-            None
+            eprintln!("DATABASE_URL not set, using the in-memory store (data is lost on restart)");
+            Some(Db::Mem(MemStore::default()))
         }
     };
+
+    if let Some(Db::Pg(pool)) = &db {
+        if let Err(e) = database::migrate(pool).await {
+            eprintln!("migration failed, continuing: {e}");
+        }
+    }
+
+    let studio_dir = std::env::var("OMNI_STUDIO_DIR").ok().map(std::path::PathBuf::from);
+    if let Some(dir) = &studio_dir {
+        eprintln!("serving Studio from {}", dir.display());
+    }
 
     let port = std::env::var("PORT")
         .ok()
@@ -31,7 +44,7 @@ async fn main() {
         }
     };
     eprintln!("listening on 0.0.0.0:{port}");
-    if let Err(e) = axum::serve(listener, app(db)).await {
+    if let Err(e) = axum::serve(listener, app_with_studio(db, studio_dir)).await {
         eprintln!("server error: {e}");
         std::process::exit(1);
     }
@@ -39,7 +52,7 @@ async fn main() {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use omni_backend::app;
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
     // tower is not a direct dependency, so /health is exercised over a loopback socket.
