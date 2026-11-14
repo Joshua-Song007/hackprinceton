@@ -22,15 +22,18 @@ OmniCore ◄──── OmniInput ◄──── OmniRuntime ◄──── O
    ├──── OmniAdapters              (stretch; Core + Input)
    └──── OmniCompanion             (iOS + watchOS apps; Core only)
 
-OmniCloud                          (no Omni deps; Studio's backend client)
+OmniCloud                          (no Omni deps; backend client for Studio and the player)
+   ▲
+   └──── OmniLibrary                (Phase 9: device profile + library model; OmniCloud only)
 
-OmniStudio (macOS app)  ──►  every package above except OmniCompanion
+OmniStudio (macOS app)  ──►  every package above except OmniCompanion and OmniLibrary
+OmniPlayer (iOS + macOS app) ──►  OmniLibrary, OmniCloud (Phase 9; library shell, no runtime yet)
 Games/Flagship          ──►  data only (scene + scripts) run through OmniRuntime + OmniScript
 Backend/ (Rust)         ──►  no Swift edges; reached over HTTP / WebSocket by OmniCloud
+                             (one file edge, not a package edge: `script_host.rs` includes OmniScript's `prelude.js`; see Placement Notes)
 Web/ (TypeScript, Phase 8) ─► no Swift edges; file-level imports of Schema/usis.schema.json, prelude.js, Games/*; reaches Backend/ over HTTP / WebSocket via @omni/cloud
   @omni/core ◄── @omni/runtime ◄── @omni/script        (@omni/runtime, @omni/script never import @omni/sim: hardware-blind)
   @omni/core ◄── @omni/sim ;  @omni/cloud (no Omni deps) ;  studio = composition root, depends on all
-                             (one file edge, not a package edge: `script_host.rs` includes OmniScript's `prelude.js`; see Placement Notes)
 ```
 
 | Package / target | Depends on |
@@ -46,6 +49,8 @@ Web/ (TypeScript, Phase 8) ─► no Swift edges; file-level imports of Schema/u
 | OmniAdapters (stretch) | OmniCore, OmniInput |
 | OmniCompanion (iOS, watchOS) | OmniCore |
 | OmniCloud | — |
+| OmniLibrary (Phase 9) | OmniCloud |
+| OmniPlayer (iOS + macOS app, Phase 9) | OmniLibrary, OmniCloud |
 | OmniStudio (macOS app) | all packages |
 | Games/Flagship | OmniRuntime, OmniScript (public API only) |
 
@@ -62,7 +67,8 @@ Enforced in each `Package.swift`; a violation is a build failure, not a conventi
 | OmniCompanion | anything but OmniCore | Phone/Watch apps share only the wire types |
 | OmniCollab | OmniInput, OmniRuntime | Syncs the project document only; never touches input |
 | OmniSim ↔ OmniBridge | each other | Siblings; both plug in through `InputSource` / `OutputSink` |
-| OmniRuntime, OmniScript, Games/* | OmniCloud | Module 11 boundary: only Studio (the composition root) talks to the backend |
+| OmniRuntime, OmniScript, Games/* | OmniCloud | Module 11 boundary: only a composition root talks to the backend (Studio; since Phase 9 also OmniPlayer, **(plan decision)** until overview.md Module 11 changes) |
+| OmniLibrary | OmniRuntime, OmniScript, OmniInput, OmniSim, OmniBridge (this round) | **(plan decision)** the player shell is library-only; keeps the hardware-blind property and the Network Rule by dependency; revisit when Play embeds the runtime |
 | OmniCloud | any Omni package | Carries game content only, never input |
 
 ## Protocol Seams
@@ -77,6 +83,9 @@ Where one package is swapped for another without the consumer changing. Studio's
 | `EventDispatcher` (OmniRuntime) | OmniScript: `ScriptEngine` | OmniRuntime `SceneRunner` |
 | `EventDeriver` (OmniRuntime) | OmniRuntime: `LookAtDetector`, `GestureEventMapper`, `HeartRateIntensity`, `RaycastHitDetector` (2.1) | OmniRuntime `SceneRunner` |
 | `RemoteChannel` (OmniScript) | OmniStudio: `InMemoryRemoteChannel` (in `LocalTestSession.swift`) · later the player app's game-server connection | OmniScript `ScriptEngine`, `ServerScriptEngine` |
+| `CatalogSource` (OmniLibrary, Phase 9) | OmniCloud: `CloudClient` | OmniLibrary `LibraryModel` |
+| `SessionStore` (OmniLibrary, Phase 9) | OmniLibrary: Keychain store · in-memory store (tests) | OmniPlayer `PlayerModel` |
+| `GameLauncher` (OmniLibrary, Phase 9) | OmniLibrary: `StubGameLauncher` (fetches the bundle only) · later a launcher that hands it to OmniRuntime / OmniScript | OmniPlayer `PlayerModel` |
 
 ## Type Ownership
 
@@ -99,6 +108,8 @@ Where one package is swapped for another without the consumer changing. Studio's
 | `ScriptEngine`, `SelfBridge`, `ContextBridge`, `ScriptReloader` | OmniScript | |
 | `ServerScriptEngine`, `RemoteChannel` | OmniScript | server scripts and the remote-event seam (overview.md Module 3) |
 | `CloudClient` | OmniCloud | **(plan decision)** one HTTP client for sign-in, publish and fetch |
+| `CatalogEntry` | OmniCloud | **(plan decision)** one row of the public library (id, title, author, latest version, run mode, required tier) |
+| `DeviceProfile`, `Playability`, `LibraryModel` | OmniLibrary | **(plan decision)** what this device is, whether it can play an entry, and the browse state |
 
 ## Apple Framework Use
 
@@ -116,6 +127,8 @@ Where one package is swapped for another without the consumer changing. Studio's
 | OmniCompanion iOS | Network (via `Shared/BridgeClient.swift`), CoreMotion, Core Haptics, WatchConnectivity, SwiftUI, UIKit |
 | OmniCompanion watchOS | HealthKit, CoreMotion, WatchConnectivity, SwiftUI |
 | OmniCloud | Foundation (`URLSession`) |
+| OmniLibrary | Foundation, Security (Keychain), Observation |
+| OmniPlayer | SwiftUI, AuthenticationServices (Sign in with Apple) |
 | OmniStudio | SwiftUI, RealityKit, AppKit, Observation, Synchronization |
 | Backend (Rust, not Apple) | axum (with `ws`), tokio, sqlx (Postgres), serde, serde_json, rquickjs 0.9 (provisional; deno_core not picked) |
 
@@ -235,6 +248,15 @@ Packages/
       CloudClient.swift                                                               [P4]
     Tests/OmniCloudTests/
       CloudClientTests.swift                                                          [P4]
+      LibraryAPITests.swift                                                           [P9]
+
+  OmniLibrary/                                                                        (Phase 9)
+    Package.swift                                   [P9]
+    Sources/OmniLibrary/
+      DeviceProfile.swift  Playability.swift  SessionStore.swift
+      LibraryModel.swift  GameLauncher.swift                                          [P9]
+    Tests/OmniLibraryTests/
+      DeviceProfileTests.swift  PlayabilityTests.swift  LibraryModelTests.swift       [P9]
 
 Apps/
   OmniStudio/
@@ -264,6 +286,14 @@ Apps/
     watchOS/       WatchApp.swift  HeartRateWorkout.swift
                    WristGestureDetector.swift  WatchRelay.swift                       [P3]
 
+  OmniPlayer/                                       (Phase 9: iOS + macOS player app, library shell)
+    OmniPlayer.xcodeproj/project.pbxproj            [P9]
+    OmniPlayer.entitlements                         [P9]
+    OmniPlayer/
+      OmniPlayerApp.swift  PlayerModel.swift                                          [P9]
+      Account/     AppleSignInView.swift                                              [P9]
+      Library/     LibraryView.swift  GameDetailView.swift                            [P9]
+
 Tools/                                              (plan decision: hardware probes, no Omni deps, no graph edges)
   AirPodsProbe/
     Package.swift  Info.plist  bundle.sh                                              [HW]
@@ -283,8 +313,10 @@ Backend/                                            (plan decision: Rust Cargo p
   migrations/      0001_init.sql                                                      [P4]
   src/             main.rs  db.rs  lib.rs                                             [P4]
   src/api/         accounts.rs  games.rs  mod.rs                                      [P4]
+                   library.rs  apple.rs                                               [P9]
   src/game_server/ session.rs  script_host.rs  mod.rs                                 [P4]
   tests/           api.rs  script_host.rs                                             [P4]
+                   library.rs  apple.rs                                               [P9]
 ```
 
 ## Placement Notes
@@ -295,7 +327,8 @@ Backend/                                            (plan decision: Rust Cargo p
 - `BridgeClient` is shared by the iOS and watchOS targets under `Apps/OmniCompanion/Shared/`; the Watch reaches the Mac through the phone via `WatchRelay` → `WatchConnectivityReceiver`.
 - `Games/Flagship` holds data (scene + JS) only, so it cannot import Swift packages by construction; it reaches the engine through `OmniScript`'s `self` / `ctx` API.
 - Cloud game hosting (`overview.md` Module 11): `OmniCloud` is the Mac-side client and `Backend/` is the Rust server. Published games are data only (scene + client scripts + server scripts + assets + metadata), the same shape as `Games/Flagship`, and are stored in TigerData; sensor data (USIS) and output commands never go there.
-- Only `OmniStudio` (the composition root) depends on `OmniCloud`. It fetches a published game and hands the scene and script sources to `OmniRuntime` / `OmniScript`. `OmniCloud` carries game content only, never input, so the hardware-blind property holds.
+- Only `OmniStudio` (the composition root) depends on `OmniCloud`. It fetches a published game and hands the scene and script sources to `OmniRuntime` / `OmniScript`. `OmniCloud` carries game content only, never input, so the hardware-blind property holds. (Changed 2026-11-14: since Phase 9 `OmniLibrary` and `OmniPlayer` also depend on `OmniCloud`; `OmniLibrary` is a package of its own so its logic is tested with `swift test`. **(plan decision)** until overview.md Module 11 is updated.)
+- **(plan decision)** `OmniPlayer` (Phase 9) is a second composition root: it builds `CloudClient`, the session store, `DeviceProfile`, `LibraryModel` and a `GameLauncher` in `PlayerModel.swift`. Identity is Sign in with Apple; `DeviceProfile` only flags which games the device can play. Play is a stub (`StubGameLauncher` fetches the bundle and stops); running a game on the player needs `.iOS(.v18)` on OmniInput, OmniRuntime, OmniScript and OmniOutput, which are macOS-only today (`OmniCore` already declares iOS; `OmniCloud` gets it in 9.2). overview.md still lists player apps in Phase 7: flagged, not decided.
 - `LocalTestSession` (Studio) is the composition root for a multiplayer test: one `ServerScriptEngine` plus several simulated players, each with its own `InputPipeline`, `SceneRunner` and client `ScriptEngine`, joined by an in-memory `RemoteChannel`. **(plan decision)** The viewport shows one selected player.
 - **(plan decision)** `Backend/src/game_server/script_host.rs` implements the same `serverScript` API as `ServerScriptEngine` in a different JS engine; `Backend/tests/script_host.rs` and `ServerScriptEngineTests.swift` run the same fixture so the two stay aligned.
 - **(plan decision)** `Backend/src/game_server/script_host.rs` includes `Packages/OmniScript/Sources/OmniScript/Resources/prelude.js` with `include_str!`, so the Rust and Swift engines share one `serverScript` definition. This is a file-level edge from `Backend/` into a Swift package: `Backend/` no longer builds standalone (Windows laptops need the whole repo checked out), and a change to `prelude.js` affects both engines. `overview.md` describes `Backend/` as a separate Rust project; the mismatch is flagged, not decided.

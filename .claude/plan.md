@@ -320,6 +320,61 @@ Not file-bound: demo run on the Vultr box from the desktop executable; two peopl
 
 ---
 
+## Phase 9: Player App (consumer, iOS + macOS)
+
+(Numbered 9, placed here after Phase 8 because it is the next active work; Phase 6 stays deferred and Phase 7 unscheduled, so existing 6/7 references keep their numbers.)
+
+Goal: a multiplatform (iOS + macOS) Omni player app where a person signs in with Apple, browses the cloud game library and sees which games this device can play. Play fetches the published game and stops there: running it (runtime, game-server WebSocket, Mac bridge input) is the next round. Games stay cloud-hosted as data; they run on the player's device and sensor data never goes to the cloud (overview.md Network Rule).
+
+FLAGGED (overview.md mismatch, not decided): overview.md lists player apps in Phase 7 (after the hackathon) and Module 11 says only Studio (the composition root) fetches from the backend. Phase 9 adds a second composition root, `Apps/OmniPlayer`, that also talks to the backend through `OmniCloud`. Needs a user decision to update overview.md (a Player App module, Phase 7 wording, Module 11 boundary).
+
+Rules for every Phase 9 item:
+- Identity is Sign in with Apple. The device profile (kind, sensors, tier it can meet) only decides which games are flagged playable; it is not an identity.
+- `OmniLibrary` depends on `OmniCloud` only. It never depends on OmniRuntime, OmniScript, OmniInput, OmniSim or OmniBridge this round, so the hardware-blind property and the Network Rule hold by package dependencies.
+- Lanes: 9.1 is backend work (`jacob-e-lee`'s lane); 9.2 to 9.4 are Swift, and `Apps/**` items need a Mac worker with `xcodebuild` output (iOS Simulator and macOS) in the PR. The lane table in `.agents/ORCHESTRATOR.md` has no row for `OmniLibrary` or `Apps/OmniPlayer` yet.
+- Re-listing an existing file is allowed for a follow-up change, as in 8.1.
+
+### 9.1 Backend — catalog and Apple sign-in (changes to Phase 4.2 / 8.1 files, plus new files; blocks 9.2 and 9.4)
+- [ ] `Backend/Cargo.toml` — add an RS256 JWT verifier and an HTTPS client (to fetch Apple's signing keys); nothing else. (Crate names not decided [provisional: needs-tien-review]; accounts.rs currently says "no new crates".)
+- [ ] `Backend/src/db.rs` — `list_catalog(&Db)`: one row per game with id, title, owner `display_name`, latest version, `run_mode` and the scene JSON (the tier is read from `requiredTier`, default 1). Postgres query and `Db::Mem` arm.
+- [ ] `Backend/src/memstore.rs` — `MemStore::list_catalog`, same result as `db.rs`.
+- [ ] `Backend/src/api/library.rs` — `GET /api/library`, any signed-in account: id, title, author, latestVersion, runMode, requiredTier per game. (No description: `GameBundle` carries none. Every published game is listed; permissions and moderation undecided [provisional: needs-tien-review].)
+- [ ] `Backend/src/api/apple.rs` — `POST /api/accounts/apple` `{identityToken, displayName?}`: verify RS256 against Apple's keys, iss `https://appleid.apple.com`, aud in env `OMNI_APPLE_AUDIENCES`, not expired; `upsert_account` with provider `apple` and subject = `sub`, name from the request only (Apple omits it from the token and sends it once, at first authorization; `upsert_account` keeps the stored name when the new one is empty); returns the same `{token, account}` as dev sign-in. The key source is a trait so tests inject keys. (Check `store_session` visibility in `accounts.rs`; if private, make it `pub(crate)` in this item.)
+- [ ] `Backend/src/api/mod.rs` — declare the `library` and `apple` modules.
+- [ ] `Backend/src/lib.rs` — mount both routers.
+- [ ] `Backend/tests/library.rs` — catalog fields; signed-out rejected; newest version wins. In-memory store, so it runs without `DATABASE_URL`.
+- [ ] `Backend/tests/apple.rs` — valid token signs in; wrong audience, expired and bad signature rejected; a repeat sign-in without a name keeps the name. In-memory store, injected keys.
+
+### 9.2 OmniCloud — catalog and Apple sign-in client
+- [ ] `Packages/OmniCloud/Package.swift` — add `.iOS(.v18)`. (OmniCloud was macOS-only; the iOS app needs it.)
+- [ ] `Packages/OmniCloud/Sources/OmniCloud/CloudClient.swift` — `CatalogEntry`; `listCatalog()`; `signInWithApple(identityToken:displayName:)`. (Same file as the client: `sessionToken` and `send` are `private`, so an extension in another file cannot use them.)
+- [ ] `Packages/OmniCloud/Tests/OmniCloudTests/LibraryAPITests.swift` — request and response coding against a stubbed `URLProtocol`; a 401 surfaces as `CloudError.unauthorized`.
+
+### 9.3 OmniLibrary — device profile and library model (new package; depends on OmniCloud only; macOS 15 + iOS 18; testTarget `OmniLibraryTests`)
+- [ ] `Packages/OmniLibrary/Package.swift` — OmniLibrary manifest, depends on OmniCloud only.
+- [ ] `Packages/OmniLibrary/Sources/OmniLibrary/DeviceProfile.swift` — device kind (iPhone / iPad / Mac), model, OS, sensors, and `maxTier` (a plain Int 1…3, like `SceneDescription.requiredTier`, so OmniLibrary stays off OmniInput).
+- [ ] `Packages/OmniLibrary/Sources/OmniLibrary/Playability.swift` — pure function (catalog entry, device profile) → playable / needsController / needsTier(n) / needsDisplay. `device` games need a phone; `screen` games need a display plus controllers (overview.md Module 7 Run Mode).
+- [ ] `Packages/OmniLibrary/Sources/OmniLibrary/SessionStore.swift` — `SessionStore` protocol; Keychain implementation; in-memory implementation for tests.
+- [ ] `Packages/OmniLibrary/Sources/OmniLibrary/LibraryModel.swift` — main-actor observable model: loads the catalog through a `CatalogSource` protocol (`CloudClient` conforms), search, refresh, error state, per-entry playability.
+- [ ] `Packages/OmniLibrary/Sources/OmniLibrary/GameLauncher.swift` — `GameLauncher` protocol plus `StubGameLauncher` (fetches the `FetchedGame`, records it, no runtime). This is the seam the runtime plugs into in the next round.
+- [ ] `Packages/OmniLibrary/Tests/OmniLibraryTests/DeviceProfileTests.swift` — each device kind maps to its sensors and `maxTier`.
+- [ ] `Packages/OmniLibrary/Tests/OmniLibraryTests/PlayabilityTests.swift` — every outcome for both run modes and tiers 1 to 3.
+- [ ] `Packages/OmniLibrary/Tests/OmniLibraryTests/LibraryModelTests.swift` — load, search, error and empty states; `StubGameLauncher` and the in-memory session store.
+
+### 9.4 OmniPlayer — iOS + macOS app (Mac worker; `xcodebuild` iOS Simulator and macOS builds in the PR)
+- [ ] `Omni.xcworkspace/contents.xcworkspacedata` — reference `Packages/OmniLibrary` and `Apps/OmniPlayer/OmniPlayer.xcodeproj`. (Xcode-generated; commit as-is.)
+- [ ] `Apps/OmniPlayer/OmniPlayer.xcodeproj/project.pbxproj` — multiplatform SwiftUI app (iOS 18 + macOS 15), one bundle id, links OmniLibrary and OmniCloud. (Hand-written like Studio's [provisional: needs-tien-review].)
+- [ ] `Apps/OmniPlayer/OmniPlayer.entitlements` — `com.apple.developer.applesignin`.
+- [ ] `Apps/OmniPlayer/OmniPlayer/OmniPlayerApp.swift` — SwiftUI app entry.
+- [ ] `Apps/OmniPlayer/OmniPlayer/PlayerModel.swift` — the second composition root: `CloudClient` (base URL from env `OMNI_CLOUD_URL`), session store, `DeviceProfile`, `LibraryModel`, `StubGameLauncher`.
+- [ ] `Apps/OmniPlayer/OmniPlayer/Account/AppleSignInView.swift` — `SignInWithAppleButton` → `signInWithApple`, passing the name from the first authorization; `#if DEBUG` dev-token fallback for the simulator.
+- [ ] `Apps/OmniPlayer/OmniPlayer/Library/LibraryView.swift` — grid / list, search, tier badge, playable flag.
+- [ ] `Apps/OmniPlayer/OmniPlayer/Library/GameDetailView.swift` — metadata, run mode and Play (shows the stub result).
+
+Not file-bound: Apple Developer team, the Sign in with Apple capability and bundle id registration; the next round (runtime on the player, game-server WebSocket, Mac bridge input) needs `.iOS(.v18)` on OmniInput, OmniRuntime, OmniScript and OmniOutput first.
+
+---
+
 ## Phase 6: Collaborative Coding Space (stretch)
 
 (Changed 2026-11-14: stretch goal, deferred until Phase 8 is done; come back to it after. Phase 8 below is the active work.)
@@ -348,4 +403,4 @@ Throwaway probes that confirm what each real device delivers before its Phase 3 
 
 ## Phase 7: After the Hackathon (unscheduled — no checklist)
 
-Open, not scheduled: Lua scripting backend; third-party Bluetooth adapters (Joy-Cons, haptic gloves, ESP32 bands) via `OmniAdapters`; iPad / Pencil and Vision Pro input; player apps on iOS / visionOS (they connect players to the game server, 4.2, through a `RemoteChannel`); relay server for remote collaboration; automatic state replication; permissions, version history and moderation for hosted games.
+Open, not scheduled: Lua scripting backend; third-party Bluetooth adapters (Joy-Cons, haptic gloves, ESP32 bands) via `OmniAdapters`; iPad / Pencil and Vision Pro input; player apps on iOS / visionOS (they connect players to the game server, 4.2, through a `RemoteChannel`); relay server for remote collaboration; automatic state replication; permissions, version history and moderation for hosted games. (Changed 2026-11-14: the iOS + macOS library shell moved to Phase 9; running games on the player is still open.)
