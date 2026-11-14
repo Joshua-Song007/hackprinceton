@@ -4,6 +4,7 @@ import SwiftUI
 
 struct LibraryView: View {
     let model: PlayerModel
+    @State private var playableOnly = false
 
     var body: some View {
         @Bindable var library = model.library
@@ -20,6 +21,18 @@ struct LibraryView: View {
                             Label("Refresh", systemImage: "arrow.clockwise")
                         }
                         .disabled(model.library.isLoading)
+                        .help("Refresh library")
+                    }
+                    ToolbarItem(placement: .automatic) {
+                        Toggle(
+                            "Playable only",
+                            systemImage: playableOnly
+                                ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle",
+                            isOn: $playableOnly
+                        )
+                        .toggleStyle(.button)
+                        .labelStyle(.titleAndIcon)
+                        .help("Playable on this device")
                     }
                     ToolbarItem(placement: .automatic) {
                         Menu {
@@ -30,6 +43,7 @@ struct LibraryView: View {
                         } label: {
                             Label("Account", systemImage: "person.crop.circle")
                         }
+                        .help("Account")
                     }
                 }
         }
@@ -37,6 +51,15 @@ struct LibraryView: View {
         .onChange(of: model.library.state) { _, state in
             if state == .failed(.signedOut) { Task { await model.sessionExpired() } }
         }
+    }
+
+    /// Search matches, playable games first; server order is kept inside each group.
+    private var visible: [CatalogEntry] {
+        let library = model.library
+        let matches = library.filtered
+        let playable = matches.filter { library.playability(of: $0).isPlayable }
+        if playableOnly { return playable }
+        return playable + matches.filter { !library.playability(of: $0).isPlayable }
     }
 
     @ViewBuilder private var content: some View {
@@ -62,6 +85,17 @@ struct LibraryView: View {
             }
         } else if library.filtered.isEmpty {
             ContentUnavailableView.search(text: library.query)
+        } else if visible.isEmpty {
+            let query = library.query.trimmingCharacters(in: .whitespacesAndNewlines)
+            ContentUnavailableView {
+                Label("Nothing playable on this device yet", systemImage: "gamecontroller")
+            } description: {
+                Text(query.isEmpty
+                    ? "Games that need a controller or an iPhone are hidden."
+                    : "No playable game matches “\(query)”.")
+            } actions: {
+                Button("Show all games") { playableOnly = false }
+            }
         } else {
             ScrollView {
                 if case .failed(.message(let text)) = library.state {
@@ -74,7 +108,7 @@ struct LibraryView: View {
                     .padding(.top, 8)
                 }
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 280), spacing: 12)], spacing: 12) {
-                    ForEach(library.filtered) { entry in
+                    ForEach(visible) { entry in
                         NavigationLink(value: entry) {
                             GameCard(entry: entry, playability: library.playability(of: entry))
                         }
@@ -91,30 +125,66 @@ struct LibraryView: View {
 private struct GameCard: View {
     let entry: CatalogEntry
     let playability: Playability
+    @State private var hovering = false
+
+    /// The sensor the game requires; hidden when the status line already names it as the blocker.
+    private var tierBadge: String? {
+        if case .needsTier = playability { return nil }
+        return entry.tierLabel.map { "Requires \($0.lowercased())" }
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(entry.title.isEmpty ? "Untitled game" : entry.title).font(.headline)
+            HStack(alignment: .firstTextBaseline) {
+                Text(entry.title.isEmpty ? "Untitled game" : entry.title)
+                    .font(.headline)
+                    .lineLimit(2)
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.caption.bold())
+                    .foregroundStyle(.secondary)
+                    .accessibilityHidden(true)
+            }
             Text(entry.author.isEmpty ? "Unknown author" : entry.author)
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .help(entry.author)
             HStack {
                 Label(entry.runModeLabel, systemImage: entry.runMode == "device" ? "iphone" : "tv")
                 Spacer()
-                Text("Tier \(entry.requiredTier)")
-                    .font(.caption.bold())
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 2)
-                    .background(Color.secondary.opacity(0.2), in: Capsule())
+                if let tier = tierBadge {
+                    Text(tier)
+                        .font(.caption.bold())
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 2)
+                        .background(Color.secondary.opacity(0.2), in: Capsule())
+                }
             }
             .font(.caption)
-            Label(playability.summary, systemImage: playability.isPlayable ? "checkmark.circle.fill" : "exclamationmark.circle")
-                .font(.caption)
-                .foregroundStyle(playability.isPlayable ? Color.green : Color.orange)
+            .frame(minHeight: 22)
+            Label {
+                Text(playability.summary)
+                    .fontWeight(.medium)
+                    .foregroundStyle(playability.isPlayable ? Color.green : Color.primary)
+            } icon: {
+                Image(systemName: playability.symbol)
+                    .foregroundStyle(playability.isPlayable ? Color.green : Color.secondary)
+            }
+            .font(.caption)
         }
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.secondary.opacity(0.12), in: RoundedRectangle(cornerRadius: 12))
+        .background(Color.secondary.opacity(hovering ? 0.2 : 0.12), in: RoundedRectangle(cornerRadius: 12))
+        .overlay {
+            RoundedRectangle(cornerRadius: 12)
+                .strokeBorder(Color.secondary.opacity(hovering ? 0.5 : 0), lineWidth: 1)
+        }
+        .contentShape(RoundedRectangle(cornerRadius: 12))
+        .onHover { hovering = $0 }
+        #if os(macOS)
+        .pointerStyle(.link)
+        #endif
         .accessibilityElement(children: .combine)
     }
 }
@@ -127,12 +197,54 @@ extension Playability {
         case .needsPhone: "Needs an iPhone"
         case .needsController: "Needs a controller"
         case .needsDisplay: "Needs a display"
-        case .needsTier(let tier): "Needs tier \(tier)"
+        case .needsTier(let tier): "Needs \(CatalogEntry.tierName(tier)?.lowercased() ?? "tier \(tier)")"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .playable: "checkmark.circle.fill"
+        case .needsController: "gamecontroller"
+        case .needsPhone: "iphone"
+        case .needsDisplay: "display"
+        case .needsTier: "dot.radiowaves.left.and.right"
+        }
+    }
+
+    /// Why the game cannot be played here; nil when it can.
+    var explanation: String? {
+        switch self {
+        case .playable: nil
+        case .needsPhone: "This game is made to run on an iPhone."
+        case .needsController: "Controller input isn't in this app yet."
+        case .needsDisplay: "This game needs a screen to show it."
+        case .needsTier(let tier):
+            "This game needs \(CatalogEntry.tierName(tier)?.lowercased() ?? "tier \(tier)"), which this device can't provide."
         }
     }
 }
 
 extension CatalogEntry {
+    /// What a tier asks of the player's devices (`CapabilityTier`: tier 2 = position, tier 3 = heart rate); nil for tier 1.
+    static func tierName(_ tier: Int) -> String? {
+        switch min(max(tier, 1), 3) {
+        case 2: "Position tracking"
+        case 3: "Heart rate"
+        default: nil
+        }
+    }
+
+    var tierLabel: String? { Self.tierName(requiredTier) }
+
+    /// overview.md Module 1, Capability Tiers.
+    var tierDetail: String {
+        switch min(max(requiredTier, 1), 3) {
+        case 2: "Tier 2, position tracking"
+        case 3: "Tier 3, heart rate"
+        default: "Tier 1, orientation and touch"
+        }
+    }
+
     var runModeLabel: String { runMode == "device" ? "On your phone" : "On a screen" }
 
     /// overview.md Module 7, Run Mode.

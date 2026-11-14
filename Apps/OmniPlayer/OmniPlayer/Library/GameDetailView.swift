@@ -25,29 +25,42 @@ struct GameDetailView: View {
                     .foregroundStyle(.secondary)
 
                 Divider()
-                LabeledContent("Latest version", value: "\(entry.latestVersion)")
+                LabeledContent("Version", value: "v\(entry.latestVersion)")
                 LabeledContent("Plays", value: entry.runModeLabel)
-                LabeledContent("Needs", value: "Tier \(entry.requiredTier)")
+                if entry.tierLabel != nil {
+                    LabeledContent("Sensors", value: entry.tierDetail)
+                }
                 Text(entry.runModeExplanation).font(.callout).foregroundStyle(.secondary)
 
-                Label(playability.summary, systemImage: playability.isPlayable ? "checkmark.circle.fill" : "exclamationmark.circle")
-                    .foregroundStyle(playability.isPlayable ? Color.green : Color.orange)
-
-                Button {
-                    Task { await playTapped() }
-                } label: {
-                    if case .working = play {
-                        ProgressView()
-                    } else {
-                        Text("Play").frame(maxWidth: 240)
-                    }
+                Label(playability.summary, systemImage: playability.symbol)
+                    .foregroundStyle(playability.isPlayable ? Color.green : Color.secondary)
+                if let why = playability.explanation {
+                    Text(why).font(.callout)
                 }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.large)
-                .disabled(!playability.isPlayable || isWorking)
+
+                if playability.isPlayable {
+                    Button {
+                        Task { await playTapped() }
+                    } label: {
+                        if case .working = play {
+                            ProgressView()
+                        } else {
+                            Text("Play").frame(maxWidth: 240)
+                        }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+                    .disabled(isWorking)
+                } else {
+                    Button("Not playable on this device") {}
+                        .buttonStyle(.bordered)
+                        .controlSize(.large)
+                        .disabled(true)
+                }
 
                 result
             }
+            .labeledContentStyle(ColumnLabeledContentStyle())
             .padding()
             .frame(maxWidth: 640, alignment: .leading)
         }
@@ -85,6 +98,18 @@ struct GameDetailView: View {
                 return
             }
             play = .failed(PlayerModel.describe(error))
+        }
+    }
+}
+
+/// Label and value in two aligned columns; keeps `LabeledContent`'s label/value pairing for VoiceOver.
+private struct ColumnLabeledContentStyle: LabeledContentStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 16) {
+            configuration.label
+                .foregroundStyle(.secondary)
+                .frame(minWidth: 100, alignment: .leading)
+            configuration.content
         }
     }
 }
