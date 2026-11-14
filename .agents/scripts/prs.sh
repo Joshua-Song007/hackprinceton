@@ -3,7 +3,7 @@
 # usage: .agents/scripts/prs.sh [list|update|close-stale] [--apply] [--days N]      (needs gh, jq)
 #   list         (default) one line per open agent PR: number, CI, review, mergeable, behind-by, age, labels, branch
 #   update       gh pr update-branch for agent PRs that are behind main, not conflicting and not human-hold
-#   close-stale  close agent PRs with no activity for N days (default 3) that are not human-hold
+#   close-stale  close agent PRs with no activity (GitHub updatedAt) for N days (default 3) that are not human-hold
 #   --apply      act; without it update and close-stale only print what they would do
 # Env: PRS_NOW (epoch seconds) overrides the clock, for tests.
 set -uo pipefail
@@ -40,11 +40,13 @@ rows=$(jq -r --argjson now "$now" '
       ([.labels[]?.name] | join(",") | if . == "" then "-" else . end) ]
   | @tsv' <<<"$json") || { echo "could not parse gh output"; exit 1; }
 
-behind_by() { gh api "repos/{owner}/{repo}/compare/main...$1" --jq .behind_by 2>/dev/null || echo "?"; }
-run() { if [ "$apply" = 1 ]; then "$@"; else echo "      would: $*"; fi; }
+rows=${rows//$'\r'/}   # jq.exe on Windows may emit CRLF
+behind_by() { gh api "repos/{owner}/{repo}/compare/main...$1" --jq .behind_by </dev/null 2>/dev/null || echo "?"; }
+# gh gets </dev/null so it can never eat the rows the loop reads from stdin
+run() { if [ "$apply" = 1 ]; then "$@" </dev/null || { echo "      failed: $*"; failed=$((failed+1)); }; else echo "      would: $*"; fi; }
 
 [ -z "$rows" ] && { echo "no open agent PRs"; exit 0; }
-acted=0; skipped=0
+acted=0; skipped=0; failed=0
 while IFS=$'\t' read -r num branch ci review mergeable hold age labels; do
   case "$cmd" in
     list)
@@ -66,4 +68,5 @@ while IFS=$'\t' read -r num branch ci review mergeable hold age labels; do
   esac
 done <<<"$rows"
 [ "$cmd" = list ] && exit 0
-echo "$acted to act on, $skipped skipped$( [ "$apply" = 1 ] || echo ' (dry run: nothing changed, use --apply)')"
+echo "$acted to act on, $skipped skipped, $failed failed$( [ "$apply" = 1 ] || echo ' (dry run: nothing changed, use --apply)')"
+[ "$failed" -eq 0 ]
