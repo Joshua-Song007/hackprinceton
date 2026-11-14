@@ -9,6 +9,7 @@ import os
 from pathlib import Path
 import re
 import signal
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -40,7 +41,23 @@ def terminate_tree(process):
             pass
 
 
+def bash_executable():
+    if os.environ.get('OMNI_BASH'):
+        return os.environ['OMNI_BASH']
+    if os.name == 'nt':
+        executable = shutil.which('git')
+        if executable:
+            install = Path(executable).resolve().parent.parent
+            for candidate in (install / 'bin/bash.exe', install / 'usr/bin/bash.exe'):
+                if candidate.is_file():
+                    return str(candidate)
+        raise RuntimeError('Git Bash not found; set OMNI_BASH to its bash.exe (not WSL bash)')
+    return shutil.which('bash') or 'bash'
+
+
 def run(args, cwd=None, data=None, check=True, env=None, timeout=120, stop_aware=False):
+    if args[0] == 'bash':
+        args = [bash_executable(), *args[1:]]
     options = {'creationflags': subprocess.CREATE_NEW_PROCESS_GROUP} if os.name == 'nt' else {'start_new_session': True}
     p = subprocess.Popen(args, cwd=ROOT if cwd is None else cwd, stdin=subprocess.PIPE if data is not None else subprocess.DEVNULL,
                          stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding='utf-8', errors='replace', env=env, **options)
@@ -453,7 +470,7 @@ def execute_issue(store, repo, worker, number, token, b, body):
         if stopped(store, worker):
             raise RuntimeError('STOP after push; checkpoint only')
         pr = gh('pr', 'create', '--head', branch, '--base', 'main', '--title', f'Implement #{number}', '--body',
-                f'AUTONOMY-V2\nCloses #{number}\n\nSTATUS: review\nTESTS: build/tests/lint passed\nBLOCKER: none')
+                f'AUTONOMY-V2\nCloses #{number}\nRefs #{number}\n\nSTATUS: review\nTESTS: build/tests/lint passed\nBLOCKER: none')
         def delivered(s):
             owned(s, number, token).update(status='review', pr=pr, sha=sha, evidence=evidence)
         store.update(delivered)

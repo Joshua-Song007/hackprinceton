@@ -77,7 +77,7 @@ bash .agents/scripts/start.sh worker-one --worker
 
 No worker polling call spends model tokens. `ready` briefs must be authored by OMNI_ORCHESTRATOR_LOGIN. Claims are CAS-protected before label/assignee updates; a failed mirror does not grant a second worker the issue. Missing/malformed briefs and wrong-platform work are not claimed. Swift/Apps/Packages changes require macOS, so assign appropriate machines and avoid starving that queue with three Windows workers.
 
-Windows: keep Git Bash open, plugged in, lid open, and disable OS idle sleep for the night; the new foreground launcher does not silently change power settings or spawn detached windows. macOS: use tmux plus the automatic caffeinate wrapper. Laptop lid sleep is not prevented. Local exclusive lock directories are under `<clone>.worktrees/nightly`; after a hard kill, verify no process remains before removing the stale `<laptop>-<role>.lock` directory.
+Windows: Python command execution explicitly locates Git Bash rather than Windows' WSL `bash.exe`; set `OMNI_BASH` to your Git Bash executable if using a portable/custom installation. Keep Git Bash open, plugged in, lid open, and disable OS idle sleep for the night; the new foreground launcher does not silently change power settings or spawn detached windows. macOS: use tmux plus the automatic caffeinate wrapper. Laptop lid sleep is not prevented. Local exclusive lock directories are under `<clone>.worktrees/nightly`; after a hard kill, verify no process remains before removing the stale `<laptop>-<role>.lock` directory.
 
 ## Brief format
 
