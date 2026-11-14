@@ -21,5 +21,13 @@ let package = Package(
                 .product(name: "OmniOutput", package: "OmniOutput"),
             ]
         ),
+        .testTarget(
+            name: "OmniSimTests",
+            dependencies: [
+                "OmniSim",
+                .product(name: "OmniCore", package: "OmniCore"),
+                .product(name: "OmniInput", package: "OmniInput"),
+            ]
+        ),
     ]
 )
