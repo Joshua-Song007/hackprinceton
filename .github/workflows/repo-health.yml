@@ -1,0 +1,50 @@
+name: repo-health
+# Scheduled: prints .agents/scripts/health.sh (GitHub-only checks) and opens one issue labeled ci while main is red.
+on:
+  schedule:
+    - cron: "17 */2 * * *"
+  workflow_dispatch:
+permissions:
+  actions: read
+  contents: read
+  issues: write
+  pull-requests: read
+concurrency:
+  group: repo-health
+  cancel-in-progress: true
+jobs:
+  health:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: report
+        # informational: a dead claim or missing label must not turn this job red
+        run: bash .agents/scripts/health.sh || true
+      - name: open an issue when main is red
+        run: |
+          if bash .agents/scripts/health.sh --only main >health-main.txt; then
+            cat health-main.txt
+            echo "main is green"
+            exit 0
+          fi
+          cat health-main.txt
+          title="[ci] main is red"
+          open=$(gh issue list --state open --search "\"$title\" in:title" --json number --jq '.[0].number // empty')
+          if [ -n "$open" ]; then
+            echo "issue #$open already open"
+            exit 0
+          fi
+          gh label create ci --description "CI problems" --color B60205 2>/dev/null || true
+          {
+            echo "main is red. Found by repo-health.yml: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+            echo
+            echo '```'
+            grep -E '✗' health-main.txt | head -n 15
+            echo '```'
+            echo
+            echo "next: read the failing run log, fix with a PR, close this issue when main is green."
+          } >body.md
+          gh issue create --title "$title" --label ci --body-file body.md

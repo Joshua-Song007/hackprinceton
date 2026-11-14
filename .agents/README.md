@@ -28,7 +28,10 @@ Instructions and tooling for autonomous agents. `.claude/` is human-only: agents
 - `scripts/cleanup.sh [--dry-run] [--closed]` — remove worktrees and branches of merged agent PRs (skips dirty or unmerged work).
 - `scripts/prs.sh [list|update|close-stale] [--apply] [--days N]` — open agent PRs with CI, review, mergeable and behind-main state; `update` runs `gh pr update-branch` on behind PRs (not conflicting, not `human-hold`); `close-stale` closes PRs idle for N days (default 3). Dry run unless `--apply`.
 - `scripts/check-docs.sh` — last step before a push: fails when `.agents/*.md` or `docs/agents/` notes point at missing files, a script is not listed here, or retired wording is still there.
+- `scripts/hygiene.sh [--base REF] [--branch NAME] [--body-file FILE] [--strict]` — PR hygiene: `agent/<laptop>/<slug>` branch name, a `Refs #<n>` line in an agent PR body, no `.build/`, `Backend/target/` or secret-looking file or token added, tracked JSON / YAML parse, `bash -n` + `shellcheck -S error` on `scripts/*.sh`, `check-docs.sh`. Read-only; run by `hygiene.yml` and by hand.
 - `../.github/workflows/verify.yml` — on macOS for every PR and push to `main`: `verify-swift.sh`, `verify-nonswift.sh`, `check-docs.sh`; on Linux: `verify-backend.sh`.
+- `../.github/workflows/hygiene.yml` — on every PR (also when its body is edited), Linux: `hygiene.sh --strict` against the PR's base.
+- `../.github/workflows/repo-health.yml` — every 2 h and on demand: prints `health.sh`, and opens one `[ci] main is red` issue labeled `ci` while `main` is red.
 
 Roles and models (same for everyone): orchestrator `claude-opus-5-5`; workers and every subagent `claude-sonnet-5-5`.
 
