@@ -45,6 +45,16 @@ export function rewriteExportDefault(source: string): string {
   return source.slice(0, match.index) + '__omniExportDefault(' + body + ');';
 }
 
+/**
+ * The 1-based script line of the innermost frame in a V8 stack for code compiled by `load` (`<anonymous>:L:C`), else undefined.
+ * new Function adds 2 header lines, then `with (this) {` and the prelude come before the script.
+ */
+export function scriptLine(e: unknown, prelude: string): number | undefined {
+  const m = /<anonymous>:(\d+):\d+/.exec(e instanceof Error ? e.stack ?? '' : '');
+  const line = m ? Number(m[1]) - 3 - prelude.split('\n').length : 0;
+  return line > 0 ? line : undefined; // shortcut: V8 stack format only; WebKit (macOS desktop) reports no line
+}
+
 // shortcut: shadowing these names is not a security boundary (sloppy-mode `this` still reaches the worker global);
 // the Worker itself is: no DOM, no page storage, no tokens. Upgrade to a realm/ShadowRealm when one is available.
 const SHADOWED = [
@@ -133,7 +143,8 @@ export class ScriptRuntime {
     try {
       fn(self, this.ctx, ...c.args);
     } catch (e) {
-      error = `${c.script}.${c.handler}: ${String(e)}`;
+      const line = scriptLine(e, this.prelude);
+      error = `${c.script}.${c.handler}: ${String(e)}${line ? ` (line ${line})` : ''}`;
     }
     return { outputs: this.outputs, error };
   }

@@ -113,6 +113,13 @@ describe('editor.ts errorRange', () => {
     expect(src.slice(r.from, r.to)).toBe('  onGesture(self) {},');
     expect(errorRange(src, 'SyntaxError: nope').from).toBe(0);
   });
+
+  it('marks the reported line when the sandbox gives one', () => {
+    const src = 'export default script({\n  onLookAt(self) {},\n  onGesture(self) {},\n});\n';
+    const r = errorRange(src, 'player.onLookAt: ReferenceError: x is not defined (line 3)');
+    expect(src.slice(r.from, r.to)).toBe('  onGesture(self) {},');
+    expect(src.slice(errorRange(src, 'p.onLookAt: E (line 1)').from).startsWith('export')).toBe(true);
+  });
 });
 
 describe('fix round 1', () => {

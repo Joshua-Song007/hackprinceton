@@ -70,6 +70,7 @@ project.onChange((c) => {
   if (c === 'open' || c === 'scene') refreshScene();
 });
 selection.onChange((id) => viewport.select(id));
+viewport.onPick = (id) => selection.set(id);
 prefs.onChange(() => viewport.refreshColors());
 
 // Actions
