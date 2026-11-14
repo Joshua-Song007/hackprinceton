@@ -16,7 +16,7 @@ run() { out=$("$@" 2>&1) || fail+="== $* ==
 $(tail -40 <<<"$out")
 "; }
 
-all=$(sed -n 's#^Packages/\([A-Za-z]*\)/.*#\1#p' <<<"$changed" | sort -u)
+all=$(grep -v '/\.build/' <<<"$changed" | sed -n 's#^Packages/\([A-Za-z]*\)/.*#\1#p' | sort -u)   # build output is never a source change
 if [ -n "$all" ]; then
   for _ in 1 2 3 4 5 6; do   # transitive closure over `.package(path: "../X")` edges; the graph is shallower than 6
     for d in Packages/*/; do

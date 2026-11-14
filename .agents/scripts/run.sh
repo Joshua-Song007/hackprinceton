@@ -12,7 +12,7 @@ done
 slug=${1:?usage: run.sh [-i] [--orch] <slug> "<task>"}; task=${2:?usage: run.sh [-i] [--orch] <slug> "<task>"}
 laptop=${OMNI_LAPTOP:?set OMNI_LAPTOP to this laptop name (letters, digits, dashes)}
 [[ "$laptop" =~ ^[a-z0-9-]+$ && "$slug" =~ ^[a-z0-9-]+$ ]] || { echo "run.sh: laptop and slug must match [a-z0-9-]+" >&2; exit 2; }
-repo=$(git rev-parse --show-toplevel)
+repo=$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")   # the primary clone, even when launched from a worktree (the orchestrator launches workers from ../orch)
 root="$(dirname "$repo")/$(basename "$repo").worktrees"
 wt="$root/$slug"
 mkdir -p "$root"

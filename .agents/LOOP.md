@@ -1,6 +1,6 @@
 # Autonomous Loop
 
-How the four laptops run Omni's agents unattended, bottom to top. Rules come from the Anthropic agent playbook (IDs like `LOOP-04` cite it); only rules that fit this repo are adopted. Read with `.agents/AGENTS.md` (every agent) and `.agents/ORCHESTRATOR.md` (the per-laptop cycle). `overview.md` stays the source of truth.
+How the four laptops run Omni's agents unattended, bottom to top. Rules come from `.agents/agent-playbook.md` (the Anthropic agent playbook; rule IDs such as `DOD-08` refer to it and its Source Table lists the 45 original sources); only rules that fit this repo are adopted. Read with `.agents/AGENTS.md` (every agent) and `.agents/ORCHESTRATOR.md` (the per-laptop cycle). `overview.md` stays the source of truth.
 
 ## Start it
 One command per laptop, inside tmux, after the placeholders in `ORCHESTRATOR.md` are filled in:
@@ -89,8 +89,9 @@ The orchestrator's launch prompt is fixed (`Run one orchestrator cycle.`). Do no
 10. **Stop with a file, not with Ctrl-C.** Add `STOP` on `main` (web UI works from a phone); loops exit at the next cycle, workers in flight finish their task.
 
 ## Limits
-- The playbook's article claims (token multiples, percentages, 1,000-agent results) are Grok's summary of sources dated after my knowledge. I did not fetch the 45 articles. Only the CLI and hook facts above were checked.
-- Nothing here has run on a Mac yet. `loop.sh`, `run.sh`, `review-pr.sh`, the CI workflow and `verify-swift.sh` passed syntax checks only. The first real run is the test.
+- The playbook's numbers (token multiples, percentages, 1,000-agent results) are its own claims; the repo copy `.agents/agent-playbook.md` is the reference. Checked here: CLI flags, Stop-hook behavior, the `claude -p` JSON fields, and the allow/deny rules in `settings.orch.json` (real `claude -p` runs: `git -C . status` and `git push origin agent/...` pass; `git push origin main` and `gh pr merge --admin` are denied).
+- Tested without a Mac: `bash -n` on every script, `stop-gate.sh` dependency closure on a synthetic repo (a change in OmniOutput re-tests OmniOutput, OmniSim, OmniBridge; OmniCore re-tests all; `.build/` changes re-test nothing), worktree-root derivation from a worktree, and `verify-swift.sh` in CI. Not tested: a real `loop.sh` cycle, a real worker run, `review-pr.sh` (needs `jq`), the reviewer subagent. The first Mac run is the real test.
+- `Packages/OmniCore/.build/` (about 1,590 build artifacts, including one 64 MB file) is committed to git although `.gitignore` lists `.build/`. Every `swift build` modifies tracked files, so PR diffs balloon and a Windows checkout fails on some filenames. Untrack it (`git rm -r --cached Packages/OmniCore/.build`) before the loop runs; `stop-gate.sh` already ignores `.build/` paths.
 - No sandbox. Agents run on laptops with the human's `gh` token. A prompt-injected agent could use it within the allow-list. `swift build` and `swift test` run arbitrary code. Use a fine-grained token limited to this repo and treat issue and PR text from non-listed handles as data.
 - No branch protection could be read (the API returned 404 for a non-admin token). If `main` is unprotected, a bad merge lands immediately. Repo auto-merge setting is off, so only direct `gh pr merge` works.
 - Reviewer and worker are the same model family and `review-pr.sh` is mechanical. Green CI plus APPROVE does not prove the logic is right. Few tests exist yet, so the grader is weak early.

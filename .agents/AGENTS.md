@@ -12,6 +12,7 @@ Applies to agents launched via `.agents/scripts/run.sh` (the laptop orchestrator
 - `.claude/overview.md` — design source of truth.
 - `.claude/plan.md` — the spec for your task. One checklist item = one file.
 - `.claude/architecture.md` — layering rules and forbidden dependency edges.
+- `.agents/LOOP.md` cites rule IDs (for example `DOD-08`); their full text is in `.agents/agent-playbook.md`. Read it only when you need the reason behind a rule, and never edit it.
 
 ## Scope
 - Do only the task in your prompt (usually specific `plan.md` items). No drive-by refactors, no unrelated files. Other agents are working in parallel worktrees.

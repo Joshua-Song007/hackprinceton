@@ -11,13 +11,20 @@ notify() { echo "NOTIFY: $1"; osascript -e "display notification \"$1\" with tit
 while true; do
   git fetch -q origin || { sleep 60; continue; }
   if git cat-file -e origin/main:STOP 2>/dev/null || git cat-file -e "origin/main:STOP-$laptop" 2>/dev/null; then notify "STOP found; loop ended"; exit 0; fi
+  rm -f "$logs/orch.json"   # a stale success from an earlier cycle must not mask a launch failure
   .agents/scripts/run.sh --orch orch "Run one orchestrator cycle." || true   # run.sh swallows claude's exit code; read the JSON result instead
+  jq -r '.permission_denials[]?.tool_input.command' "$logs/orch.json" 2>/dev/null | sort -u | while IFS= read -r cmd; do   # silent dontAsk denials: tell Tien once per command
+    f="$logs/.denied-$laptop-$(printf %s "$cmd" | shasum | cut -c1-12)"; [ -e "$f" ] && continue
+    notify "permission denied: $cmd"; gh label create needs-human >/dev/null 2>&1 || true
+    gh issue create --title "[permission] $cmd" --label needs-human --body "**$laptop** orchestrator was denied \`$cmd\` by dontAsk. If it is legitimate, add a matching rule to the allow list in .agents/settings.orch.json." >/dev/null 2>&1 && touch "$f"
+  done
   if jq -e '.is_error == false' "$logs/orch.json" >/dev/null 2>&1; then
     fails=0; delay=$base; rm -f "$flag"
   else
     fails=$((fails+1)); delay=$(( delay * 2 > 1800 ? 1800 : delay * 2 ))   # exponential backoff, capped at 30 min
     if [ "$fails" -ge 5 ] && [ ! -e "$flag" ]; then
       notify "orchestrator failed $fails cycles in a row"
+      gh label create needs-human >/dev/null 2>&1 || true
       gh issue create --title "[loop] $laptop orchestrator failing" --label needs-human --body "**$laptop** orchestrator failed $fails cycles in a row. Last result: $logs/orch.json on that laptop. Likely a rate limit, a denied command or a broken setup." >/dev/null 2>&1 && touch "$flag"
     fi
   fi

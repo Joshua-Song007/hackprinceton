@@ -3,6 +3,7 @@
 Instructions and tooling for autonomous agents. `.claude/` is human-only: agents read it and never write to it.
 
 - `AGENTS.md` — rules every autonomous agent follows (rules in `.claude/instructions.md` under `## Autonomous Mode`).
+- `agent-playbook.md` — the condensed Anthropic playbook (rule IDs like `DOD-08` cited from `LOOP.md`). Reference only; do not edit.
 - `LOOP.md` — the whole unattended loop, bottom to top: layers, escalation table, adopted/rejected playbook rules, how to prompt it, limits.
 - `ORCHESTRATOR.md` — the per-laptop orchestrator cycle: pick work, launch workers, push, open PRs, escalate.
 - `settings.json` — worker permissions + stop-hook (commit only, no push, no `gh`).

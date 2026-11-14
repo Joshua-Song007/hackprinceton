@@ -62,7 +62,7 @@ while IFS= read -r l; do [ -n "$l" ] && out "$l"; done <<<"$deps_out"
 section "Purity and hardware-blind rule"
 if grep -qx OmniCore <<<"$pkgs"; then
   imp=$(git grep -n -E '^import ' "$ref" -- Packages/OmniCore/Sources | sed "s#^$ref:##" | grep -v 'import Foundation$' | head -10 || true)
-  io=$(git grep -n -E 'FileManager|URLSession|NWConnection|NWListener|Date\(\)|SystemRandomNumberGenerator|\.random\(|\bprint\(' "$ref" -- Packages/OmniCore/Sources | sed "s#^$ref:##" | head -10 || true)
+  io=$(git grep -n -E 'FileManager|URLSession|NWConnection|NWListener|Date\(\)|SystemRandomNumberGenerator|\.random\(|(^|[^A-Za-z_])print\(' "$ref" -- Packages/OmniCore/Sources | sed "s#^$ref:##" | head -10 || true)
   [ -n "$imp$io" ] && out "  ✗ OmniCore: $(printf '%s %s' "$imp" "$io" | tr '\n' ';')" || out "  ✓ OmniCore: Foundation only, no I/O or clock"
 else echo "  · OmniCore not touched"; fi
 blind=$(git grep -n -E 'import (OmniSim|OmniBridge)' "$ref" -- Packages/OmniRuntime Packages/OmniScript Games | sed "s#^$ref:##" | head -10 || true)
