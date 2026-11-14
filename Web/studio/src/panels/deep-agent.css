@@ -10,7 +10,20 @@
 .da-status { color: var(--text-secondary); }
 .da-errors p { color: var(--error); }
 .da-list { margin: 0; padding: 0; list-style: none; }
-.da-list li { padding: 2px 0; }
+.da-list li { display: flex; gap: var(--space-2); align-items: baseline; padding: var(--space-1) 0; }
+/* Status glyphs are decoration (empty alt text): the state is always also spelled out in the row text. */
+.da-list li::before { flex: none; width: 1.2em; text-align: center; content: "\2022" / ""; color: var(--text-secondary); }
+.da-list li[data-status="pending"]::before { content: "\25CB" / ""; }
+.da-list li[data-status="in_progress"]::before, .da-list li[data-state="running"]::before { content: "\25D0" / ""; color: var(--accent); }
+.da-list li[data-status="completed"]::before, .da-list li[data-state="done"]::before { content: "\2713" / ""; font-weight: 700; }
+.da-list li[data-state="error"]::before { content: "\2715" / ""; font-weight: 700; }
 .da-list li[data-status="completed"], .da-list li[data-state="done"] { color: var(--ok); }
+.da-list li[data-status="completed"] { text-decoration: line-through; text-decoration-color: var(--line-control); }
+.da-list li[data-status="in_progress"], .da-list li[data-state="running"] { color: var(--text); font-weight: 500; }
 .da-list li[data-state="error"] { color: var(--error); }
 .da-list li[data-status="pending"] { color: var(--text-secondary); }
+.da-list li[data-state] { font-family: var(--font-mono); font-size: 12px; }
+/* Files: a script path that opens the editor reads as a link; other paths stay plain text. */
+.da-list li:has(.om-btn)::before { content: none; }
+.da-list .om-btn--borderless { height: auto; min-height: 24px; padding: 2px var(--space-1); color: var(--accent); font-family: var(--font-mono); font-size: 12px; text-align: left; text-decoration: underline; text-underline-offset: 2px; }
+.da-list .om-btn--borderless:hover { color: var(--accent); background: var(--bg-hover); }
