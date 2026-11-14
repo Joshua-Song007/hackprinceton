@@ -23,6 +23,8 @@ const json = (v: unknown): string => {
 };
 
 export class DebugStore {
+  /** Set to the player name in a test-player tab, which cannot open the owner-only /debug stream. */
+  testPlayer: string | null = null;
   output: OutputEntry[] = [];
   server: ServerRow[] = [];
   packets: PacketRow[] = [];
@@ -152,7 +154,7 @@ function logPanel(label: string, store: DebugStore, topic: 'output' | 'server', 
     barEl.replaceChildren(...bar());
     const items = rows();
     if (!items.length) {
-      scroller.replaceChildren(el('div', { class: 'pn-empty' }, [topic === 'output' ? 'No output yet. Run the project to see script logs and errors.' : 'No server events. Use Run on server to open a live session.']));
+      scroller.replaceChildren(el('div', { class: 'pn-empty' }, [topic === 'output' ? 'No output yet. Run the project to see script logs and errors.' : store.testPlayer ? `Only the game owner sees the server console. This tab is test player ${store.testPlayer}.` : 'No server events. Use Run on server to open a live session.']));
       return;
     }
     const table = el('table', {}, [
@@ -210,7 +212,7 @@ export function createStatePanel(store: DebugStore): PanelView {
     shown = now;
     const focused = document.activeElement instanceof HTMLElement && tree.contains(document.activeElement) ? document.activeElement.dataset.path : undefined;
     const empty = typeof state !== 'object' || state === null || Object.keys(state).length === 0;
-    tree.replaceChildren(empty ? el('div', { class: 'pn-empty' }, ['ctx.state is empty. Run on server and send a remote event to fill it.']) : jsonNode(store, 'ctx.state', state, 'state', 0));
+    tree.replaceChildren(empty ? el('div', { class: 'pn-empty' }, [store.testPlayer ? `Only the game owner sees ctx.state. This tab is test player ${store.testPlayer}.` : 'ctx.state is empty. Run on server and send a remote event to fill it.']) : jsonNode(store, 'ctx.state', state, 'state', 0));
     if (focused) tree.querySelector<HTMLElement>(`summary[data-path="${CSS.escape(focused)}"]`)?.focus();
   };
   const off = store.subscribe('state', render);

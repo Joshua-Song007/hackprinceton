@@ -29,6 +29,7 @@ export class AccountController {
   games: Game[] = [];
   gameId: string | null = null;
   lastPublished: { gameId: string; version: number } | null = null;
+  private publishedJson: string | null = null;
   private listeners = new Set<() => void>();
   private url: string;
 
@@ -126,12 +127,23 @@ export class AccountController {
   /** Publishes the project as a new version of the selected game and records the version on the project. */
   async publish(project: Project): Promise<GameVersion> {
     if (!this.gameId) throw new Error('Pick or create a game first.');
-    const version = await this.client.publish(this.gameId, project.toVersion());
+    const body = project.toVersion();
+    const version = await this.client.publish(this.gameId, body);
     project.setCloud(this.gameId, version.version);
     project.markSaved();
     this.lastPublished = { gameId: this.gameId, version: version.version };
+    this.publishedJson = JSON.stringify(body);
     this.emit();
     return version;
+  }
+
+  /** Version to join: the current one when nothing publishable changed since the last publish, else a new publish. */
+  async publishIfChanged(project: Project): Promise<{ version: number; published: boolean }> {
+    const last = this.lastPublished;
+    if (last && last.gameId === this.gameId && project.gameId === this.gameId && project.version === last.version && this.publishedJson === JSON.stringify(project.toVersion())) {
+      return { version: last.version, published: false };
+    }
+    return { version: (await this.publish(project)).version, published: true };
   }
 
   async openLatest(gameId: string): Promise<ProjectSnapshot> {
@@ -187,7 +199,6 @@ export function openAccountSheet(account: AccountController, prefs: PreferenceSt
         picker.addEventListener('change', () => account.select(picker.value || null));
         const title = el('input', { type: 'text', 'aria-label': 'New game title', placeholder: 'Game title' });
         const gameId = account.gameId;
-        const published = account.lastPublished?.gameId === gameId ? account.lastPublished : null;
         rows.push(
           el('div', { class: 'om-prop' }, [el('span', {}, ['Signed in as']), el('span', {}, [account.account.display_name || account.account.subject])]),
           el('div', { class: 'om-prop' }, [el('label', {}, ['Game']), picker]),
@@ -199,7 +210,7 @@ export function openAccountSheet(account: AccountController, prefs: PreferenceSt
               hooks.openSnapshot(await account.openLatest(gameId));
             }, 'Opened the latest version.')),
           ]),
-          el('p', { class: 'om-num' }, [published ? `Published version ${published.version}.` : hooks.project.version && hooks.project.gameId === gameId ? `This project is at version ${hooks.project.version}.` : 'Not published yet.']),
+          el('p', { class: 'om-num' }, [hooks.project.version && hooks.project.gameId === gameId ? `This project is at version ${hooks.project.version}.` : 'Not published yet.']),
           el('div', { class: 'sheet-actions' }, [
             button('Sign out', guarded(() => account.signOut())),
             button('Close', close),

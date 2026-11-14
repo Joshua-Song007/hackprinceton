@@ -208,12 +208,12 @@ export class LayoutManager {
     this.focusInto(id);
   }
 
-  private focusInto(id: string): void {
+  private focusInto(id: string, quiet = false): void {
     const view = this.views.get(id);
     if (!view) return;
     if (view.focus) view.focus();
     else (view.element.querySelector<HTMLElement>('input, button, [tabindex="0"], textarea, select') ?? view.element).focus();
-    announce(`${this.specs.get(id)?.title ?? id} panel`);
+    if (!quiet) announce(`${this.specs.get(id)?.title ?? id} panel`);
   }
 
   /** F6: next group in reading order (top to bottom, left to right), wrapping. */
@@ -256,7 +256,7 @@ export class LayoutManager {
     if (target) panel.api.moveTo({ group: target, position: split ? direction : 'center' });
     else if (panel.group.panels.length > 1) panel.api.moveTo({ group: panel.group, position: direction });
     announce(`${panel.title ?? panel.id} moved ${direction}`);
-    this.focusInto(panel.id);
+    this.focusInto(panel.id, true); // the move announcement is the one to hear
   }
 
   private onKey(e: KeyboardEvent): void {

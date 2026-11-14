@@ -28,7 +28,15 @@ const viewport = new ViewportHost();
 debug.onServerError = (message) => editor.reportServerError(project, message);
 
 let layout: LayoutManager;
-const run = new RunController({ project, debug, account, viewport, editor, reveal: (id) => layout.show(id) });
+debug.testPlayer = testPlayer?.name ?? null;
+// A test player tab: fetch a version, load it into the project and join it (at startup and on a server `_reload`).
+const joinVersion = async (version: number | 'latest') => {
+  const v = await account.client.fetchVersion(testPlayer!.gameId, version);
+  project.load(Project.snapshotOfVersion(v));
+  history.replaceState(null, '', `${location.pathname}?${new URLSearchParams({ join: v.game_id, version: String(v.version), as: testPlayer!.name })}`);
+  await run.join(v.game_id, v.version);
+};
+const run = new RunController({ project, debug, account, viewport, editor, reveal: (id) => layout.show(id), onReload: testPlayer ? joinVersion : undefined });
 
 const panels: PanelSpec[] = [
   { id: 'explorer', title: 'Explorer', create: () => createExplorerPanel(project, selection, editor) },
@@ -232,9 +240,7 @@ if (testPlayer) {
   void guard(async () => {
     status(`Signing in as ${testPlayer.name}`);
     await account.signIn(testPlayer.name);
-    const v = await account.client.fetchVersion(testPlayer.gameId, testPlayer.version ?? 'latest');
-    project.load(Project.snapshotOfVersion(v));
-    await run.join(v.game_id, v.version);
+    await joinVersion(testPlayer.version ?? 'latest');
   })();
 } else {
   attachAutosave(project, (message) => debug.addOutput('warn', message));

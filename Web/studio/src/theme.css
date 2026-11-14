@@ -24,8 +24,9 @@ html, body { height: 100%; overflow: hidden; }
 #dock { min-height: 0; min-width: 0; position: relative; }
 .om-toolbar { flex-wrap: nowrap; overflow-x: auto; }
 .om-toolbar .om-sep { width: 1px; align-self: stretch; margin: 10px 2px; background: var(--line); }
-.om-toolbar .om-activity { min-width: 120px; }
-.om-toolbar .om-activity span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.om-toolbar > :not(.om-activity) { flex-shrink: 0; }
+.om-toolbar .om-activity { min-width: 0; }
+.om-toolbar .om-activity span { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .om-btn[aria-pressed="true"] { background: var(--bg-selected); }
 /* Bundle sizes small buttons and the filter at 20px; controls are 24px. */
 .om-btn--small, .om-filter, .om-tabs .om-filter { height: var(--control-height); }
@@ -138,7 +139,7 @@ html, body { height: 100%; overflow: hidden; }
 .json-tree div.leaf { margin-left: 14px; }
 
 /* Sheets and menus */
-dialog.sheet { border: 1px solid var(--line-control); border-radius: var(--radius-window); background: var(--bg-panel); color: var(--text); padding: var(--space-6); width: min(520px, calc(92vw / var(--ui-scale))); zoom: var(--ui-scale); font: var(--text-body); }
+dialog.sheet { margin: 12vh auto auto; border: 1px solid var(--line-control); border-radius: var(--radius-window); background: var(--bg-panel); color: var(--text); padding: var(--space-6); width: min(520px, calc(92vw / var(--ui-scale))); zoom: var(--ui-scale); font: var(--text-body); }
 dialog.sheet::backdrop { background: color-mix(in srgb, var(--bg-window) 70%, transparent); }
 dialog.sheet h2 { font: var(--text-title); margin: 0 0 var(--space-4); }
 dialog.sheet .sheet-actions { display: flex; justify-content: flex-end; gap: var(--space-2); margin-top: var(--space-4); }
