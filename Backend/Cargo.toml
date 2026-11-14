@@ -10,4 +10,5 @@ tokio = { version = "1", features = ["full"] }
 sqlx = { version = "0.8", default-features = false, features = ["postgres", "runtime-tokio", "tls-rustls"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+# JS engine for server scripts: rquickjs is provisional (deno_core vs rquickjs not decided)
 rquickjs = "0.9"
