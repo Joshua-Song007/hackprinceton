@@ -99,11 +99,8 @@ public final class ServerScriptEngine {
     /// JavaScriptCore has no ES module loader: turn a leading `export default X;` into
     /// `__omniExportDefault(X)` (see prelude.js).
     static func rewriteExportDefault(_ source: String) -> String {
-        let trimmed = source.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard trimmed.hasPrefix("export default") else { return source }
-        var body = String(trimmed.dropFirst("export default".count))
-        while let last = body.last, last == ";" || last.isWhitespace { body.removeLast() }
-        return "__omniExportDefault(" + body + "\n)"
+        // Same line-leading rule as the client engine (and Backend script_host.rs), so a script may open with comments.
+        ScriptEngine.rewriteExportDefault(source)
     }
 
     private static let glue = """
