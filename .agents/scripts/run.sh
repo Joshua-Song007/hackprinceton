@@ -42,12 +42,12 @@ if [ ! -d "$wt" ]; then   # a branch can outlive its worktree (manual delete, pr
 fi
 if [ "$role" != worker ]; then git -C "$wt" merge -q --ff-only origin/main || echo "run.sh: $role worktree could not fast-forward to origin/main" >&2; fi   # orchestrator and integrator worktrees stay on fresh main; their work goes on other branches
 rm -f "$(git -C "$wt" rev-parse --git-dir)/agent-stopgate"
-git -C "$wt" sparse-checkout set --no-cone '*' '!.agents/HUMAN.md'   # human-only doc: never materialized in an agent's worktree
+git -C "$wt" sparse-checkout set --no-cone '*' '!.agents/HUMAN.md' '!CLAUDE.md'   # human-only doc: never materialized in an agent's worktree; CLAUDE.md is hidden too so its @-imports (overview, plan, architecture) are not loaded into every agent turn
 rmdir "$root/.setup.lock"; have_lock=0
 cd "$wt"
 
 turns=60
-if [ "$role" = orch ]; then settings=.agents/settings.orch.json; model=claude-opus-5-5; budget=10; extra=" You are the orchestrator for laptop $laptop."; rules=(.agents/AGENTS.md .agents/ORCHESTRATOR.md)
+if [ "$role" = orch ]; then settings=.agents/settings.orch.json; model=claude-opus-5-5; budget=5; extra=" You are the orchestrator for laptop $laptop."; rules=(.agents/AGENTS.md .agents/ORCHESTRATOR.md)
 elif [ "$role" = integrator ]; then
   settings=.agents/settings.integrator.json; extra=" You are the integrator for laptop $laptop, phase ${OMNI_PHASE:-build}."; rules=(.agents/AGENTS.md .agents/INTEGRATOR.md)
   if [ "${OMNI_PHASE:-build}" = maintain ]; then model=claude-sonnet-5-5; budget=3; turns=40; else model=claude-opus-5-5; budget=20; turns=100; fi   # build spends the night's budget, maintain is cheap
