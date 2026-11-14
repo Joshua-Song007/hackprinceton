@@ -71,7 +71,10 @@ public final class AirPodsMotionSource: InputSource {
             s = State()
             s.bus = bus
         }
-        box.delegate.onConnect = { [weak self] in self?.restartUpdates() }
+        box.delegate.onConnect = { [weak self] in
+            guard let self else { return }
+            self.queue.addOperation { [weak self] in self?.restartUpdates() }
+        }
         // Disconnect keeps `lastBud` and `lastOut`, so the first sample after the gap is compared with the
         // bud that streamed before it and re-anchored if the bud changed.
         box.delegate.onDisconnect = nil
