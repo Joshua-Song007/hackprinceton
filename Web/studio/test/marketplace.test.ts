@@ -1,12 +1,13 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { DEEP_AGENTS_ID, MarketplaceController, type MarketplaceDeps } from '../src/marketplace/controller';
+import { DEEP_AGENTS_ID, MarketplaceController, runtimePort, type MarketplaceDeps } from '../src/marketplace/controller';
 import { TauriInstaller, type PluginInstaller } from '../src/marketplace/installer';
 import { RegistryClient, type PluginSummary } from '../src/marketplace/registry';
 
 const summary: PluginSummary = {
   id: DEEP_AGENTS_ID, name: 'LangChain Deep Agents', version: '0.1.0', author: 'Omni', category: 'AI agents', description: 'Writes scripts.', installs: 7,
 };
-const manifest = { id: DEEP_AGENTS_ID, name: summary.name };
+const manifest: { id: string } & Record<string, unknown> = { id: DEEP_AGENTS_ID, name: summary.name };
 
 class MemoryStorage {
   private data = new Map<string, string>();
@@ -15,8 +16,11 @@ class MemoryStorage {
 }
 
 /** Every collaborator writes into one ordered log, so tests assert the sequence of the flow. */
-function setup(over: { healthOk?: boolean; storage?: MemoryStorage } = {}) {
+function setup(over: { healthOk?: boolean; storage?: MemoryStorage; manifest?: typeof manifest } = {}) {
   const log: string[] = [];
+  const healthUrls: string[] = [];
+  const panelUrls: string[] = [];
+  const bundled = over.manifest ?? manifest;
   const announced: string[] = [];
   const installer: PluginInstaller = {
     install: async (project, files) => void log.push(`install ${project} ${Object.keys(files).join(',')}`),
@@ -27,11 +31,12 @@ function setup(over: { healthOk?: boolean; storage?: MemoryStorage } = {}) {
   const fetchFn = (async (url: string, init?: RequestInit) => {
     if (url.endsWith('/health')) {
       log.push('health');
+      healthUrls.push(url);
       return new Response('{}', { status: over.healthOk === false ? 503 : 200 });
     }
     if (url.endsWith('/bundle')) {
       log.push('GET bundle');
-      return Response.json({ manifest, files: { 'omni-plugin.json': '{}' } });
+      return Response.json({ manifest: bundled, files: { 'omni-plugin.json': '{}' } });
     }
     if (init?.method === 'POST') {
       log.push('POST installs');
@@ -47,7 +52,7 @@ function setup(over: { healthOk?: boolean; storage?: MemoryStorage } = {}) {
       unregister: (id) => void log.push(`unregister ${id}`),
       openRight: (id) => void log.push(`openRight ${id}`),
     },
-    panels: { [DEEP_AGENTS_ID]: () => ({ id: 'panel.deepagents', title: 'Deep Agent', create: () => ({ element: {} as HTMLElement }) }) },
+    panels: { [DEEP_AGENTS_ID]: (m) => (panelUrls.push(`ws://localhost:${runtimePort(m)}/ws`), { id: 'panel.deepagents', title: 'Deep Agent', create: () => ({ element: {} as HTMLElement }) }) },
     projectId: () => 'p1',
     storage: over.storage ?? new MemoryStorage(),
     fetchFn,
@@ -55,7 +60,7 @@ function setup(over: { healthOk?: boolean; storage?: MemoryStorage } = {}) {
     healthTimeoutMs: 3000,
     announce: (t) => void announced.push(t),
   };
-  return { controller: new MarketplaceController(deps), log, announced, deps };
+  return { controller: new MarketplaceController(deps), log, announced, deps, healthUrls, panelUrls };
 }
 
 describe('marketplace registry list', () => {
@@ -116,6 +121,23 @@ describe('marketplace install flow', () => {
   });
 });
 
+describe('marketplace runtime port', () => {
+  it('runtimePort reads manifest.runtime.port and falls back to 9410', () => {
+    expect(runtimePort({ id: 'x', runtime: { port: 9555 } })).toBe(9555);
+    for (const runtime of [undefined, {}, { port: '9555' }, { port: 0 }, { port: 70000 }, { port: 1.5 }]) {
+      expect(runtimePort({ id: 'x', runtime })).toBe(9410);
+    }
+  });
+
+  it('polls /health and builds the panel ws url from the manifest port, not 9410', async () => {
+    const { controller, healthUrls, panelUrls } = setup({ manifest: { ...manifest, runtime: { command: 'uv', port: 9555 } } });
+    await controller.refresh();
+    await controller.install(DEEP_AGENTS_ID);
+    expect(healthUrls).toEqual(['http://localhost:9555/health']);
+    expect(panelUrls).toEqual(['ws://localhost:9555/ws']);
+  });
+});
+
 describe('marketplace auto-install', () => {
   it('runs once per project, restarts the runtime next time, and never after an uninstall', async () => {
     const storage = new MemoryStorage();
@@ -158,5 +180,14 @@ describe('TauriInstaller', () => {
       ['stop_runtime', { projectId: 'p1' }],
       ['uninstall_plugin', { projectId: 'p1', id: 'x' }],
     ]);
+  });
+});
+
+describe('marketplace panel source encoding', () => {
+  it('meta line uses U+00B7 and no replacement character', () => {
+    const src = readFileSync(new URL('../src/marketplace/panel.ts', import.meta.url), 'utf8');
+    const meta = src.split('\n').find((l) => l.includes('mk-meta'))!;
+    expect(meta).toContain('\\u00b7'); // source keeps the escape, which renders as U+00B7
+    expect(meta).not.toContain('\ufffd');
   });
 });

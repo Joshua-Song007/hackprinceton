@@ -84,6 +84,29 @@ pub fn uninstall_plugin(app: AppHandle, project_id: String, id: String) -> Resul
     }
 }
 
+/// Only these commands may be started as a plugin runtime.
+const ALLOWED_RUNTIME_COMMANDS: [&str; 1] = ["uv"];
+
+/// (command, args, port) from an omni-plugin.json; rejects any command outside the allow-list.
+fn runtime_spec(manifest_json: &str) -> Result<(String, Vec<String>, u16), String> {
+    let manifest: serde_json::Value = serde_json::from_str(manifest_json).map_err(|e| format!("bad omni-plugin.json: {e}"))?;
+    let runtime = manifest.get("runtime").ok_or("omni-plugin.json has no runtime")?;
+    let command = runtime.get("command").and_then(|v| v.as_str()).ok_or("runtime.command missing")?;
+    if !ALLOWED_RUNTIME_COMMANDS.contains(&command) {
+        return Err(format!("runtime command {command:?} is not allowed (allowed: {ALLOWED_RUNTIME_COMMANDS:?})"));
+    }
+    let args = runtime
+        .get("args")
+        .and_then(|v| v.as_array())
+        .map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+        .unwrap_or_default();
+    let port = match runtime.get("port") {
+        None => 9410,
+        Some(p) => p.as_u64().and_then(|p| u16::try_from(p).ok()).filter(|p| *p > 0).ok_or("runtime.port must be 1-65535")?,
+    };
+    Ok((command.to_string(), args, port))
+}
+
 #[tauri::command]
 pub fn start_runtime(
     app: AppHandle,
@@ -94,14 +117,11 @@ pub fn start_runtime(
     validate_id("projectId", &project_id)?;
     let id = manifest.get("id").and_then(|v| v.as_str()).ok_or("manifest has no id")?;
     validate_id("plugin id", id)?;
-    let runtime = manifest.get("runtime").ok_or("manifest has no runtime")?;
-    let command = runtime.get("command").and_then(|v| v.as_str()).ok_or("manifest.runtime.command missing")?;
-    let args: Vec<&str> = runtime
-        .get("args")
-        .and_then(|v| v.as_array())
-        .map(|a| a.iter().filter_map(|v| v.as_str()).collect())
-        .unwrap_or_default();
-    let port = runtime.get("port").and_then(|v| v.as_u64()).unwrap_or(9410);
+    // The webview only names the plugin; the command comes from the omni-plugin.json that was written to disk.
+    let base = app_data(&app)?;
+    let dir = plugin_dir(&base, &project_id, id);
+    let on_disk = std::fs::read_to_string(dir.join("omni-plugin.json")).map_err(|e| format!("plugin {id} is not installed: {e}"))?;
+    let (command, args, port) = runtime_spec(&on_disk)?;
 
     let mut running = runtimes.0.lock().map_err(|e| e.to_string())?;
     if let Some(child) = running.get_mut(&project_id) {
@@ -109,10 +129,9 @@ pub fn start_runtime(
             return Ok(());
         }
     }
-    let base = app_data(&app)?;
-    let mut cmd = Command::new(command);
+    let mut cmd = Command::new(&command);
     cmd.args(args)
-        .current_dir(plugin_dir(&base, &project_id, id))
+        .current_dir(dir)
         .env("OMNI_PLUGIN_PORT", port.to_string())
         .env("OMNI_PROJECT_DIR", project_dir(&base, &project_id))
         .stdin(Stdio::null())
@@ -176,6 +195,25 @@ mod tests {
         assert!(validate_id("projectId", "Local_1-x").is_ok());
         for bad in ["", "..", "a/b", r"a\b", "a.b"] {
             assert!(validate_id("projectId", bad).is_err(), "{bad} should be rejected");
+        }
+    }
+
+    #[test]
+    fn runtime_spec_allows_only_uv_and_reads_args_and_port() {
+        let ok = r#"{"runtime":{"command":"uv","args":["run","python","runtime/server.py"],"port":9411}}"#;
+        assert_eq!(runtime_spec(ok).unwrap(), ("uv".to_string(), vec!["run".into(), "python".into(), "runtime/server.py".into()], 9411));
+        assert_eq!(runtime_spec(r#"{"runtime":{"command":"uv"}}"#).unwrap().2, 9410);
+        for bad in [
+            r#"{"runtime":{"command":"powershell","args":["-c","calc"]}}"#,
+            r#"{"runtime":{"command":"/usr/bin/uv"}}"#,
+            r#"{"runtime":{"command":"uv.exe"}}"#,
+            r#"{"runtime":{"command":"uv","port":70000}}"#,
+            r#"{"runtime":{"command":"uv","port":0}}"#,
+            r#"{"runtime":{}}"#,
+            r#"{}"#,
+            "not json",
+        ] {
+            assert!(runtime_spec(bad).is_err(), "{bad} should be rejected");
         }
     }
 
