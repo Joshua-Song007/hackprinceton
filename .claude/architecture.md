@@ -27,6 +27,9 @@ OmniCloud                          (no Omni deps; Studio's backend client)
 OmniStudio (macOS app)  ──►  every package above except OmniCompanion
 Games/Flagship          ──►  data only (scene + scripts) run through OmniRuntime + OmniScript
 Backend/ (Rust)         ──►  no Swift edges; reached over HTTP / WebSocket by OmniCloud
+Web/ (TypeScript, Phase 8) ─► no Swift edges; file-level imports of Schema/usis.schema.json, prelude.js, Games/*; reaches Backend/ over HTTP / WebSocket via @omni/cloud
+  @omni/core ◄── @omni/runtime ◄── @omni/script        (@omni/runtime, @omni/script never import @omni/sim: hardware-blind)
+  @omni/core ◄── @omni/sim ;  @omni/cloud (no Omni deps) ;  studio = composition root, depends on all
                              (one file edge, not a package edge: `script_host.rs` includes OmniScript's `prelude.js`; see Placement Notes)
 ```
 
@@ -285,6 +288,7 @@ Backend/                                            (plan decision: Rust Cargo p
 ```
 
 ## Placement Notes
+- **(plan decision, Phase 8)** `Web/` is an npm-workspace TypeScript SDK + Studio (`Web/packages/omni-{core,runtime,script,sim,cloud}`, `Web/studio`, desktop shell `Web/studio/src-tauri`), mirroring the Swift package boundaries for a browser / desktop Studio. Contracts are shared by importing the same files, never copies. `Deploy/` holds the Dockerfile, compose, Caddyfile and Vultr scripts; the backend image serves the built Studio. overview.md defines Studio as native macOS only: mismatch flagged in plan.md Phase 8, not decided.
 
 - `OmniStudio` is the composition root: it constructs the `InputPipeline`, the active `InputSource` / `OutputSink` pair, the `ScriptEngine` and the `SceneRunner`, and wires them together, in `AppModel.swift`. No package does this wiring. `AppModel` also drains the runtime's `OutputQueue` into the active sink each frame; `ModeController` (P3) takes over choosing the source/sink pair. (Changed 2026-11-14: as built, `AppModel` constructs the `InputPipeline`, `SceneRunner`, one sim head device, a `RecordingOutputSink` placeholder, the `ModeController` and `DemoMode`, but no `ScriptEngine`; `ModeController` builds the live `BridgeInputSource`, `BridgeOutputSink` and `BonjourListener`; `ScriptEngine` and `ServerScriptEngine` are constructed only in `LocalTestSession`. `ScriptEditorView`, `InspectorView`, `SimulatorPanelView` and `DebugOverlayView` exist but are not mounted in the window yet.)
 - **(plan decision)** `SceneDescription.requiredTier` is a plain `Int` (1…3), so `OmniRuntime` stays off `CapabilityTier`; Studio maps it to `CapabilityTier` for the capability warning.
