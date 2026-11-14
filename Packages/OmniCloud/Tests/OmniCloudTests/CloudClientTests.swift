@@ -46,22 +46,45 @@ struct CloudClientTests {
         return CloudClient(baseURL: base, session: URLSession(configuration: config))
     }
 
-    static let signInBody = Data(#"{"sessionToken":"s1","account":{"id":"a1","displayName":"Ada"}}"#.utf8)
+    // Shapes as Backend/src/db.rs serializes them.
+    static let accountJSON = #"{"id":"a1","provider":"dev","subject":"Ada","display_name":"Ada","created_at":"t"}"#
+    static let signInBody = Data(#"{"token":"s1","account":\#(accountJSON)}"#.utf8)
+    static let signInPath = "/api/accounts/signin"
     let bundle = GameBundle(
         title: "T", runMode: "device", scene: .object(["entities": .array([.number(1), .null])]),
         clientScripts: [ScriptSource(name: "enemy", source: "x")],
         serverScripts: [ScriptSource(name: "game", source: "y")],
         assets: [AssetFile(name: "a.png", contentType: "image/png", data: Data([1, 2, 3]))])
 
-    @Test func signInStoresSessionAndSendsToken() async throws {
+    static func versionJSON(game: String, version: Int, metadata: String = #"{"title":"T"}"#) -> Data {
+        Data(#"""
+        {"id":"v","game_id":"\#(game)","version":\#(version),"scene":{"entities":[1,null]},
+         "client_scripts":{"enemy":"x"},"server_scripts":{"game":"y"},
+         "assets":{"a.png":{"contentType":"image/png","data":"AQID"}},
+         "metadata":\#(metadata),"run_mode":"device","published_at":"t"}
+        """#.utf8)
+    }
+
+    @Test func devSignInStoresSessionAndSendsNoToken() async throws {
         let client = makeClient { _ in (200, Self.signInBody) }
-        let account = try await client.signIn(token: "tok")
+        let account = try await client.signInDev(name: "Ada")
         #expect(account == Account(id: "a1", displayName: "Ada"))
         #expect(await client.isSignedIn)
         let req = StubProtocol.seen[0]
-        #expect(req.url?.path == "/v1/session")
+        #expect(req.httpMethod == "POST")
+        #expect(req.url?.path == Self.signInPath)
         #expect(req.value(forHTTPHeaderField: "Authorization") == nil)
-        #expect(String(decoding: req.httpBody ?? Data(), as: UTF8.self) == #"{"token":"tok"}"#)
+        let sent = try JSONSerialization.jsonObject(with: req.httpBody ?? Data()) as? [String: String]
+        #expect(sent == ["provider": "dev", "subject": "Ada", "display_name": "Ada"])
+    }
+
+    @Test func pastedTokenIsCheckedWithMe() async throws {
+        let client = makeClient { _ in (200, Data(Self.accountJSON.utf8)) }
+        let account = try await client.signIn(token: "tok")
+        #expect(account == Account(id: "a1", displayName: "Ada"))
+        #expect(StubProtocol.seen[0].url?.path == "/api/accounts/me")
+        #expect(StubProtocol.seen[0].value(forHTTPHeaderField: "Authorization") == "Bearer tok")
+        #expect(await client.isSignedIn)
     }
 
     @Test func publishRequiresSignIn() async {
@@ -70,55 +93,80 @@ struct CloudClientTests {
         #expect(StubProtocol.seen.isEmpty)
     }
 
-    @Test func publishEncodesBundleAndDecodesVersion() async throws {
+    @Test func publishEncodesBackendShapeAndDecodesVersion() async throws {
         let client = makeClient { req in
-            req.url?.path == "/v1/session" ? (200, Self.signInBody)
-                : (200, Data(#"{"gameId":"g1","version":3}"#.utf8))
+            req.url?.path == Self.signInPath ? (200, Self.signInBody) : (201, Self.versionJSON(game: "g1", version: 3))
         }
-        try await client.signIn(token: "tok")
+        try await client.signInDev(name: "Ada")
         let published = try await client.publish(bundle, gameId: "g1")
         #expect(published == PublishedVersion(gameId: "g1", version: 3))
         let req = StubProtocol.seen[1]
         #expect(req.httpMethod == "POST")
-        #expect(req.url?.path == "/v1/games/g1/versions")
+        #expect(req.url?.path == "/api/games/g1/versions")
         #expect(req.value(forHTTPHeaderField: "Authorization") == "Bearer s1")
-        let sent = try JSONDecoder().decode(GameBundle.self, from: req.httpBody ?? Data())
-        #expect(sent == bundle)
+        let sent = try #require(try JSONSerialization.jsonObject(with: req.httpBody ?? Data()) as? [String: Any])
+        #expect(sent["run_mode"] as? String == "device")
+        #expect(sent["client_scripts"] as? [String: String] == ["enemy": "x"])
+        #expect(sent["server_scripts"] as? [String: String] == ["game": "y"])
+        #expect(sent["metadata"] as? [String: String] == ["title": "T"])
+        #expect(sent["scene"] is [String: Any])
+        let asset = (sent["assets"] as? [String: Any])?["a.png"] as? [String: String]
+        #expect(asset == ["contentType": "image/png", "data": "AQID"])
     }
 
-    @Test func publishNewGameUsesGamesRoute() async throws {
+    @Test func publishNewGameCreatesItFirst() async throws {
         let client = makeClient { req in
-            req.url?.path == "/v1/session" ? (200, Self.signInBody)
-                : (200, Data(#"{"gameId":"g9","version":1}"#.utf8))
+            switch req.url?.path {
+            case Self.signInPath: return (200, Self.signInBody)
+            case "/api/games": return (201, Data(#"{"id":"g9","owner_id":"a1","title":"T","created_at":"t","updated_at":"t"}"#.utf8))
+            default: return (201, Self.versionJSON(game: "g9", version: 1))
+            }
         }
-        try await client.signIn(token: "tok")
-        _ = try await client.publish(bundle)
-        #expect(StubProtocol.seen[1].url?.path == "/v1/games")
+        try await client.signInDev(name: "Ada")
+        #expect(try await client.publish(bundle) == PublishedVersion(gameId: "g9", version: 1))
+        #expect(StubProtocol.seen[1].url?.path == "/api/games")
+        #expect(String(decoding: StubProtocol.seen[1].httpBody ?? Data(), as: UTF8.self) == #"{"title":"T"}"#)
+        #expect(StubProtocol.seen[2].url?.path == "/api/games/g9/versions")
     }
 
     @Test func listAndFetch() async throws {
-        let fetched = FetchedGame(gameId: "g1", version: 2, bundle: bundle)
-        let fetchedData = try JSONEncoder().encode(fetched)
         let client = makeClient { req in
             switch req.url?.path {
-            case "/v1/session": return (200, Self.signInBody)
-            case "/v1/games": return (200, Data(#"{"games":[{"id":"g1","title":"T","latestVersion":2}]}"#.utf8))
-            default: return (200, fetchedData)
+            case Self.signInPath: return (200, Self.signInBody)
+            case "/api/games": return (200, Data(#"""
+                [{"id":"g1","owner_id":"a1","title":"T","created_at":"t","updated_at":"t"},
+                 {"id":"g2","owner_id":"a1","title":"Draft","created_at":"t","updated_at":"t"}]
+                """#.utf8))
+            case "/api/library": return (200, Data(#"""
+                [{"id":"g1","title":"T","author":"Ada","latestVersion":2,"runMode":"device","requiredTier":1}]
+                """#.utf8))
+            default: return (200, Self.versionJSON(game: "g1", version: 2))
             }
         }
-        try await client.signIn(token: "tok")
-        #expect(try await client.listGames() == [GameSummary(id: "g1", title: "T", latestVersion: 2)])
-        #expect(try await client.fetchGame(id: "g1") == fetched)
-        #expect(StubProtocol.seen[2].url?.path == "/v1/games/g1/versions/latest")
+        try await client.signInDev(name: "Ada")
+        #expect(try await client.listGames() == [
+            GameSummary(id: "g1", title: "T", latestVersion: 2), GameSummary(id: "g2", title: "Draft", latestVersion: 0),
+        ])
+        #expect(try await client.fetchGame(id: "g1") == FetchedGame(gameId: "g1", version: 2, bundle: bundle))
+        #expect(StubProtocol.seen[3].url?.path == "/api/games/g1/versions/latest")
         _ = try await client.fetchGame(id: "g1", version: 2)
-        #expect(StubProtocol.seen[3].url?.path == "/v1/games/g1/versions/2")
+        #expect(StubProtocol.seen[4].url?.path == "/api/games/g1/versions/2")
+    }
+
+    @Test func webStudioVersionTakesTitleFromMetadataName() async throws {
+        let client = makeClient { req in
+            req.url?.path == Self.signInPath ? (200, Self.signInBody)
+                : (200, Self.versionJSON(game: "g1", version: 1, metadata: #"{"name":"Web","source":"omni-studio"}"#))
+        }
+        try await client.signInDev(name: "Ada")
+        #expect(try await client.fetchGame(id: "g1").bundle.title == "Web")
     }
 
     @Test func unauthorizedSurfacesAsErrorAndClearsSession() async throws {
         let client = makeClient { req in
-            req.url?.path == "/v1/session" ? (200, Self.signInBody) : (401, Data())
+            req.url?.path == Self.signInPath ? (200, Self.signInBody) : (401, Data())
         }
-        try await client.signIn(token: "tok")
+        try await client.signInDev(name: "Ada")
         await #expect(throws: CloudError.unauthorized) { try await client.listGames() }
         #expect(await !client.isSignedIn)
     }
@@ -127,14 +175,16 @@ struct CloudClientTests {
         let client = makeClient { _ in (401, Data()) }
         await #expect(throws: CloudError.unauthorized) { try await client.signIn(token: "bad") }
         #expect(await !client.isSignedIn)
+        await #expect(throws: CloudError.unauthorized) { try await client.signInDev(name: "Ada") }
+        #expect(await !client.isSignedIn)
     }
 
     @Test func forbiddenNotFoundAndServerErrors() async throws {
         let status = StatusBox()
         let client = makeClient { req in
-            req.url?.path == "/v1/session" ? (200, Self.signInBody) : (status.value, Data("boom".utf8))
+            req.url?.path == Self.signInPath ? (200, Self.signInBody) : (status.value, Data("boom".utf8))
         }
-        try await client.signIn(token: "tok")
+        try await client.signInDev(name: "Ada")
         status.value = 403
         await #expect(throws: CloudError.forbidden) { try await client.publish(bundle, gameId: "other") }
         status.value = 404
@@ -145,9 +195,9 @@ struct CloudClientTests {
 
     @Test func malformedBodyIsDecodingError() async throws {
         let client = makeClient { req in
-            req.url?.path == "/v1/session" ? (200, Self.signInBody) : (200, Data("nope".utf8))
+            req.url?.path == Self.signInPath ? (200, Self.signInBody) : (200, Data("nope".utf8))
         }
-        try await client.signIn(token: "tok")
+        try await client.signInDev(name: "Ada")
         do {
             _ = try await client.listGames()
             Issue.record("expected decoding error")
