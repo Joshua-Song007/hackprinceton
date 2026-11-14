@@ -270,12 +270,20 @@ run.onChange(renderState);
 project.onChange(renderChrome);
 account.onChange(renderChrome);
 // Signing in (or switching accounts) applies that account's plugin installs from other devices.
+// The marketplace boots once the editor has an account (login is required), so the auto-install sees the account's records.
 let marketplaceAccount = account.account?.id ?? null;
+let marketplaceBooted = false;
+const bootMarketplace = () => {
+  marketplaceBooted = true;
+  void marketplace.boot();
+};
 account.onChange(() => {
   const id = account.account?.id ?? null;
   if (id === marketplaceAccount) return;
   marketplaceAccount = id;
-  void marketplace.refresh().then(() => marketplace.loadModelKey());
+  if (testPlayer) return;
+  if (id && !marketplaceBooted) bootMarketplace();
+  else void marketplace.refresh().then(() => marketplace.loadModelKey());
 });
 renderState();
 renderChrome();
@@ -425,5 +433,5 @@ if (testPlayer) {
   attachAutosave(project, (message) => debug.addOutput('warn', message));
   if (account.account) void account.refreshGames().catch(() => {});
   showScreen(nextScreen(!!account.account, false));
-  void marketplace.boot();
+  if (account.account) bootMarketplace();
 }
