@@ -21,20 +21,25 @@ pub enum Db {
 }
 
 const MIGRATION_0001: &str = include_str!("../migrations/0001_init.sql");
+const MIGRATION_0002: &str = include_str!("../migrations/0002_plugins.sql");
 
 /// Lazy pool: no connection is made until a query runs.
 pub fn connect_lazy(url: &str) -> DbResult<PgPool> {
     PgPoolOptions::new().connect_lazy(url)
 }
 
-/// Applies 0001_init.sql once. Skips when the `accounts` table already exists.
+/// Applies 0001_init.sql and 0002_plugins.sql, each once: a step is skipped when its table
+/// (`accounts`, `plugins`) already exists.
 pub async fn migrate(pool: &PgPool) -> DbResult<()> {
-    let exists: bool = sqlx::query("SELECT to_regclass('public.accounts') IS NOT NULL")
-        .fetch_one(pool)
-        .await?
-        .try_get(0)?;
-    if !exists {
-        sqlx::raw_sql(MIGRATION_0001).execute(pool).await?;
+    for (table, sql) in [("accounts", MIGRATION_0001), ("plugins", MIGRATION_0002)] {
+        let exists: bool = sqlx::query("SELECT to_regclass($1) IS NOT NULL")
+            .bind(format!("public.{table}"))
+            .fetch_one(pool)
+            .await?
+            .try_get(0)?;
+        if !exists {
+            sqlx::raw_sql(sql).execute(pool).await?;
+        }
     }
     Ok(())
 }
@@ -80,6 +85,32 @@ pub struct NewGameVersion {
     pub assets: Value,
     pub metadata: Value,
     pub run_mode: String,
+}
+
+/// A marketplace plugin row. `bundle` is {"files":{"relpath":"utf8 content"}}.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Plugin {
+    pub id: String,
+    pub name: String,
+    pub version: String,
+    pub author: String,
+    pub category: String,
+    pub description: String,
+    pub manifest: Value,
+    pub bundle: Value,
+    pub installs: i64,
+}
+
+/// What GET /api/plugins lists (no manifest or bundle).
+#[derive(Debug, Clone, Serialize, PartialEq)]
+pub struct PluginSummary {
+    pub id: String,
+    pub name: String,
+    pub version: String,
+    pub author: String,
+    pub category: String,
+    pub description: String,
+    pub installs: i64,
 }
 
 // The sqlx `derive` feature is not enabled, so rows are mapped by hand.
@@ -316,6 +347,86 @@ pub async fn list_catalog(db: &Db) -> DbResult<Vec<CatalogRow>> {
             })
         })
         .collect()
+}
+
+/// Inserts or updates a plugin by id; an existing row keeps its `installs` count.
+pub async fn upsert_plugin(db: &Db, p: &Plugin) -> DbResult<()> {
+    let pool = match db {
+        Db::Pg(pool) => pool,
+        Db::Mem(m) => return Ok(m.upsert_plugin(p)),
+    };
+    sqlx::query(
+        "INSERT INTO plugins (id, name, version, author, category, description, manifest, bundle) \
+         VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8::jsonb) \
+         ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, version = EXCLUDED.version, \
+         author = EXCLUDED.author, category = EXCLUDED.category, description = EXCLUDED.description, \
+         manifest = EXCLUDED.manifest, bundle = EXCLUDED.bundle",
+    )
+    .bind(&p.id)
+    .bind(&p.name)
+    .bind(&p.version)
+    .bind(&p.author)
+    .bind(&p.category)
+    .bind(&p.description)
+    .bind(p.manifest.to_string())
+    .bind(p.bundle.to_string())
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+pub async fn list_plugins(db: &Db) -> DbResult<Vec<PluginSummary>> {
+    let pool = match db {
+        Db::Pg(pool) => pool,
+        Db::Mem(m) => return Ok(m.list_plugins()),
+    };
+    let rows = sqlx::query(
+        "SELECT id, name, version, author, category, description, installs FROM plugins ORDER BY id",
+    )
+    .fetch_all(pool)
+    .await?;
+    rows.iter()
+        .map(|r| {
+            Ok(PluginSummary {
+                id: r.try_get("id")?,
+                name: r.try_get("name")?,
+                version: r.try_get("version")?,
+                author: r.try_get("author")?,
+                category: r.try_get("category")?,
+                description: r.try_get("description")?,
+                installs: r.try_get("installs")?,
+            })
+        })
+        .collect()
+}
+
+/// The manifest and bundle of one plugin, or None for an unknown id.
+pub async fn get_plugin_content(db: &Db, id: &str) -> DbResult<Option<(Value, Value)>> {
+    let pool = match db {
+        Db::Pg(pool) => pool,
+        Db::Mem(m) => return Ok(m.get_plugin_content(id)),
+    };
+    let row = sqlx::query("SELECT manifest::text AS manifest, bundle::text AS bundle FROM plugins WHERE id = $1")
+        .bind(id)
+        .fetch_optional(pool)
+        .await?;
+    match row {
+        Some(r) => Ok(Some((json_col(&r, "manifest")?, json_col(&r, "bundle")?))),
+        None => Ok(None),
+    }
+}
+
+/// Adds one install and returns the new count, or None for an unknown id.
+pub async fn add_plugin_install(db: &Db, id: &str) -> DbResult<Option<i64>> {
+    let pool = match db {
+        Db::Pg(pool) => pool,
+        Db::Mem(m) => return Ok(m.add_plugin_install(id)),
+    };
+    let row = sqlx::query("UPDATE plugins SET installs = installs + 1 WHERE id = $1 RETURNING installs")
+        .bind(id)
+        .fetch_optional(pool)
+        .await?;
+    row.map(|r| r.try_get("installs")).transpose()
 }
 
 #[cfg(test)]
