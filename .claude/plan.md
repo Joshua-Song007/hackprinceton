@@ -15,7 +15,7 @@ Goal: every package exists with its dependency boundary enforced, USIS v1 is def
 - [x] `Packages/OmniCore/Package.swift` — OmniCore manifest, no dependencies. (testTarget `OmniCoreTests` added in Phase 1.2 so `swift test` can run; no other package has a testTarget yet.)
 - [x] `Packages/OmniInput/Package.swift` — OmniInput manifest, depends on OmniCore. (testTarget `OmniInputTests` added in 1.3.)
 - [x] `Packages/OmniOutput/Package.swift` — OmniOutput manifest, depends on OmniCore.
-- [x] `Packages/OmniRuntime/Package.swift` — OmniRuntime manifest, depends on OmniCore and OmniInput only. (testTarget `OmniRuntimeTests` to be added when the first test file lands, 1.5.)
+- [x] `Packages/OmniRuntime/Package.swift` — OmniRuntime manifest, depends on OmniCore and OmniInput only. (testTarget `OmniRuntimeTests` added in 1.5.)
 - [x] `Packages/OmniScript/Package.swift` — OmniScript manifest, depends on OmniRuntime. (testTarget `OmniScriptTests` to be added when the first test file lands, 2.3; declare `Resources/prelude.js` as a resource when it lands, 2.3.)
 - [x] `Packages/OmniScript/Sources/OmniScript/Module.swift` — empty module marker so the target compiles; removed when the first real OmniScript file lands (Phase 2).
 - [x] `Packages/OmniSim/Package.swift` — OmniSim manifest, depends on OmniCore, OmniInput, OmniOutput. (testTarget `OmniSimTests` to be added when the first test file lands, 2.2; declare the four `Presets/*.usis.jsonl` as resources, one explicit entry per file so `PresetLibrary.swift` stays a compiled source — verify when added, 2.2.)
@@ -61,15 +61,16 @@ Goal: every package exists with its dependency boundary enforced, USIS v1 is def
 - [x] `Packages/OmniOutput/Sources/OmniOutput/OutputSink.swift` — `OutputSink` protocol: receives `OutputCommand`s and delivers them to live devices or the simulator. (Synchronous, non-throwing batch `send`; implementations must be thread-safe and cannot be `@MainActor` classes (checked by compile); delivery failures are the sink's to count; no test item since it is a bare protocol, exercised by its first two implementations in 2.2 and 3.2.)
 
 ### 1.5 OmniRuntime — scene runner and first trigger
-- [ ] `Packages/OmniRuntime/Sources/OmniRuntime/Components/TriggerComponent.swift` — RealityKit component: collision-volume trigger with enter/exit callbacks.
-- [ ] `Packages/OmniRuntime/Sources/OmniRuntime/Components/AudioEmitterComponent.swift` — RealityKit component: named spatial sound attached to an entity.
-- [ ] `Packages/OmniRuntime/Sources/OmniRuntime/Components/ScriptComponent.swift` — RealityKit component: names the script attached to an entity.
-- [ ] `Packages/OmniRuntime/Sources/OmniRuntime/Events/GameEvent.swift` — `onLookAt`, `onGesture`, `onHeartRate`, `onRaycastHit` event enum.
-- [ ] `Packages/OmniRuntime/Sources/OmniRuntime/Events/EventDispatcher.swift` — protocol the runtime calls to deliver events to a script backend (lets OmniScript plug in without the runtime depending on it).
-- [ ] `Packages/OmniRuntime/Sources/OmniRuntime/Systems/TriggerSystem.swift` — RealityKit system resolving trigger overlaps each update.
-- [ ] `Packages/OmniRuntime/Sources/OmniRuntime/Output/OutputQueue.swift` — collects `OutputCommand`s during a frame; drained once at end of frame by the caller (Studio), never by the runtime.
-- [ ] `Packages/OmniRuntime/Sources/OmniRuntime/SceneRunner.swift` — per-frame loop: take `InputFrame` → derive events → dispatch → resolve triggers → expose queued `OutputCommand`s for the caller to drain (the runtime never sees a sink). Never reads sockets, device APIs or sim state.
-- [ ] `Packages/OmniRuntime/Tests/OmniRuntimeTests/SceneRunnerTriggerTests.swift` — hard-coded USIS packet through `InputPipeline` into `SceneRunner` fires a trigger (Phase 1 exit test).
+- [x] `Packages/OmniRuntime/Sources/OmniRuntime/Components/TriggerComponent.swift` — RealityKit component: collision-volume trigger with enter/exit callbacks. (The volume is a plain shape tested by `TriggerSystem` with its own math, not RealityKit collision — overview.md says "RealityKit collision for triggers"; chosen so triggers resolve inside `SceneRunner.step` in the overview's frame order and run headless; `CollisionComponent` is added for raycasts in 2.1; `probeSlots` defaults to `[.head]` because overview.md does not say what enters a trigger; user decision, revisit only if physics-based triggers are wanted.)
+- [x] `Packages/OmniRuntime/Sources/OmniRuntime/Components/AudioEmitterComponent.swift` — RealityKit component: named spatial sound attached to an entity. (Data only: no plan item plays the sound yet, so `self.audio.play` in 2.3 needs a playback path; unscheduled, no revisit scheduled.)
+- [x] `Packages/OmniRuntime/Sources/OmniRuntime/Components/ScriptComponent.swift` — RealityKit component: names the script attached to an entity.
+- [x] `Packages/OmniRuntime/Sources/OmniRuntime/Events/GameEvent.swift` — `onLookAt`, `onGesture`, `onHeartRate`, `onRaycastHit` event enum. (Also has `triggerEntered` / `triggerExited` so data-only games can react to triggers; overview.md lists only the four input events, so the overview.md update is pending on user request.)
+- [x] `Packages/OmniRuntime/Sources/OmniRuntime/Events/EventDispatcher.swift` — protocol the runtime calls to deliver events to a script backend (lets OmniScript plug in without the runtime depending on it). (Main-actor; always receives a concrete entity that carries a `ScriptComponent`.)
+- [x] `Packages/OmniRuntime/Sources/OmniRuntime/Events/EventDeriver.swift` — protocol the 2.1 detectors conform to; `SceneRunner` asks each registered deriver for `GameEvent`s every step (extension point so `SceneRunner.swift` is not edited in 2.1; added after the audit, not in overview.md).
+- [x] `Packages/OmniRuntime/Sources/OmniRuntime/Systems/TriggerSystem.swift` — RealityKit system resolving trigger overlaps each update. (ECS-style system called by `SceneRunner`, not a registered `RealityKit.System`, for a fixed frame order and headless tests; returns the trigger `GameEvent`s.)
+- [x] `Packages/OmniRuntime/Sources/OmniRuntime/Output/OutputQueue.swift` — collects `OutputCommand`s during a frame; drained once at end of frame by the caller (Studio), never by the runtime.
+- [x] `Packages/OmniRuntime/Sources/OmniRuntime/SceneRunner.swift` — per-frame loop: take `InputFrame` → derive events → dispatch → resolve triggers → expose queued `OutputCommand`s for the caller to drain (the runtime never sees a sink). Never reads sockets, device APIs or sim state. (Main-actor; order is derive events → dispatch → resolve triggers → dispatch trigger events; derivers are registered on `derivers`.)
+- [x] `Packages/OmniRuntime/Tests/OmniRuntimeTests/SceneRunnerTriggerTests.swift` — hard-coded USIS packet through `InputPipeline` into `SceneRunner` fires a trigger (Phase 1 exit test). (18 tests; also covers `probeSlots`, stale probes, rotated and nested volumes, event routing to scripts and `OutputQueue`.)
 
 ### 1.6 OmniStudio shell
 - [ ] `Apps/OmniStudio/OmniStudio.xcodeproj/project.pbxproj` — macOS app project linking the local packages (Xcode-generated).
@@ -84,7 +85,7 @@ Goal: every package exists with its dependency boundary enforced, USIS v1 is def
 Goal: a creator can exercise every mechanic on a Mac alone; the jitter buffer is proven against simulated input (OmniSim tests) and derived events against hand-built `InputFrame`s (OmniRuntime tests) before any live device exists; OmniSim cannot depend on OmniRuntime, so no single sim-to-events test is scheduled. Also covers OmniScript, which `overview.md` does not assign to a phase (scheduled here so Phase 4 builds on a finished API; revisit only if scope forces it later).
 
 ### 2.1 OmniRuntime — derived events
-- [ ] `Packages/OmniRuntime/Sources/OmniRuntime/Events/LookAtDetector.swift` — head forward `f` vs direction to entity `ŝ`; fires `onLookAt` when `acos(f·ŝ) < θ_lock` (15°) held for 0.5 s. (Head position = the head sample's `position` when present, else `SceneDescription.playerOrigin` — plan decision, overview.md is silent.)
+- [ ] `Packages/OmniRuntime/Sources/OmniRuntime/Events/LookAtDetector.swift` — head forward `f` vs direction to entity `ŝ`; fires `onLookAt` when `acos(f·ŝ) < θ_lock` (15°) held for 0.5 s. (Head position = the head sample's `position` when present, else `SceneDescription.playerOrigin` — plan decision, overview.md is silent.) (Head forward is −Z: usis.schema.json documents +X right, +Y up, −Z forward.)
 - [ ] `Packages/OmniRuntime/Sources/OmniRuntime/Events/GestureEventMapper.swift` — maps gesture channels from any device to `onGesture(type, dir?)`.
 - [ ] `Packages/OmniRuntime/Sources/OmniRuntime/Events/HeartRateIntensity.swift` — `d = clamp((HR − HR_rest)/(HR_max − HR_rest), 0, 1)` and `onHeartRate` emission.
 - [ ] `Packages/OmniRuntime/Sources/OmniRuntime/Events/RaycastHitDetector.swift` — `onRaycastHit` from phone aim or simulator gaze via RealityKit raycast.
@@ -124,9 +125,9 @@ Goal: a creator can exercise every mechanic on a Mac alone; the jitter buffer is
 - [ ] `Packages/OmniScript/Sources/OmniScript/Resources/prelude.js` — defines `script({...})` and handles `export default` for JavaScriptCore (which has no ES module loader).
 - [ ] `Packages/OmniScript/Sources/OmniScript/SelfBridge.swift` — `JSExport` surface for `self` (audio, speed, entity state). (Also deletes `Module.swift`.)
 - [ ] `Packages/OmniScript/Sources/OmniScript/ContextBridge.swift` — `JSExport` surface for `ctx` (`spawn`, `intensity`, output commands); no file, network or raw USIS access.
-- [ ] `Packages/OmniScript/Sources/OmniScript/ScriptEngine.swift` — sandboxed `JSContext`; implements `EventDispatcher` to call `onLookAt`/`onGesture`/`onHeartRate`/`onRaycastHit` handlers.
+- [ ] `Packages/OmniScript/Sources/OmniScript/ScriptEngine.swift` — sandboxed `JSContext`; implements `EventDispatcher` to call `onLookAt`/`onGesture`/`onHeartRate`/`onRaycastHit` handlers. (Also calls `onTriggerEnter` / `onTriggerExit` handlers for the `triggerEntered` / `triggerExited` events added in 1.5.)
 - [ ] `Packages/OmniScript/Sources/OmniScript/ScriptReloader.swift` — recompiles a script on source change without restarting the scene.
-- [ ] `Packages/OmniScript/Tests/OmniScriptTests/ScriptEngineTests.swift` — handler dispatch, sandbox isolation, error containment, hot reload.
+- [ ] `Packages/OmniScript/Tests/OmniScriptTests/ScriptEngineTests.swift` — handler dispatch, sandbox isolation, error containment, hot reload. (Covers the trigger handlers too.)
 
 ### 2.4 OmniStudio — simulator UI
 - [ ] `Apps/OmniStudio/OmniStudio/Sim/SimulatorPanelView.swift` — device slot picker, gizmos/sliders, heart-rate slider, "spike" button, preset buttons, record/replay controls.

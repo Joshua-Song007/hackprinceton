@@ -5,3 +5,4 @@ xcuserdata/
 Tools/AirPodsProbe/*.jsonl
 Tools/AirPodsProbe/*.log
 Tools/AirPodsProbe/*.cues.json
+Packages/OmniCore/.build
