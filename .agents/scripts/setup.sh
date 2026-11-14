@@ -48,7 +48,7 @@ echo "[tools]"
 need gh gh GitHub.cli
 need jq jq jqlang.jq
 need node node OpenJS.NodeJS.LTS
-for d in "$HOME/.cargo/bin"; do [ -d "$d" ] && PATH="$d:$PATH"; done   # rustup's default location, before a new shell picks it up
+if [ -d "$HOME/.cargo/bin" ]; then PATH="$HOME/.cargo/bin:$PATH"; fi   # rustup's default location, before a new shell picks it up
 need cargo rust Rustlang.Rustup
 if [ "$plat" = win ]; then   # MSVC linker for Rust; detected with vswhere
   vsw="/c/Program Files (x86)/Microsoft Visual Studio/Installer/vswhere.exe"

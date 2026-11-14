@@ -5,7 +5,7 @@
 set -uo pipefail
 cd "$(dirname "$0")/../.."
 [ -f Backend/Cargo.toml ] || { echo "verify-backend: no Backend/Cargo.toml yet, nothing to check"; exit 0; }
-for d in "$HOME/.cargo/bin"; do [ -d "$d" ] && PATH="$d:$PATH"; done   # rustup's default location; agent shells do not inherit it (same line as setup.sh)
+if [ -d "$HOME/.cargo/bin" ]; then PATH="$HOME/.cargo/bin:$PATH"; fi   # rustup's default location; agent shells do not inherit it (same line as setup.sh)
 command -v cargo >/dev/null 2>&1 || { echo "verify-backend: cargo not found (run .agents/scripts/setup.sh <laptop>, then open a new shell)" >&2; exit 2; }
 cargo build --manifest-path Backend/Cargo.toml --all-targets || exit 1
 cargo test --manifest-path Backend/Cargo.toml || exit 1
