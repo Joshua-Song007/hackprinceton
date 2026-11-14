@@ -1,4 +1,6 @@
 // Starts the HTTP API; the WebSocket game server (/play) and /api routes are added by later 4.2 items.
+mod db;
+
 use axum::{routing::get, Router};
 use sqlx::postgres::{PgPool, PgPoolOptions};
 
