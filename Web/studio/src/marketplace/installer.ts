@@ -38,7 +38,7 @@ export class TauriInstaller implements PluginInstaller {
 }
 
 export class BrowserInstaller implements PluginInstaller {
-  readonly startHint = 'cd Plugins/langchain-deepagents && uv run python runtime/server.py';
+  readonly startHint = 'set ANTHROPIC_API_KEY | OPENAI_API_KEY | GOOGLE_API_KEY (or OMNI_AGENT_FAKE=1 for the rehearsal), then cd Plugins/langchain-deepagents && uv run python runtime/server.py';
   async install(): Promise<void> {}
   async uninstall(): Promise<void> {}
   async start(): Promise<void> {}

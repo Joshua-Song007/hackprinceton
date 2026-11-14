@@ -1,4 +1,8 @@
-"""Omni Deep Agents runtime: /health over HTTP and /ws for panel prompts (websockets only)."""
+"""Omni Deep Agents runtime: /health over HTTP and /ws for panel prompts (websockets only).
+
+Live model: OMNI_AGENT_MODEL ("provider:model") or the first key set of ANTHROPIC_API_KEY, OPENAI_API_KEY,
+GOOGLE_API_KEY/GEMINI_API_KEY. Extra panel origins: OMNI_ALLOWED_ORIGINS (comma-separated).
+"""
 import asyncio
 import json
 import os
@@ -11,16 +15,28 @@ from string import Template
 from deepagents import FilesystemPermission, create_deep_agent
 from deepagents.backends import FilesystemBackend
 from langchain.agents.middleware import TodoListMiddleware
-from langchain_core.language_models.chat_models import BaseChatModel
-from langchain_core.messages import AIMessage
-from langchain_core.outputs import ChatGeneration, ChatResult
+from langchain.chat_models import init_chat_model
 from websockets.asyncio.server import serve
 from websockets.exceptions import ConnectionClosed
 
 from translate import new_state, translate
 
 PLUGIN_DIR = Path(__file__).resolve().parent.parent
-DEFAULT_MODEL = "anthropic:claude-sonnet-5-5"
+NO_KEY_MESSAGE = "No model API key: set ANTHROPIC_API_KEY, OPENAI_API_KEY or GOOGLE_API_KEY."
+
+
+def choose_model(env) -> str | None:
+    """The "provider:model" to use, or None when no key is set. OMNI_AGENT_MODEL wins."""
+    if env.get("OMNI_AGENT_MODEL"):
+        return env["OMNI_AGENT_MODEL"]
+    if env.get("ANTHROPIC_API_KEY"):
+        return "anthropic:claude-sonnet-5-5"
+    if env.get("OPENAI_API_KEY"):
+        return "openai:gpt-5.5"
+    if env.get("GOOGLE_API_KEY") or env.get("GEMINI_API_KEY"):
+        # shortcut: unverified model id, override with OMNI_AGENT_MODEL
+        return "google_genai:gemini-2.5-pro"
+    return None
 
 PERMISSIONS = [
     FilesystemPermission(operations=["write"], paths=["/scripts/**"]),
@@ -42,97 +58,14 @@ SUBAGENTS = [
     },
 ]
 
-CUBE_CLIENT_JS = """export default (function () {
-  // Cube pulse (client script): looking at the cube pulses it and tags the look for the server.
-  // [provisional] self.scale, self.name and ctx.haptic follow the Flagship scripts; prelude.js does not define self/ctx shapes.
-  return script({
-    onLookAt(self, ctx) {
-      self.scale = 1.25;
-      ctx.haptic("tick", 0.4);
-      ctx.remote.fire("tag", { entity: self.name, tag: "looked" });
-    },
 
-    // The server confirmed the tag: end the pulse.
-    onRemote(self, ctx, name, data) {
-      if (name === "tagCount" && data.entity === self.name) self.scale = 1;
-    },
-  });
-})();
-"""
-
-TAGS_SERVER_JS = """export default (function () {
-  // Tag counter (server script): counts each tag per player and confirms to everyone.
-  function init(ctx) {
-    if (!ctx.state.tags) ctx.state.tags = {};
-  }
-
-  return serverScript({
-    onPlayerJoin(ctx, player) {
-      init(ctx);
-      ctx.state.tags[player.id] = {};
-    },
-
-    onPlayerLeave(ctx, player) {
-      init(ctx);
-      delete ctx.state.tags[player.id];
-    },
-
-    onRemote(ctx, player, name, data) {
-      init(ctx);
-      if (name !== "tag") return;
-      const mine = ctx.state.tags[player.id] || (ctx.state.tags[player.id] = {});
-      mine[data.tag] = (mine[data.tag] || 0) + 1;
-      ctx.remote.fireAll("tagCount", { entity: data.entity, player: player.id, tag: data.tag, count: mine[data.tag] });
-    },
-  });
-})();
-"""
-
-
-class ReplayModel(BaseChatModel):
-    """Deterministic stand-in for the LLM (OMNI_AGENT_FAKE=1): replays a fixed list of replies."""
-
-    replies: list[AIMessage]
-    next_index: int = 0
-
-    @property
-    def _llm_type(self) -> str:
-        return "omni-replay"
-
-    def bind_tools(self, tools, **kwargs):
-        return self
-
-    def _generate(self, messages, stop=None, run_manager=None, **kwargs):
-        reply = self.replies[self.next_index]
-        self.next_index += 1
-        return ChatResult(generations=[ChatGeneration(message=reply)])
-
-
-def _call(name: str, call_id: str, **args) -> AIMessage:
-    return AIMessage(content="", tool_calls=[{"name": name, "args": args, "id": call_id}])
-
-
-def fake_model() -> ReplayModel:
-    def todos(client, server):
-        return [{"content": "Write cube client script", "status": client},
-                {"content": "Write tags server script", "status": server}]
-
-    return ReplayModel(replies=[
-        _call("write_todos", "t1", todos=todos("pending", "pending")),
-        _call("task", "task-client", description="Write scripts/cube.client.js", subagent_type="client-js"),
-        _call("write_file", "w-client", file_path="/scripts/cube.client.js", content=CUBE_CLIENT_JS),
-        AIMessage(content="Wrote scripts/cube.client.js"),
-        _call("write_todos", "t2", todos=todos("completed", "in_progress")),
-        _call("task", "task-server", description="Write scripts/tags.server.js", subagent_type="server-js"),
-        _call("write_file", "w-server", file_path="/scripts/tags.server.js", content=TAGS_SERVER_JS),
-        AIMessage(content="Wrote scripts/tags.server.js"),
-        _call("write_todos", "t3", todos=todos("completed", "completed")),
-        AIMessage(content="Wrote scripts/cube.client.js and scripts/tags.server.js."),
-    ])
-
-
-def build_agent(project_dir: Path):
-    model = fake_model() if os.environ.get("OMNI_AGENT_FAKE") == "1" else os.environ.get("OMNI_AGENT_MODEL", DEFAULT_MODEL)
+def build_agent(project_dir: Path, model=None):
+    """The deep agent for one project. `model` (a chat model instance) is injected by tests; otherwise the env picks it."""
+    if model is None:
+        model = choose_model(os.environ)
+        if model.startswith("google_genai:") and not os.environ.get("GOOGLE_API_KEY") and os.environ.get("GEMINI_API_KEY"):
+            model = init_chat_model(model, api_key=os.environ["GEMINI_API_KEY"])
+    # The subagents specs carry no model, so they inherit this one.
     return create_deep_agent(
         model=model,
         skills=["/.omni/skills/"],
@@ -153,20 +86,30 @@ def prepare_project(project_dir: Path, snapshot: dict) -> None:
     (project_dir / "AGENTS.md").write_text(text, encoding="utf-8")
 
 
-async def run_prompt(message: dict, project_dir: Path):
-    """Yield the panel events (without ids) for one prompt, ending with done or error."""
+PROJECT_LOCKS: dict[Path, asyncio.Lock] = {}
+
+
+async def run_prompt(message: dict, project_dir: Path, model=None):
+    """Yield the panel events (without ids) for one prompt, ending with done or error.
+
+    Prompts for the same project dir run one at a time: a second prompt waits for the first to finish.
+    """
+    if model is None and choose_model(os.environ) is None:
+        yield {"type": "error", "message": NO_KEY_MESSAGE}
+        return
     try:
-        prepare_project(project_dir, message.get("project") or {})
-        agent = build_agent(project_dir)
-        state = new_state()
-        async for chunk in agent.astream(
-            {"messages": [{"role": "user", "content": message["text"]}]},
-            stream_mode=["updates", "messages"],
-            subgraphs=True,
-        ):
-            for event in translate(chunk, project_dir, state):
-                yield event
-        yield {"type": "done", "summary": state["summary"]}
+        async with PROJECT_LOCKS.setdefault(project_dir, asyncio.Lock()):
+            prepare_project(project_dir, message.get("project") or {})
+            agent = build_agent(project_dir, model)
+            state = new_state()
+            async for chunk in agent.astream(
+                {"messages": [{"role": "user", "content": message["text"]}]},
+                stream_mode=["updates", "messages"],
+                subgraphs=True,
+            ):
+                for event in translate(chunk, project_dir, state):
+                    yield event
+            yield {"type": "done", "summary": state["summary"]}
     except Exception as exc:  # noqa: BLE001 - any agent failure must reach the panel
         yield {"type": "error", "message": f"{type(exc).__name__}: {exc}"}
 
@@ -177,19 +120,21 @@ ALLOWED_ORIGINS = {"http://localhost:5173", "http://127.0.0.1:5173", "tauri://lo
 
 def handle_request(connection, request):
     if request.path == "/health":
-        response = connection.respond(HTTPStatus.OK, json.dumps({"status": "ok", "deepagents": version("deepagents")}))
+        model = choose_model(os.environ)
+        response = connection.respond(HTTPStatus.OK, json.dumps({"status": "ok", "deepagents": version("deepagents"), "model": model}))
         response.headers["Content-Type"] = "application/json"
         response.headers["Access-Control-Allow-Origin"] = "*"
         return response
     if request.path != "/ws":
         return connection.respond(HTTPStatus.NOT_FOUND, "not found\n")
     origin = request.headers.get("Origin")
-    if origin is not None and origin not in ALLOWED_ORIGINS:
+    extra = {o.strip() for o in os.environ.get("OMNI_ALLOWED_ORIGINS", "").split(",") if o.strip()}
+    if origin is not None and origin not in ALLOWED_ORIGINS | extra:
         return connection.respond(HTTPStatus.FORBIDDEN, "origin not allowed\n")
     return None
 
 
-async def handle_socket(websocket):
+async def handle_socket(websocket, model=None):
     try:
         async for raw in websocket:
             try:
@@ -201,7 +146,7 @@ async def handle_socket(websocket):
                 await websocket.send(json.dumps({"type": "error", "id": prompt_id, "message": "expected a prompt message"}))
                 continue
             project_dir = Path(os.environ.get("OMNI_PROJECT_DIR", ".")).resolve()
-            async for event in run_prompt(message, project_dir):
+            async for event in run_prompt(message, project_dir, model):
                 await websocket.send(json.dumps({**event, "id": prompt_id}))
     except ConnectionClosed:
         pass

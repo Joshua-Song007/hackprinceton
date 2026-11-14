@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { DEEP_AGENTS_ID, MarketplaceController, runtimePort, type MarketplaceDeps } from '../src/marketplace/controller';
-import { TauriInstaller, type PluginInstaller } from '../src/marketplace/installer';
+import { DEEP_AGENTS_ID, MarketplaceController, openScriptAndReveal, runtimePort, type MarketplaceDeps } from '../src/marketplace/controller';
+import { BrowserInstaller, TauriInstaller, type PluginInstaller } from '../src/marketplace/installer';
 import { RegistryClient, type PluginSummary } from '../src/marketplace/registry';
 
 const summary: PluginSummary = {
@@ -16,7 +16,7 @@ class MemoryStorage {
 }
 
 /** Every collaborator writes into one ordered log, so tests assert the sequence of the flow. */
-function setup(over: { healthOk?: boolean; storage?: MemoryStorage; manifest?: typeof manifest } = {}) {
+function setup(over: { healthOk?: boolean; postFails?: boolean; storage?: MemoryStorage; manifest?: typeof manifest } = {}) {
   const log: string[] = [];
   const healthUrls: string[] = [];
   const panelUrls: string[] = [];
@@ -40,6 +40,7 @@ function setup(over: { healthOk?: boolean; storage?: MemoryStorage; manifest?: t
     }
     if (init?.method === 'POST') {
       log.push('POST installs');
+      if (over.postFails) return new Response('{}', { status: 500 });
       return Response.json({ installs: 8 });
     }
     return Response.json([summary]);
@@ -90,14 +91,14 @@ describe('marketplace install flow', () => {
     expect(controller.cards()[0]).toMatchObject({ state: 'installed', progress: 'Healthy', installs: 8, error: '' });
   });
 
-  it('shows an error when /health never answers, stops the runtime and keeps no panel', async () => {
+  it('on a /health timeout keeps the runtime running (no stop), shows "still starting" and keeps no panel', async () => {
     const { controller, log, announced } = setup({ healthOk: false });
     await controller.refresh();
     await controller.install(DEEP_AGENTS_ID);
     expect(log).not.toContain('register panel.deepagents');
-    expect(log.at(-1)).toBe('stop p1');
-    expect(controller.cards()[0]!.error).toMatch(/did not answer .*\/health within 3 s/);
-    expect(announced.at(-1)).toMatch(/LangChain Deep Agents: The runtime did not answer/);
+    expect(log).not.toContain('stop p1');
+    expect(controller.cards()[0]!.error).toMatch(/^Runtime still starting - press Reinstall or wait/);
+    expect(announced.at(-1)).toMatch(/LangChain Deep Agents: Runtime still starting/);
   });
 
   it('uninstall stops the runtime, removes the plugin dir and closes the panel', async () => {
@@ -118,6 +119,38 @@ describe('marketplace install flow', () => {
     await controller.reinstall(DEEP_AGENTS_ID);
     expect(log.filter((l) => /^(stop|uninstall|GET|start)/.test(l))).toEqual(['stop p1', `uninstall p1 ${DEEP_AGENTS_ID}`, 'GET bundle', 'start p1']);
     expect(controller.cards()[0]!.state).toBe('installed');
+  });
+});
+
+describe('marketplace install counter', () => {
+  it('keeps going and keeps the previous count when POST installs fails', async () => {
+    const { controller, log } = setup({ postFails: true });
+    await controller.refresh();
+    await controller.install(DEEP_AGENTS_ID);
+    expect(log).toContain('register panel.deepagents');
+    expect(controller.cards()[0]).toMatchObject({ state: 'installed', progress: 'Healthy', installs: 7, error: '' });
+  });
+
+  it('does not count Reinstall twice', async () => {
+    const { controller, log } = setup();
+    await controller.refresh();
+    await controller.install(DEEP_AGENTS_ID);
+    await controller.reinstall(DEEP_AGENTS_ID);
+    expect(log.filter((l) => l === 'POST installs')).toHaveLength(1);
+  });
+
+  it('counts an install after an uninstall', async () => {
+    const { controller, log } = setup();
+    await controller.refresh();
+    await controller.install(DEEP_AGENTS_ID);
+    await controller.uninstall(DEEP_AGENTS_ID);
+    await controller.install(DEEP_AGENTS_ID);
+    expect(log.filter((l) => l === 'POST installs')).toHaveLength(2);
+  });
+
+  it('browser start hint names the model key env vars and the fake rehearsal switch', () => {
+    expect(new BrowserInstaller().startHint).toContain('ANTHROPIC_API_KEY | OPENAI_API_KEY | GOOGLE_API_KEY');
+    expect(new BrowserInstaller().startHint).toContain('OMNI_AGENT_FAKE=1');
   });
 });
 
@@ -163,6 +196,14 @@ describe('marketplace auto-install', () => {
     const again = setup({ storage });
     again.controller.registerInstalled();
     expect(again.log).toEqual(['register panel.deepagents']);
+  });
+});
+
+describe('openScriptAndReveal', () => {
+  it('opens the ref in the editor and shows the editor dock panel', () => {
+    const calls: string[] = [];
+    openScriptAndReveal({ open: (ref: string) => void calls.push(`open ${ref}`) }, (id) => void calls.push(`show ${id}`))('scripts/cube.client.js');
+    expect(calls).toEqual(['open scripts/cube.client.js', 'show editor']);
   });
 });
 

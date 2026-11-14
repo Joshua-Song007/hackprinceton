@@ -53,3 +53,17 @@ def test_scripts_path_traversal_is_not_a_script_write(tmp_path):
     (tmp_path / "x.js").write_text("x")
     assert not translate_module._in_scripts(tmp_path, "/scripts/../x.js")
     assert translate_module._in_scripts(tmp_path, "/scripts/a.js")
+
+
+def test_openai_and_gemini_stream_shapes(tmp_path):
+    # OpenAI: tool calls plus a text-block reply; Gemini: plain-string content parts and a thinking block.
+    todos = [{"content": "do it", "status": "pending"}]
+    state, events = new_state(), []
+    events += translate(updates((), ai(("write_todos", {"todos": todos}, "call_abc"))), tmp_path, state)
+    events += translate(updates((), ai(("task", {"subagent_type": "server-js", "description": "go"}, "call_def"))), tmp_path, state)
+    events += translate(updates((), AIMessage(content=["Wrote ", {"type": "thinking", "thinking": "hm"}, "it."])), tmp_path, state)
+    assert events == [{"type": "todos", "items": todos},
+                      {"type": "subagent_status", "name": "server-js", "state": "started", "detail": "go"}]
+    assert state["summary"] == "Wrote it."
+    translate(updates((), AIMessage(content=[{"type": "text", "text": "ok"}])), tmp_path, state)
+    assert state["summary"] == "ok"

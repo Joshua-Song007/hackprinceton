@@ -12,7 +12,8 @@ def new_state() -> dict:
 def _text(content) -> str:
     if isinstance(content, str):
         return content
-    return "".join(b.get("text", "") for b in content if isinstance(b, dict))
+    # Gemini returns plain-string parts, Anthropic/OpenAI dict blocks (thinking blocks have no "text").
+    return "".join(b if isinstance(b, str) else b.get("text", "") for b in content if isinstance(b, (str, dict)))
 
 
 def translate(chunk, project_dir, state: dict) -> list[dict]:

@@ -1,9 +1,8 @@
-// Judge demo, headless: the fake-mode Deep Agent writes scripts/cube.client.js and scripts/tags.server.js into a Blank project
+// Judge demo, headless: a Deep Agent writes scripts/cube.client.js and scripts/tags.server.js into a Blank project
 // (the same addScript + setScript calls deep-agent.ts makes on file_written); Run local with the sim head aimed at Cube
 // must pulse the cube (haptic tick) and send the tagged remote event.
 // shortcut: the server script is only loaded in the sandbox, not run. Local run has no server runtime and the sandbox
 // calls handlers as (self, ctx, ...args), not serverScript's (ctx, player, ...args). Server behaviour is covered by the runtime pytest.
-import { readFileSync } from 'node:fs';
 import { Worker } from 'node:worker_threads';
 import { afterEach, describe, expect, it } from 'vitest';
 import { ScriptSandbox, type WorkerLike } from '@omni/script';
@@ -26,14 +25,52 @@ class NodeWorkerLike implements WorkerLike {
   }
 }
 
-const serverPy = readFileSync(new URL('../../../Plugins/langchain-deepagents/runtime/server.py', import.meta.url), 'utf8');
-function pythonString(name: string): string {
-  const m = new RegExp(`^${name} = """([\\s\\S]*?)"""`, 'm').exec(serverPy);
-  if (!m) throw new Error(`${name} not found in server.py`);
-  return m[1]!;
-}
-const CUBE_CLIENT_JS = pythonString('CUBE_CLIENT_JS');
-const TAGS_SERVER_JS = pythonString('TAGS_SERVER_JS');
+// The scripts a Deep Agent is expected to write for this demo (expected output shape; no agent runs in this test).
+const CUBE_CLIENT_SCRIPT = `export default (function () {
+  // Cube pulse (client script): looking at the cube pulses it and tags the look for the server.
+  // [provisional] self.scale, self.name and ctx.haptic follow the Flagship scripts; prelude.js does not define self/ctx shapes.
+  return script({
+    onLookAt(self, ctx) {
+      self.scale = 1.25;
+      ctx.haptic("tick", 0.4);
+      ctx.remote.fire("tag", { entity: self.name, tag: "looked" });
+    },
+
+    // The server confirmed the tag: end the pulse.
+    onRemote(self, ctx, name, data) {
+      if (name === "tagCount" && data.entity === self.name) self.scale = 1;
+    },
+  });
+})();
+`;
+
+const TAGS_SERVER_SCRIPT = `export default (function () {
+  // Tag counter (server script): counts each tag per player and confirms to everyone.
+  function init(ctx) {
+    if (!ctx.state.tags) ctx.state.tags = {};
+  }
+
+  return serverScript({
+    onPlayerJoin(ctx, player) {
+      init(ctx);
+      ctx.state.tags[player.id] = {};
+    },
+
+    onPlayerLeave(ctx, player) {
+      init(ctx);
+      delete ctx.state.tags[player.id];
+    },
+
+    onRemote(ctx, player, name, data) {
+      init(ctx);
+      if (name !== "tag") return;
+      const mine = ctx.state.tags[player.id] || (ctx.state.tags[player.id] = {});
+      mine[data.tag] = (mine[data.tag] || 0) + 1;
+      ctx.remote.fireAll("tagCount", { entity: data.entity, player: player.id, tag: data.tag, count: mine[data.tag] });
+    },
+  });
+})();
+`;
 
 /** What deep-agent.ts does for a file_written message. */
 function writeScript(project: Project, kind: 'client' | 'server', name: string, content: string) {
@@ -41,14 +78,14 @@ function writeScript(project: Project, kind: 'client' | 'server', name: string, 
   project.setScript(kind, name, content);
 }
 
-describe('Deep Agent fake-mode scripts in Run local on the Blank template', () => {
+describe('Deep Agent demo scripts in Run local on the Blank template', () => {
   let run: LocalRun | undefined;
   afterEach(() => run?.stop());
 
   function open() {
     const project = new Project(templateSnapshot('blank'));
-    writeScript(project, 'client', 'cube', CUBE_CLIENT_JS);
-    writeScript(project, 'server', 'tags', TAGS_SERVER_JS);
+    writeScript(project, 'client', 'cube', CUBE_CLIENT_SCRIPT);
+    writeScript(project, 'server', 'tags', TAGS_SERVER_SCRIPT);
     const outputs: { script: string; output: EffectOutput }[] = [];
     const loadErrors: string[] = [];
     let now = 1000;
@@ -101,7 +138,7 @@ describe('Deep Agent fake-mode scripts in Run local on the Blank template', () =
 
   it('tags.server.js is stored as a server script and loads in the sandbox', async () => {
     const project = new Project(templateSnapshot('blank'));
-    writeScript(project, 'server', 'tags', TAGS_SERVER_JS);
+    writeScript(project, 'server', 'tags', TAGS_SERVER_SCRIPT);
     expect(Object.keys(project.serverScripts)).toContain('tags');
     expect(project.serverScripts['tags']).toMatch(/^export default /);
     const sandbox = new ScriptSandbox({ createWorker: () => new NodeWorkerLike() });
