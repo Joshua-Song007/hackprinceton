@@ -1,7 +1,9 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod plugins;
+
 use std::sync::atomic::{AtomicU32, Ordering};
-use tauri::{webview::NewWindowResponse, AppHandle, WebviewUrl, WebviewWindowBuilder};
+use tauri::{webview::NewWindowResponse, AppHandle, Manager, WebviewUrl, WebviewWindowBuilder};
 
 /// Opens a panel in its own OS window. The Studio normally pops panels out through window.open (see
 /// on_new_window below) so they share the main window's state; this command is the standalone fallback.
@@ -19,7 +21,14 @@ fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_window_state::Builder::default().build())
-        .invoke_handler(tauri::generate_handler![open_panel_window])
+        .manage(plugins::Runtimes::default())
+        .invoke_handler(tauri::generate_handler![
+            open_panel_window,
+            plugins::install_plugin,
+            plugins::uninstall_plugin,
+            plugins::start_runtime,
+            plugins::stop_runtime
+        ])
         .setup(|app| {
             // Built here (window config has create:false) because window.open is blocked unless a new-window handler
             // returns a window; dockview pops panels out with window.open so they stay in the main JS context.
@@ -41,6 +50,11 @@ fn main() {
                 .build()?;
             Ok(())
         })
-        .run(tauri::generate_context!())
-        .expect("error while running Omni Studio");
+        .build(tauri::generate_context!())
+        .expect("error while building Omni Studio")
+        .run(|app, event| {
+            if let tauri::RunEvent::Exit = event {
+                plugins::stop_all(&app.state::<plugins::Runtimes>());
+            }
+        });
 }

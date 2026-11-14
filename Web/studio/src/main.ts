@@ -7,6 +7,11 @@ import { DebugStore, createOutputPanel, createPacketsPanel, createServerPanel, c
 import { EditorBus, createEditorPanel } from './editor';
 import { Selection, createExplorerPanel } from './explorer';
 import { LayoutManager, type PanelSpec } from './layout';
+import { MarketplaceController } from './marketplace/controller';
+import { deepAgentPanel } from './marketplace/deep-agent-stub';
+import { BrowserInstaller, TauriInstaller } from './marketplace/installer';
+import { MARKETPLACE_PANEL_ID, marketplacePanel } from './marketplace/panel';
+import { RegistryClient } from './marketplace/registry';
 import { PreferenceStore, bindPreferences, inDesktopApp, openSettingsSheet } from './preferences';
 import { Project, TEMPLATES, attachAutosave, loadDraft, templateSnapshot, type ProjectSnapshot } from './project';
 import { RunController, ViewportHost, createDevicesPanel, createViewportPanel } from './run';
@@ -38,7 +43,17 @@ const joinVersion = async (version: number | 'latest') => {
 };
 const run = new RunController({ project, debug, account, viewport, editor, reveal: (id) => layout.show(id), onReload: testPlayer ? joinVersion : undefined });
 
+const marketplace = new MarketplaceController({
+  registry: new RegistryClient(() => prefs.get().serverUrl),
+  installer: inDesktopApp() ? new TauriInstaller() : new BrowserInstaller(),
+  host: { register: (spec) => layout.register(spec), unregister: (id) => layout.unregister(id), openRight: (id) => layout.openRight(id) },
+  panels: { 'langchain-deepagents': () => deepAgentPanel({ url: 'ws://localhost:9410/ws', project, openScript: (ref) => editor.open(ref) }) },
+  projectId: () => (project.gameId ?? 'local').replace(/[^A-Za-z0-9_-]/g, '_'),
+  storage: localStorage,
+});
+
 const panels: PanelSpec[] = [
+  marketplacePanel(marketplace),
   { id: 'explorer', title: 'Explorer', create: () => createExplorerPanel(project, selection, editor) },
   { id: 'viewport', title: 'Viewport', create: () => createViewportPanel(viewport, run) },
   { id: 'inspector', title: 'Inspector', create: () => createInspectorPanel(project, selection) },
@@ -149,10 +164,11 @@ const windowButton = button('Window', () =>
     status(`Saved layout ${name}`);
     return undefined;
   }), (name) => layout.deleteNamed(name)), { variant: 'borderless' });
+const marketplaceButton = button('Marketplace', () => layout.focusPanel(MARKETPLACE_PANEL_ID), { variant: 'borderless' });
 const accountButton = button('Sign in', () => openAccountSheet(account, prefs, { project, openSnapshot }), { variant: 'borderless' });
 const settingsButton = button('Settings', () => openSettingsSheet(prefs), { variant: 'borderless' });
 const sep = () => el('span', { class: 'om-sep', 'aria-hidden': 'true' });
-toolbar.append(runLocal, runServer, stop, testPlayerButton, sep(), projectButton, activity, publishButton, windowButton, accountButton, settingsButton);
+toolbar.append(runLocal, runServer, stop, testPlayerButton, sep(), projectButton, activity, publishButton, windowButton, marketplaceButton, accountButton, settingsButton);
 rovingToolbar(toolbar);
 
 // Status bar
@@ -234,6 +250,7 @@ const checkForUpdate = async () => {
 if (inDesktopApp() && !testPlayer) checkForUpdate().catch((e) => debug.addOutput('warn', `Update check failed: ${e instanceof Error ? e.message : String(e)}`));
 
 // Start
+marketplace.registerInstalled(); // before start(), so a saved layout that names an installed plugin's panel loads
 layout.start();
 refreshScene();
 if (testPlayer) {
@@ -249,4 +266,5 @@ if (testPlayer) {
     if (draft && !project.dirty) project.load(draft);
   }).catch(() => {});
   if (account.account) void account.refreshGames().catch(() => {});
+  void marketplace.boot();
 }
