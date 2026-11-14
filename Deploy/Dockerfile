@@ -23,7 +23,7 @@ COPY --from=backend /repo/Backend/target/release/omni-backend /app/omni-backend
 COPY --from=studio /repo/Web/studio/dist /app/studio
 # /download is a directory in the Studio build, served by the backend's static fallback.
 COPY Deploy/download.html /app/studio/download/index.html
-COPY docs/brand-kit/project/tokens.css /app/studio/download/tokens.css
+COPY Web/studio/src/studio-tokens.css /app/studio/download/tokens.css
 ENV PORT=8080 OMNI_STUDIO_DIR=/app/studio
 EXPOSE 8080
 CMD ["/app/omni-backend"]

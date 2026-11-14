@@ -1,0 +1,118 @@
+/* Pear brand tokens. Field Notes direction.
+   Source of truth for the brand. `node tokens.mjs` writes tokens.json from it and fails if any
+   listed contrast pair misses its WCAG target. Fonts are not loaded here: link Fraunces,
+   Geist and Geist Mono (Google Fonts) or self-host them. */
+
+:root {
+  /* Locked palette */
+  --pear-emerald: #285943;   /* Emerald Depths: dark canvas; ink on Tea buttons. */
+  --pear-tea: #C2EFB3;       /* Tea Green: primary accent, CTAs, display highlights. */
+  --pear-clay: #764134;      /* Clay Soil: raised surfaces, cards, containers. Same luminance as Emerald: always give it a Sandy border. */
+  --pear-sandy: #E5B181;     /* Sandy Clay: warm accent, badges, callouts, borders. */
+  --pear-powder: #A7BED3;    /* Powder Blue: cool accent, links (large), tags, dividers. */
+
+  /* Derived from the palette for contrast */
+  --pear-paper: #F4FAEF;     /* Tea-tinted white. Body text on Emerald and Clay (7.6:1). Light canvas. */
+  --pear-ink: #0F2A1F;       /* Deep Emerald. Text on Tea, Sandy, Powder and Paper (8:1 or more). */
+  --pear-moss: #C8DCCD;      /* Secondary text on Emerald and Clay (5.6:1). */
+  --pear-powder-200: #C9D8E5;/* Links at body size on Emerald and Clay (5.5:1). */
+  --pear-sandy-200: #F0CBA8; /* Warning text on Emerald and Clay. */
+  --pear-coral: #FFB4A3;     /* Error text on Emerald and Clay, from the Clay hue. */
+  --pear-powder-700: #1F4F7A;/* Links and info on Paper (8:1). */
+  --pear-sandy-700: #7A4B12; /* Warning on Paper. */
+  --pear-clay-700: #9B2F1F;  /* Error on Paper. */
+  --pear-white: #FFFFFF;     /* Raised surface on Paper. */
+
+  /* Type */
+  --font-display: "Fraunces", "Iowan Old Style", Georgia, serif;
+  --font-sans: "Geist", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, "SF Mono", Consolas, monospace;
+  /* Display axes: soft terminals always; the WONK alternates only at 48px and up. */
+  --display-axes: "SOFT" 100, "WONK" 0;
+  --display-axes-wonk: "SOFT" 100, "WONK" 1;
+
+  /* Editorial scale: 16px base, ratio 1.333 */
+  --text-xs: 0.75rem;    /* 12: legal, captions under media */
+  --text-sm: 0.875rem;   /* 14: UI labels, table cells, notes */
+  --text-md: 1rem;       /* 16: body */
+  --text-lg: 1.3125rem;  /* 21: lead paragraphs */
+  --text-xl: 1.75rem;    /* 28: section subheads */
+  --text-2xl: 2.3125rem; /* 37: section titles */
+  --text-3xl: 3.125rem;  /* 50: page titles */
+  --text-4xl: 4.1875rem; /* 67: cover */
+  --text-5xl: 5.5625rem; /* 89: hero only, one per surface */
+  --leading-tight: 1.04;
+  --leading-snug: 1.25;
+  --leading-body: 1.6;
+  --tracking-display: -0.025em;
+  --measure: 66ch;
+
+  /* Space: 4px base */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --space-12: 3rem;
+  --space-16: 4rem;
+  --space-24: 6rem;
+  --space-32: 8rem;
+
+  /* Shape and motion */
+  --radius-sm: 4px;      /* tags, badges, fields */
+  --radius-md: 10px;     /* buttons, cards, media */
+  --radius-pill: 999px;  /* status dots only */
+  --border-width: 1px;
+  --focus-width: 2px;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --duration-fast: 120ms;
+  --duration-base: 220ms;
+  --duration-slow: 900ms; /* the one authored moment per surface */
+}
+
+/* Emerald theme (default). */
+:root, [data-theme="emerald"] {
+  color-scheme: dark;
+  --surface-canvas: var(--pear-emerald);
+  --surface-raised: var(--pear-clay);
+  --surface-accent: var(--pear-tea);
+  --ink-primary: var(--pear-paper);
+  --ink-secondary: var(--pear-moss);
+  --ink-on-accent: var(--pear-emerald);   /* Emerald on Tea, 6.3:1 */
+  --ink-on-warm: var(--pear-ink);         /* text on Sandy and Powder fills */
+  --accent: var(--pear-tea);
+  --accent-warm: var(--pear-sandy);
+  --accent-cool: var(--pear-powder);
+  --link: var(--pear-powder-200);
+  --border-strong: var(--pear-sandy);      /* fields, cards; 4.2:1 on Emerald and Clay */
+  --border-subtle: color-mix(in srgb, var(--pear-powder) 32%, transparent); /* dividers, decorative */
+  --focus: var(--pear-tea);
+  --state-ok: var(--pear-tea);
+  --state-warn: var(--pear-sandy-200);
+  --state-error: var(--pear-coral);
+  --state-info: var(--pear-powder-200);
+}
+
+/* Paper theme: print, press, light grounds. */
+[data-theme="paper"] {
+  color-scheme: light;
+  --surface-canvas: var(--pear-paper);
+  --surface-raised: var(--pear-white);
+  --surface-accent: var(--pear-emerald);
+  --ink-primary: var(--pear-ink);
+  --ink-secondary: var(--pear-emerald);
+  --ink-on-accent: var(--pear-paper);     /* Paper on Emerald, 7.6:1 */
+  --ink-on-warm: var(--pear-ink);
+  --accent: var(--pear-emerald);
+  --accent-warm: var(--pear-clay);
+  --accent-cool: var(--pear-powder-700);
+  --link: var(--pear-powder-700);
+  --border-strong: var(--pear-emerald);
+  --border-subtle: color-mix(in srgb, var(--pear-emerald) 18%, transparent);
+  --focus: var(--pear-emerald);
+  --state-ok: var(--pear-emerald);
+  --state-warn: var(--pear-sandy-700);
+  --state-error: var(--pear-clay-700);
+  --state-info: var(--pear-powder-700);
+}
