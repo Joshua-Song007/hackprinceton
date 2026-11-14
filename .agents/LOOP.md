@@ -70,7 +70,7 @@ Verified here means checked against the installed CLI (2.1.322) or the Claude Co
 | VER-02/05: evidence, separate judge | **Adopted.** Reviewer is a different context from the worker; same model family, which is weaker than the playbook's ideal |
 | VER-03: near-perfect verifier | **Partly met.** Only OmniCore has tests today; the grader improves as tests land. Watch for green-but-wrong |
 | REV-03/04/05/08: review against the spec, skip style, tag findings, 3-round cap | **Adopted** in the reviewer prompt and the round cap |
-| REV-10/11: risk tiers, agent approval never fills a human slot | **Adapted, provisional.** Auto-merge is allowed (Tien's call), except PRs touching `Package.swift` dependency edges, `Schema/usis.schema.json`, `.github/`, or any `.xcodeproj`: those get `human-hold` and wait |
+| REV-10/11: risk tiers, agent approval never fills a human slot | **Adapted.** All merges are automatic (Tien's call, 2026-11-14). PRs touching `Package.swift` dependency edges, `Schema/usis.schema.json` or `.github/` merge after the same checks and are listed for a later review; only a `human-hold` that a human adds by hand stops a merge |
 | SEC-01/05: deterministic boundaries, deny rules not prompts | **Adopted** |
 | SEC-02/03: sandbox/VM, credentials outside | **Not met.** Laptops, real `gh` tokens. See limits |
 | SEC-15: protect `main` | **Not verified** (see limits) |
