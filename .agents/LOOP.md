@@ -3,13 +3,14 @@
 How the four laptops run Omni's agents unattended, bottom to top. Rules come from `.agents/agent-playbook.md` (the Anthropic agent playbook; rule IDs such as `DOD-08` refer to it and its Source Table lists the 45 original sources); only rules that fit this repo are adopted. Read with `.agents/AGENTS.md` (every agent) and `.agents/ORCHESTRATOR.md` (the per-laptop cycle). `overview.md` stays the source of truth.
 
 ## Start it
-First, once per laptop: `.agents/scripts/setup.sh <laptop-name>` installs what is missing, checks the `gh` and `claude` logins, and reports what only a human can do (Xcode from the App Store, the logins); `--check` only reports. Then, from the clone's root folder, one command per laptop. On a Mac, inside tmux:
+One command per laptop, from the clone's root folder:
 
 ```bash
-caffeinate -i env OMNI_LAPTOP=<name> .agents/scripts/loop.sh
+.agents/scripts/start.sh <laptop-name>                # orchestrator loop
+.agents/scripts/start.sh <laptop-name> --integrator   # the tooling integrator loop, started after it
 ```
 
-On Windows run `env OMNI_LAPTOP=<name> .agents/scripts/loop.sh` in Git Bash (no `caffeinate` or `tmux`: set Windows sleep to Never while plugged in). `loop.sh` first checks `jq`, that `claude` is installed and logged in (a one-cent Haiku call), the `gh` login, write access to the repo and the orchestrator settings file, and refuses to start until the human fixes whatever it reports. Nothing else is typed after that. The loop runs until a file named `STOP` or `STOP-<laptop>` exists on `origin/main`. Only Tien creates it.
+`start.sh` installs what is missing (`setup.sh`), runs the checks, and starts the loop so it outlives the session: on a Mac in a detached `tmux` session (`omni-loop`, `omni-integrator`) under `caffeinate -i`, on Windows in its own Git Bash window with a hidden helper that keeps the PC awake while the loop runs. `--dry-run` prints the steps. What only a human can do: the `gh` and `claude` logins, Xcode 16+ from the App Store, and keeping a laptop on power with the lid open (caffeinate stops idle sleep, not lid sleep). The commands it runs underneath are `loop.sh` (`OMNI_ROLE=orch|integrator`). `loop.sh` first checks `jq`, that `claude` is installed and logged in (a one-cent Haiku call), the `gh` login, write access to the repo and the orchestrator settings file, and refuses to start until the human fixes whatever it reports. Nothing else is typed after that. The loop runs until a file named `STOP` or `STOP-<laptop>` exists on `origin/main`. Only Tien creates it.
 
 ## Layers, bottom to top
 
@@ -19,6 +20,7 @@ On Windows run `env OMNI_LAPTOP=<name> .agents/scripts/loop.sh` in Git Bash (no 
 | 1. Worker | One headless Sonnet per task, own worktree, one `plan.md` item = one file, builds, tests, runs the reviewer, commits and pushes its own branch; self-reviews again when the orchestrator asks | `run.sh`, `stop-gate.sh` (cannot finish while `verify-swift.sh` (Mac) or `verify-nonswift.sh` fails), `--max-turns 60`, `--max-budget-usd 5` |
 | 2. Reviewer | Read-only Sonnet subagent in a fresh context; reports BLOCKING / NON-BLOCKING and an APPROVE or CHANGES NEEDED line | `agents.json` (VER-05, REV-01) |
 | 3. Laptop orchestrator | Opus, one cycle per run: triage PRs, pick unblocked items, launch up to 4 workers, open PRs, run `review-pr.sh`, merge its own PRs, verify Windows laptops' Swift changes (Macs only), post status | `ORCHESTRATOR.md`, `settings.orch.json` |
+| 3b. Integrator | Opus with a big budget while it builds PR, worktree and CI tooling (`prs.sh`, `worktrees.sh`, `health.sh`, `selftest.sh`, `hygiene.yml`), then Sonnet with a small one while it maintains them from the orchestrators' `tooling` issues, `[permission]` / `[ci]` / `[loop]` issues and failing runs. Edits only scripts, workflows, README and notes | `INTEGRATOR.md`, `settings.integrator.json`, `loop.sh` with `OMNI_ROLE=integrator` |
 | 4. Cross-laptop | Laptops never message each other. Shared state is GitHub Issues, PRs and labels. Package ownership is static, so there are no claims to race on | ARCH-11 |
 | 5. Loop | Backoff, STOP, a failure issue after 5 bad cycles, a local notification | `loop.sh` |
 | 6. Tien | `STOP`, `DECISION:` comments, `human-hold`, `needs-tien`; the only role that edits anything in `.claude/` | |
@@ -46,7 +48,7 @@ Rows are raised as GitHub issues. The orchestrator's issues mention `@tienvu-lol
 | Plan contradicts `overview.md` or `architecture.md` | `[contract] ...` + `contract-change`, `needs-tien` | Both quotes and the smallest default taken |
 | Needs a new third-party dependency | `[dependency] <name>` + `needs-tien` | Why, which package, alternatives |
 | Same failure 3 times | `[stuck] <item>` + `needs-human` | What was tried, evidence (DOD-12: next step is a bigger model or a human) |
-| Orchestrator cannot run 5 cycles | `[loop] <laptop> orchestrator failing` (by `loop.sh`) | Path of the last result JSON |
+| An agent cannot run 5 cycles | `[loop] <laptop> orch failing` or `[loop] <laptop> integrator failing` (by `loop.sh`) | Path of the last result JSON |
 | CI infrastructure red on `main` | `[ci] ...` + `needs-human` | Failing job link |
 | Budget or turn cap hit | status comment, not an issue | Which cap, which item; a repeat of the same item becomes `[stuck]` |
 

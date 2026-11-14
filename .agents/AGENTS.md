@@ -4,6 +4,7 @@ Applies to agents launched via `.agents/scripts/run.sh` (the laptop orchestrator
 
 ## Roles and models
 - Orchestrator (`run.sh --orch`): `claude-opus-5-5`. Follows `.agents/ORCHESTRATOR.md` on top of this file. The only role that uses `gh`, with full GitHub access (PRs, reviews, comments, issues, merges), and it may push any branch including `main` and force-push, locally from its own laptop (Tien's decision, see `ORCHESTRATOR.md` Permissions).
+- Integrator (`run.sh --integrator`): `claude-opus-5-5` with a big budget while building tooling, `claude-sonnet-5-5` with a small one while maintaining it. Follows `.agents/INTEGRATOR.md`. Edits only `.agents/scripts/**`, `.agents/README.md`, `.github/workflows/**` and `docs/agents/`; pushes only its own `agent/*` branches.
 - Worker (`run.sh`) and every subagent (`reviewer`, `swift-package-worker`): `claude-sonnet-5-5`. Workers commit and push their own `agent/<laptop>/<slug>` branch and nothing else; no `gh`.
 - Same for every teammate. Models are pinned in `run.sh` and `agents.json`, never taken from personal settings.
 

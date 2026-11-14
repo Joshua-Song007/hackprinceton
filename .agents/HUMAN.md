@@ -35,7 +35,13 @@ tail -f ../omni.worktrees/logs/<slug>.log                               # watch 
 Worktrees land at ../omni.worktrees/<slug> on branch agent/<laptop>/<slug>. The orchestrator's is ../omni.worktrees/orch. (For a clone named omni; in general it is <clone folder name>.worktrees. Start loop.sh from the clone's root folder.)
 Workers started by the orchestrator use run.sh --detach: they return at once, and ../omni.worktrees/logs/<slug>.state says running / done / failed.
 
-Overnight loop (one tmux window per laptop; untested, watch the first few cycles)
+Overnight loop (watch the first few cycles; start.sh does setup, verify and the detached start for you)
+
+.agents/scripts/start.sh <laptop>                  # orchestrator: Mac = tmux "omni-loop" under caffeinate -i; Windows = its own Git Bash window + keep-awake helper
+.agents/scripts/start.sh <laptop> --integrator     # then the integrator (INTEGRATOR.md): builds PR / worktree / CI tooling, then maintains it; STOP-integrator stops only it
+.agents/scripts/start.sh <laptop> --dry-run        # show the steps without doing them
+Env vars set before the command are passed on: LOOP_DELAY IDLE_DELAY BUILD_DELAY MAINT_DELAY BUILD_MAX_CYCLES AGENT_BUDGET AGENT_TURNS.
+Underneath, start.sh runs loop.sh:
 
 caffeinate -i .agents/scripts/loop.sh      # Mac, inside tmux (Windows: run it without caffeinate in Git Bash, sleep set to Never). backoff, STOP check, failure issue after 5 bad cycles; LOOP_DELAY=<secs> sets the gap between cycles (default 300), IDLE_DELAY the gap after an idle or blocked cycle (default 1800); a STATUS: done cycle ends the loop. Full design: .agents/LOOP.md
 

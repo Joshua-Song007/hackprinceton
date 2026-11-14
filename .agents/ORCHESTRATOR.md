@@ -58,10 +58,11 @@ Tien's decision: orchestrators run locally on their laptop with full GitHub acce
 - Every push to `main` and every force-push gets one line in the `Agent status` issue: what, why, the commit before and after.
 
 ## Labels
-`ready`, `claimed:<laptop>`, `in-review`, `blocked`, `needs-tien`, `needs-human`, `human-hold`, `contract-change`, `needs-mac-verify`, `flaky`, `done`. Create the missing ones with `gh label create` on first run. Never touch an issue labeled `human-hold`.
+`ready`, `claimed:<laptop>`, `in-review`, `blocked`, `needs-tien`, `needs-human`, `human-hold`, `contract-change`, `needs-mac-verify`, `tooling`, `ci`, `flaky`, `done`. Create the missing ones with `gh label create` on first run. Never touch an issue labeled `human-hold`.
 
 ## Escalation
 Full table in `.agents/LOOP.md`.
 - A change to `overview.md`, to a package boundary, to scope, or a hard-to-reverse choice: open an issue labeled `needs-tien` and `contract-change`. While it waits, take the smallest reversible default, mark it `[provisional: needs-tien-review]`, and keep moving on other items.
+- A script, cleanup or CI problem you cannot fix yourself (a command misbehaves, a check is wrong or flaky, you want a helper): open an issue labeled `tooling` with the exact command and output. The integrator (`.agents/INTEGRATOR.md`) reads those issues and fixes the scripts and workflows; you never edit them.
 - A `DECISION:` comment from Tien on an issue overrides everything.
 - Conflicts between PRs: the author merges `origin/main` and resolves. Still stuck after one round: `needs-tien`.

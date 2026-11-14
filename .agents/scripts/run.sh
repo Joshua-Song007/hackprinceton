@@ -3,13 +3,14 @@
 # usage: OMNI_LAPTOP=<name> .agents/scripts/run.sh [-i] [--orch] [--detach] <slug> "<task, e.g. implement plan.md items 1.3>"
 #   -i        interactive session instead of headless. AGENT_BUDGET=<usd> caps headless spend (default 5, orchestrator 10).
 #   --orch    orchestrator role: Opus, .agents/settings.orch.json (full gh + push). Default role is worker: Sonnet, .agents/settings.json (commit + push its own agent/* branch).
+#   --integrator  integrator role (tooling lane, .agents/settings.integrator.json): Opus with a big budget while OMNI_PHASE=build (default), Sonnet with a small one when maintain.
 #   --detach  start the run in the background and return at once, so it outlives the caller (the orchestrator launches workers this way and exits).
 # Progress is written to <clone>.worktrees/logs/<slug>.state ("running|done|failed <epoch>"), the result to <slug>.json and <slug>.log.
 # Worktree must contain .agents/ (i.e. merged to origin/main).
 set -euo pipefail
 interactive=0; role=worker; detach=0
-while [ "${1:-}" = "-i" ] || [ "${1:-}" = "--orch" ] || [ "${1:-}" = "--detach" ]; do
-  [ "$1" = "-i" ] && interactive=1; [ "$1" = "--orch" ] && role=orch; [ "$1" = "--detach" ] && detach=1; shift
+while [ "${1:-}" = "-i" ] || [ "${1:-}" = "--orch" ] || [ "${1:-}" = "--integrator" ] || [ "${1:-}" = "--detach" ]; do
+  [ "$1" = "-i" ] && interactive=1; [ "$1" = "--orch" ] && role=orch; [ "$1" = "--integrator" ] && role=integrator; [ "$1" = "--detach" ] && detach=1; shift
 done
 slug=${1:?usage: run.sh [-i] [--orch] [--detach] <slug> "<task>"}; task=${2:?usage: run.sh [-i] [--orch] [--detach] <slug> "<task>"}
 laptop=${OMNI_LAPTOP:?set OMNI_LAPTOP to this laptop name (letters, digits, dashes)}
@@ -20,7 +21,7 @@ wt="$root/$slug"
 mkdir -p "$root/logs"
 state() { printf '%s %s\n' "$1" "$(date +%s)" > "$root/logs/$slug.state"; }
 if [ "$detach" = 1 ] && [ -z "${OMNI_DETACHED:-}" ]; then
-  reargs=(); [ "$role" = orch ] && reargs+=(--orch)
+  reargs=(); [ "$role" = orch ] && reargs+=(--orch); [ "$role" = integrator ] && reargs+=(--integrator)
   OMNI_DETACHED=1 nohup bash "$0" ${reargs[@]+"${reargs[@]}"} "$slug" "$task" > "$root/logs/$slug.out" 2>&1 < /dev/null &
   disown 2>/dev/null || true
   state running
@@ -39,13 +40,17 @@ if [ ! -d "$wt" ]; then   # a branch can outlive its worktree (manual delete, pr
   if git -C "$repo" show-ref -q --verify "refs/heads/agent/$laptop/$slug"; then git -C "$repo" worktree add -q "$wt" "agent/$laptop/$slug"
   else git -C "$repo" worktree add -q --no-track -b "agent/$laptop/$slug" "$wt" origin/main; fi
 fi
-if [ "$role" = orch ]; then git -C "$wt" merge -q --ff-only origin/main || echo "run.sh: orchestrator worktree could not fast-forward to origin/main" >&2; fi   # orchestrator worktree stays on fresh main; its work goes on other branches
+if [ "$role" != worker ]; then git -C "$wt" merge -q --ff-only origin/main || echo "run.sh: $role worktree could not fast-forward to origin/main" >&2; fi   # orchestrator and integrator worktrees stay on fresh main; their work goes on other branches
 rm -f "$(git -C "$wt" rev-parse --git-dir)/agent-stopgate"
 git -C "$wt" sparse-checkout set --no-cone '*' '!.agents/HUMAN.md'   # human-only doc: never materialized in an agent's worktree
 rmdir "$root/.setup.lock"; have_lock=0
 cd "$wt"
 
+turns=60
 if [ "$role" = orch ]; then settings=.agents/settings.orch.json; model=claude-opus-5-5; budget=10; extra=" You are the orchestrator for laptop $laptop."; rules=(.agents/AGENTS.md .agents/ORCHESTRATOR.md)
+elif [ "$role" = integrator ]; then
+  settings=.agents/settings.integrator.json; extra=" You are the integrator for laptop $laptop, phase ${OMNI_PHASE:-build}."; rules=(.agents/AGENTS.md .agents/INTEGRATOR.md)
+  if [ "${OMNI_PHASE:-build}" = maintain ]; then model=claude-sonnet-5-5; budget=3; turns=40; else model=claude-opus-5-5; budget=20; turns=100; fi   # build spends the night's budget, maintain is cheap
 else settings=.agents/settings.json; model=claude-sonnet-5-5; budget=5; extra=""; rules=(.agents/AGENTS.md); fi
 # The rules are loaded into the system prompt itself: "follow AGENTS.md" alone left workers that never opened the file chaining denied commands. A file, not an argument, keeps Windows under its command-line length limit.
 prompt="$root/logs/$slug.prompt.md"
@@ -60,7 +65,7 @@ args=(
 )
 [ -f .agents/agents.json ] && args+=(--agents "$(cat .agents/agents.json)")
 # the orchestrator reads worker logs in $root/logs, which sit outside its own worktree (dontAsk denies Read outside the working directory otherwise)
-[ "$role" = orch ] && args+=(--add-dir "$root")
+[ "$role" != worker ] && args+=(--add-dir "$root")
 # no-Mac laptops (Windows reports MINGW*): Swift is off limits, enforced here instead of by prompt. A Bash write can still slip past; the needs-mac-verify PR gate is the backstop.
 [ "$(uname -s)" = Darwin ] || args+=(--disallowedTools "Edit(**/*.swift)" "Edit(**/Package.swift)" "Edit(Packages/**)" "Edit(Apps/**)" "Edit(**/*.xcodeproj/**)" "Edit(**/*.xcworkspace/**)")
 
@@ -69,7 +74,7 @@ if [ "$interactive" = 1 ]; then
 fi
 rm -f "$root/logs/$slug.json"   # a result from an earlier attempt must not look like this run's
 state running
-out=$(claude -p "$task" "${args[@]}" --permission-prompts none --max-budget-usd "${AGENT_BUDGET:-$budget}" --max-turns "${AGENT_TURNS:-60}" --output-format json) || true
+out=$(claude -p "$task" "${args[@]}" --permission-prompts none --max-budget-usd "${AGENT_BUDGET:-$budget}" --max-turns "${AGENT_TURNS:-$turns}" --output-format json) || true
 echo "$out" > "$root/logs/$slug.json"
 # ponytail: needs jq. On a subscription the dollar figure is a relative usage measure, not a bill.
 if jq -e . >/dev/null 2>&1 <<<"$out"; then

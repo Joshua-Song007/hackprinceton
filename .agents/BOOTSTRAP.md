@@ -19,6 +19,8 @@ The human's prompt to follow this file is the explicit request for the git comma
 2. Run `git status --short`. If it lists changes, stop. Show them to the human and ask them to commit and push, or put the changes aside, themselves. Uncommitted work in their own lane gets reassigned by the loop (seen on the first Mac run with OmniRuntime 1.5).
 3. `git switch main`, then `git pull --ff-only`.
 
+**Shortcut:** `.agents/scripts/start.sh <laptop>` does steps 3, 4 and 5 below in one go (setup, checks, start in tmux under `caffeinate -i` on a Mac, or in its own Git Bash window with a keep-awake helper on Windows). Add `--integrator` to start the tooling integrator loop afterwards (`INTEGRATOR.md`). The **HUMAN** items still need a person.
+
 ## 3. Install and log in
 1. `.agents/scripts/setup.sh <laptop>`: installs whatever is missing (Homebrew, tmux, gh, jq, node, python on Mac; gh, jq, node, python through winget on Windows).
 2. **HUMAN** items that setup reports:

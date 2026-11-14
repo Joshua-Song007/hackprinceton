@@ -1,0 +1,93 @@
+{
+  "permissions": {
+    "defaultMode": "dontAsk",
+    "allow": [
+      "Edit",
+      "Write",
+      "Bash(swift *)",
+      "Bash(.agents/scripts/*)",
+      "Bash(bash -n *)",
+      "Bash(shellcheck *)",
+      "Bash(actionlint*)",
+      "Bash(git status*)",
+      "Bash(git diff*)",
+      "Bash(git log*)",
+      "Bash(git show*)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git branch*)",
+      "Bash(git fetch*)",
+      "Bash(git switch -c agent/*)",
+      "Bash(git merge*)",
+      "Bash(git worktree *)",
+      "Bash(git push origin agent/*)",
+      "Bash(git push -u origin agent/*)",
+      "Bash(git push --set-upstream origin agent/*)",
+      "Bash(git push origin --delete agent/*)",
+      "Bash(git -C * status*)",
+      "Bash(git -C * log*)",
+      "Bash(git -C * diff*)",
+      "Bash(git -C * show*)",
+      "Bash(git ls-remote*)",
+      "Bash(git rev-parse*)",
+      "Bash(uname*)",
+      "Bash(date*)",
+      "Bash(gh *)",
+      "Bash(ls*)",
+      "Bash(mkdir *)",
+      "Bash(cd *)"
+    ],
+    "deny": [
+      "Edit(**/.claude/**)",
+      "Edit(**/CLAUDE.md)",
+      "Edit(**/.agents/AGENTS.md)",
+      "Edit(**/.agents/ORCHESTRATOR.md)",
+      "Edit(**/.agents/INTEGRATOR.md)",
+      "Edit(**/.agents/LOOP.md)",
+      "Edit(**/.agents/BOOTSTRAP.md)",
+      "Edit(**/.agents/HUMAN.md)",
+      "Edit(**/.agents/agent-playbook.md)",
+      "Edit(**/.agents/settings*.json)",
+      "Edit(**/.agents/agents.json)",
+      "Edit(Packages/**)",
+      "Edit(Apps/**)",
+      "Edit(Games/**)",
+      "Edit(Schema/**)",
+      "Edit(Recordings/**)",
+      "Read(**/.env)",
+      "Bash(git push* main)",
+      "Bash(git push* main *)",
+      "Bash(git push*:*)",
+      "Bash(git push --force*)",
+      "Bash(git push -f*)",
+      "Bash(git push*--force*)",
+      "Bash(git push* -f*)",
+      "Bash(git push* +*)",
+      "Bash(git -C * push*)",
+      "Bash(gh repo delete*)",
+      "Bash(gh secret*)",
+      "Bash(gh auth*)",
+      "Bash(gh ssh-key*)",
+      "Bash(gh gpg-key*)",
+      "Bash(git reset*)",
+      "Bash(git rebase*)",
+      "Bash(git checkout*)",
+      "Bash(git restore*)",
+      "Bash(git clean*)",
+      "Bash(rm -rf*)",
+      "Bash(sudo*)",
+      "Bash(curl*)",
+      "Bash(wget*)",
+      "Read(**/.agents/HUMAN.md)"
+    ]
+  },
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          { "type": "command", "command": "\"$CLAUDE_PROJECT_DIR\"/.agents/scripts/stop-gate.sh", "timeout": 900 }
+        ]
+      }
+    ]
+  }
+}
