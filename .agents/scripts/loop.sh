@@ -5,8 +5,10 @@
 # Usage limit hit or warned: OUT + handoff, sleep until the reset + 60 s (LIMIT_WINDOW=18000 s fallback), resume, BACK.
 # Optional: NIGHT_BUDGET_USD=<n> stops the loop (after posting OUT + handoff) once this loop's own cycles spent NEAR_PCT (default 90) % of it today.
 # Orchestrator only: each tick writes <logs>/snapshot.md (snapshot.sh) and skips the model when it matches the last cycle's end state; FORCE_CYCLE=<s> (default 3600) forces a real cycle anyway, for time-based rules (dead claims, idle merges).
+# Self-update: when origin/main moves, the clone fast-forwards (only on a clean main checkout) and, if .agents/ changed, the loop re-execs itself on the new scripts. AUTO_UPDATE=0 turns it off.
 # Needs git, gh, jq, claude. The agents raise needs-tien / needs-human issues themselves; this script only covers "the agent cannot run at all" and denied commands.
 set -uo pipefail
+self="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"   # absolute, for the self-update re-exec after the cd below
 cd "$(dirname "$0")/../.."
 laptop=${OMNI_LAPTOP:?set OMNI_LAPTOP}
 role=${OMNI_ROLE:-orch}
@@ -73,6 +75,17 @@ while true; do
   for stopfile in STOP "STOP-$laptop" "STOP-$slug"; do
     if git cat-file -e "origin/main:$stopfile" 2>/dev/null; then notify "$stopfile found; $slug loop ended"; exit 0; fi
   done
+  if [ "${AUTO_UPDATE:-1}" = 1 ] && [ "$(git rev-parse HEAD)" != "$(git rev-parse origin/main)" ]; then   # keep the clone's own scripts current, so a merged tooling fix needs no manual restart
+    if [ "$(git branch --show-current)" = main ] && [ -z "$(git status --porcelain --untracked-files=no)" ] && old=$(git rev-parse HEAD) && git merge -q --ff-only origin/main; then
+      if ! git diff --quiet "$old" HEAD -- .agents/; then
+        bash -n "$self" || { notify "self-update: the new loop.sh has a syntax error; staying on the old one, fix forward"; continue; }   # a bad script on main must not kill every loop
+        notify "scripts updated to $(git rev-parse --short HEAD); restarting the $slug loop"
+        rm -f "$pidfile"; exec "$self"   # same pid, same env (OMNI_LAPTOP, delays) and same tee; bash parsed this whole loop before running it, so the pull cannot corrupt it
+      fi
+    elif [ "${skipped_update:-}" != "$(git rev-parse origin/main)" ]; then
+      skipped_update=$(git rev-parse origin/main); notify "self-update skipped: clone is not a clean main that fast-forwards to origin/main; update it by hand"
+    fi
+  fi
   if [ "$role" = orch ]; then   # quiet-cycle skip: no model call when GitHub and the workers look exactly as the last cycle left them
     if .agents/scripts/snapshot.sh --out "$logs/snapshot.md" 2>/dev/null; then fp=$(cksum < "$logs/snapshot.md"); else fp=""; fi
     if [ -n "$fp" ] && [ "$fp" = "${last_fp:-}" ] && [ $(( $(date +%s) - ${last_run:-0} )) -lt "${FORCE_CYCLE:-3600}" ]; then
