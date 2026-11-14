@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # One command per laptop: install what is missing, verify, and start the loop so it outlives this session.
-# usage: .agents/scripts/start.sh <laptop> [--integrator] [--dry-run]      (run from the clone's root folder)
+# usage: .agents/scripts/start.sh <laptop> [--integrator [--maintain]] [--dry-run]      (run from the clone's root folder)
+#   --maintain    with --integrator: skip the build phase (used when an orchestrator starts a fallback integrator because the original ran out of credits).
 #   (default)     the orchestrator loop: full setup and verify first.
 #   --integrator  the tooling integrator loop (INTEGRATOR.md): start it after the orchestrator; it skips the heavy Swift verify.
 #   --dry-run     print every step instead of doing it.
@@ -12,7 +13,8 @@ set -uo pipefail
 cd "$(dirname "$0")/../.."
 laptop=${1:?usage: start.sh <laptop> [--integrator] [--dry-run]}; shift
 role=orch; dry=0
-for a in "$@"; do case "$a" in --integrator) role=integrator;; --dry-run) dry=1;; *) echo "start.sh: unknown option $a" >&2; exit 2;; esac; done
+maintain=0
+for a in "$@"; do case "$a" in --integrator) role=integrator;; --maintain) maintain=1;; --dry-run) dry=1;; *) echo "start.sh: unknown option $a" >&2; exit 2;; esac; done
 [[ "$laptop" =~ ^[a-z0-9-]+$ ]] || { echo "start.sh: laptop name must match [a-z0-9-]+" >&2; exit 2; }
 case "$(uname -s)" in Darwin) plat=mac;; MINGW*|MSYS*|CYGWIN*) plat=win;; *) echo "start.sh: unsupported OS $(uname -s)" >&2; exit 2;; esac
 slug=orch; session=omni-loop; if [ "$role" = integrator ]; then slug=integrator; session=omni-integrator; fi
@@ -20,7 +22,7 @@ repo=$PWD; logs="$(dirname "$repo")/$(basename "$repo").worktrees/logs"; out="$l
 step() { echo "== $*"; }
 run() { if [ "$dry" = 1 ]; then echo "   [dry-run] $*"; else "$@"; fi; }
 die() { echo "start.sh: $*" >&2; exit 1; }
-envs=""; for v in LOOP_DELAY IDLE_DELAY BUILD_DELAY MAINT_DELAY BUILD_MAX_CYCLES AGENT_BUDGET AGENT_TURNS; do if [ -n "${!v:-}" ]; then envs="$envs $v=${!v}"; fi; done
+envs=""; for v in LOOP_DELAY IDLE_DELAY BUILD_DELAY MAINT_DELAY BUILD_MAX_CYCLES CREDIT_WAIT AGENT_BUDGET AGENT_TURNS; do if [ -n "${!v:-}" ]; then envs="$envs $v=${!v}"; fi; done
 
 step "stop files"
 git fetch -q origin 2>/dev/null || die "cannot fetch origin"
@@ -45,6 +47,7 @@ if [ "$dry" = 1 ]; then echo "   [dry-run] gh issue list --search 'Mission in:ti
 elif [ -z "$(gh issue list --search 'Mission in:title' --state open --json number --jq '.[0].number' 2>/dev/null)" ]; then echo "   warning: no open 'Mission' issue; agents fall back to plan.md order and the default rules"; fi
 
 mkdir -p "$logs"
+[ "$maintain" = 1 ] && envs="$envs OMNI_FORCE_PHASE=maintain"
 cmd="cd '$repo' && env OMNI_LAPTOP=$laptop OMNI_ROLE=$role$envs .agents/scripts/loop.sh 2>&1 | tee -a '$out'"
 step "start the $slug loop"
 if [ "$plat" = mac ]; then

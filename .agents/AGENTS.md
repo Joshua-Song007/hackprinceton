@@ -8,6 +8,16 @@ Applies to agents launched via `.agents/scripts/run.sh` (the laptop orchestrator
 - Worker (`run.sh`) and every subagent (`reviewer`, `swift-package-worker`): `claude-sonnet-5-5`. Workers commit and push their own `agent/<laptop>/<slug>` branch and nothing else; no `gh`.
 - Same for every teammate. Models are pinned in `run.sh` and `agents.json`, never taken from personal settings.
 
+## Work like a software engineer, in the open on GitHub
+GitHub is the shared workspace: the issue is the unit of work, the PR is the delivery, comments are the conversation. Every agent follows these standards.
+- **Issue** (written by the orchestrator, body via the Write tool): `**Goal**` (the problem or capability), `**Acceptance criteria**` (checkable statements), `**How to verify**` (exact commands), `**Files**` (the plan.md paths), `**Depends on**` (issues or items).
+- **Commit:** `type(scope): imperative summary` with type `feat`, `fix`, `test`, `docs`, `refactor`, `chore` or `ci`; a body that says why, and `Refs #<issue>`. Small commits.
+- **PR body:** `**Summary**` (what and why), `**Changes**` (file by file), `**Verification**` (the commands you ran with the real tail of their output), `**Risks and provisional defaults**`, `**Out of scope**` (follow-ups), a `Refs #<issue>` line, and the reviewer's `VERDICT:` line. No `#` headings (the permission check denies them).
+- **Evidence:** a claim that something works, passes or is fixed carries the command and its output. No evidence means not done.
+- **Scope:** do what the issue says. Something else you notice becomes a new issue (label `follow-up`) with a clear title, never a bigger PR.
+- **Talk on GitHub** (orchestrators; workers report in their final message because they have no `gh`): comment on the issue when work is claimed, when a PR opens, when CI goes red or green (with the diagnosis), when review finishes, and when it merges (what changed and the evidence).
+- **Diagnose before acting:** read the log, find the root cause, write it down (symptom, cause, fix plan) in a comment, then act on that plan.
+
 ## Permissions
 - Every orchestrator, on all four laptops, has the same rights from `.agents/settings.orch.json`: full `gh` (PRs, reviews, comments, issues, labels, API), any `git push` including `main` and force-push, merging, reviewing every laptop's PRs. They run locally on their own laptop. Rules for using them are in `.agents/ORCHESTRATOR.md` Permissions.
 - Workers get the narrower `.agents/settings.json`: own `agent/*` branch only, no `gh`.
@@ -42,7 +52,7 @@ Applies to agents launched via `.agents/scripts/run.sh` (the laptop orchestrator
 ## Git
 - You work in your own worktree on branch `agent/<laptop>/<slug>`; the name is in your system prompt (or `git branch --show-current`). Commit there freely, in small commits.
 - Commit all your work (`git add -A`, then `git commit`) before running the reviewer or the verify scripts: the reviewer diffs against `origin/main` and sees only committed files. Use plain `git commit -m "short message"`, one `-m` per paragraph; no `$(...)`, heredoc or `-F`.
-- Push after the first green verify and again after the review, so a turn or budget cap cannot lose finished work. On a merge conflict, fix the files with Edit, `git add`, `git commit`; if stuck, `git merge --abort` and report it.
+- Push after the first green verify and again after the review, so a turn or budget cap cannot lose finished work. On a merge conflict, fix the files with Edit, `git add`, `git commit`; if stuck, `git merge --abort` and report it, naming the conflicting files and what each side is doing: the orchestrator turns that report into a `conflict` issue for the other owner.
 - Workers: when `verify-swift.sh` (or `verify-nonswift.sh`) is green and the reviewer has approved, push your own branch yourself: `git push -u origin agent/<laptop>/<slug>`. Push again after every fix round. Never push any other branch, never push `main`, never force-push or delete remote branches, never use `gh` (the orchestrator opens and merges PRs from your pushed branch). If the branch is behind, `git fetch` then `git merge origin/main`.
 - Orchestrator: the normal flow is PRs from `agent/<laptop>/*` branches. Pushing to `main` and force-pushing are permitted but exceptional; the rules for them are in `.agents/ORCHESTRATOR.md` Permissions. Merge only your own PRs, under the conditions in step 2 there.
 - PR body: never put a line starting with `#` inside the `gh pr create --body "..."` command. The permission check denies it. Use bold labels (`**Completed**`) instead of Markdown headings. The body can still be multi-line.
