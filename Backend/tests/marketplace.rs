@@ -40,7 +40,8 @@ async fn seeded_plugin_is_listed_bundled_without_skipped_files_and_counts_instal
     write(&plugin, "src/__pycache__/main.pyc.txt", b"skipped");
     write(&plugin, "node_modules/x/index.js", b"skipped");
     write(&plugin, "binary.bin", &[0xff, 0xfe, 0x00]);
-    write(&plugin, "big.txt", &vec![b'a'; 256 * 1024 + 1]);
+    write(&plugin, "big.txt", &vec![b'a'; 1024 * 1024 + 1]);
+    write(&plugin, "uv.lock", &vec![b'a'; 400 * 1024]);
     write(&seed_dir.join("not-a-plugin"), "readme.txt", b"no manifest, no row");
 
     let db = Db::Mem(MemStore::default());
@@ -68,7 +69,7 @@ async fn seeded_plugin_is_listed_bundled_without_skipped_files_and_counts_instal
     let files = bundle["files"].as_object().unwrap();
     let mut names: Vec<&str> = files.keys().map(String::as_str).collect();
     names.sort();
-    assert_eq!(names, ["omni-plugin.json", "src/main.py"], "{bundle}");
+    assert_eq!(names, ["omni-plugin.json", "src/main.py", "uv.lock"], "{bundle}");
     assert_eq!(files["src/main.py"], "print('hi')");
 
     let (st, n) = call(addr, "POST", "/api/plugins/langchain-deepagents/installs").await;

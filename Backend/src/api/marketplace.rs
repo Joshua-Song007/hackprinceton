@@ -22,7 +22,7 @@ use crate::AppState;
 type ApiError = (StatusCode, Json<Value>);
 
 const MANIFEST_FILE: &str = "omni-plugin.json";
-const MAX_FILE_BYTES: u64 = 256 * 1024;
+const MAX_FILE_BYTES: u64 = 1024 * 1024;
 const SKIPPED_DIRS: [&str; 2] = ["__pycache__", "node_modules"];
 
 fn error(status: StatusCode, msg: &str) -> ApiError {
@@ -85,7 +85,7 @@ pub fn routes() -> Router<AppState> {
 }
 
 /// Collects the files under `dir` into `files` keyed by POSIX relative path. Skips any path segment
-/// starting with "." or named in SKIPPED_DIRS, symlinks, files over 256 KiB and non-UTF-8 files.
+/// starting with "." or named in SKIPPED_DIRS, symlinks, files over 1 MiB (keeps the ~400 KB uv.lock) and non-UTF-8 files.
 // shortcut: blocking std::fs inside an async fn, fine for a startup seed of a few small plugins.
 fn collect_files(root: &FsPath, dir: &FsPath, files: &mut Map<String, Value>) -> std::io::Result<()> {
     for entry in std::fs::read_dir(dir)? {
