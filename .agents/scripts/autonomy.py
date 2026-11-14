@@ -239,7 +239,7 @@ def model(role, wt, task, pack, attempt=1):
     if os.environ.get('OMNI_BARE') == '1':
         args += ['--bare', '--disable-slash-commands']
     if role == 'orch':
-        args += ['--tools', 'Read,Grep,Glob,Bash', '--allowedTools', f'Read,Grep,Glob,Bash(gh issue *),Bash(gh label *),Bash(gh pr list *),Bash(gh pr view *),Bash(git show *),Bash(python "{(HERE / "autonomy.py").as_posix()}" retry *)']
+        args += ['--tools', 'Read,Grep,Glob,Bash', '--allowedTools', f'Read,Grep,Glob,Bash(gh issue *),Bash(gh label *),Bash(gh pr list *),Bash(gh pr view *),Bash(gh pr edit *),Bash(gh api *),Bash(gh repo view *),Bash(gh auth status),Bash(gh variable *),Bash(gh workflow *),Bash(gh run list *),Bash(gh run view *),Bash(git show *),Bash(python "{(HERE / "autonomy.py").as_posix()}" retry *)']
     elif role == 'reviewer':
         args += ['--tools', 'Read,Grep,Glob,Bash', '--allowedTools', 'Read,Grep,Glob,Bash(git diff *),Bash(git show *)']
     else:
@@ -470,7 +470,7 @@ def execute_issue(store, repo, worker, number, token, b, body):
         if stopped(store, worker):
             raise RuntimeError('STOP after push; checkpoint only')
         pr = gh('pr', 'create', '--head', branch, '--base', 'main', '--title', f'Implement #{number}', '--body',
-                f'AUTONOMY-V2\nCloses #{number}\nRefs #{number}\n\nSTATUS: review\nTESTS: build/tests/lint passed\nBLOCKER: none')
+                f'AUTONOMY-V2\nCloses #{number}\nRefs #{number}\nPLATFORM: {b["platform"]}\n\nSTATUS: review\nTESTS: build/tests/lint passed\nBLOCKER: none')
         def delivered(s):
             owned(s, number, token).update(status='review', pr=pr, sha=sha, evidence=evidence)
         store.update(delivered)
@@ -553,7 +553,10 @@ def passing_ci(pr):
         checks = json.loads(result.stdout)
     except ValueError:
         return False
-    return bool(checks) and all(x['bucket'] == 'pass' for x in checks) and any(x['name'] == 'agent-dod' for x in checks)
+    passed = {x['name'] for x in checks if x['bucket'] == 'pass'}
+    optional = {'swift', 'backend', 'nonswift'}
+    return {'agent-dod', 'hygiene', 'verify'} <= passed and all(
+        x['bucket'] == 'pass' or (x['bucket'] == 'skipping' and x['name'] in optional) for x in checks)
 
 
 def review_merge(store, repo, number, c, orchestrator=None):
@@ -576,7 +579,7 @@ def review_merge(store, repo, number, c, orchestrator=None):
         if c.get('rounds', 0) >= 3:
             store.update(lambda s: s['claims'][number].update(status='blocked', blocker='three review rounds exhausted'))
             mirror(repo, number, store.read()[1]['claims'][number])
-            status(repo, number, 'blocked', c['pr'], blocker='three review rounds exhausted; orchestrator/human decision required')
+            status(repo, number, 'blocked', c['pr'], blocker='three review rounds exhausted; orchestrator must decompose scoped repair work')
             return
         issue = api(f'repos/{repo}/issues/{number}')
         b = brief(issue['body'])

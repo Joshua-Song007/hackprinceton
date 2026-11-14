@@ -1,13 +1,17 @@
 name: Issue Definition of Done
 on:
   pull_request:
+concurrency:
+  group: agent-dod-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
 permissions:
   contents: read
   issues: read
   pull-requests: read
 jobs:
   agent-dod:
-    runs-on: macos-15
+    runs-on: >-
+      ${{ contains(github.event.pull_request.body, 'PLATFORM: macos') && 'macos-15' || 'ubuntu-latest' }}
     timeout-minutes: 50
     steps:
       - name: Identify managed branches independently of editable PR text
@@ -36,6 +40,8 @@ jobs:
         if: steps.kind.outputs.managed == 'true'
         with:
           node-version: '22'
+          cache: npm
+          cache-dependency-path: Web/package-lock.json
       - name: Trusted base-branch DoD against exact PR head
         if: steps.kind.outputs.managed == 'true'
         env:

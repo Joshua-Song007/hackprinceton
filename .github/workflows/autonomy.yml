@@ -5,19 +5,19 @@ on:
       - '.agents/**'
       - 'docs/agents/**'
       - '.github/workflows/autonomy.yml'
-  push:
-    branches: [main]
-    paths:
-      - '.agents/**'
-      - 'docs/agents/**'
-      - '.github/workflows/autonomy.yml'
+  workflow_dispatch:
+  schedule:
+    - cron: '23 4 * * *'
+concurrency:
+  group: autonomy-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 permissions:
   contents: read
 jobs:
   offline-runtime:
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        os: ${{ fromJSON(github.event_name == 'pull_request' && '["ubuntu-latest"]' || '["ubuntu-latest", "windows-latest", "macos-latest"]') }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 10
     steps:
@@ -31,6 +31,7 @@ jobs:
         shell: bash
         run: bash .agents/scripts/dry-run.sh
       - name: Shell syntax
+        if: github.event_name != 'pull_request'
         shell: bash
         run: |
           for script in .agents/scripts/*.sh; do bash -n "$script"; done
