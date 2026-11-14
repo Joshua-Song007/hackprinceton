@@ -63,7 +63,7 @@ Where one package is swapped for another without the consumer changing. Studio's
 |---|---|---|
 | `InputSource` (OmniInput) | OmniSim: `VirtualDevice` subclasses, `UsisPlayer` · OmniBridge: `BridgeInputSource`, `AirPodsMotionSource` · OmniAdapters (stretch) | `InputBus` (a source is started with the bus: `start(bus:)`) |
 | `InputBus` (OmniInput) | OmniInput: `InputPipeline` | OmniRuntime `SceneRunner` (via `InputFrame`), OmniStudio |
-| `OutputSink` (OmniOutput) | OmniSim: `SimOutputSink` · OmniBridge: `BridgeOutputSink` | OmniStudio flushes the runtime's `OutputQueue` into the active sink |
+| `OutputSink` (OmniOutput) | OmniSim: `SimOutputSink` · OmniBridge: `BridgeOutputSink` | `AppModel` (OmniStudio) drains the runtime's `OutputQueue` into the active sink |
 | `EventDispatcher` (OmniRuntime) | OmniScript: `ScriptEngine` | OmniRuntime `SceneRunner` |
 
 ## Type Ownership
@@ -91,7 +91,7 @@ Where one package is swapped for another without the consumer changing. Studio's
 |---|---|
 | OmniCore | Foundation only |
 | OmniInput | Foundation, Synchronization (`Mutex`) |
-| OmniOutput | Foundation |
+| OmniOutput | none (OmniCore only) |
 | OmniRuntime | RealityKit |
 | OmniScript | JavaScriptCore |
 | OmniSim | RealityKit (sensor rig) |

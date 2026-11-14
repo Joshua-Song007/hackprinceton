@@ -58,7 +58,7 @@ Goal: every package exists with its dependency boundary enforced, USIS v1 is def
 - [x] `Packages/OmniInput/Tests/OmniInputTests/SourceStrippingTests.swift` — asserts `InputFrame` carries no source information.
 
 ### 1.4 OmniOutput
-- [ ] `Packages/OmniOutput/Sources/OmniOutput/OutputSink.swift` — `OutputSink` protocol: receives `OutputCommand`s and delivers them to live devices or the simulator.
+- [x] `Packages/OmniOutput/Sources/OmniOutput/OutputSink.swift` — `OutputSink` protocol: receives `OutputCommand`s and delivers them to live devices or the simulator. (Synchronous, non-throwing batch `send`; implementations must be thread-safe and cannot be `@MainActor` classes (checked by compile); delivery failures are the sink's to count; no test item since it is a bare protocol, exercised by its first two implementations in 2.2 and 3.2.)
 
 ### 1.5 OmniRuntime — scene runner and first trigger
 - [ ] `Packages/OmniRuntime/Sources/OmniRuntime/Components/TriggerComponent.swift` — RealityKit component: collision-volume trigger with enter/exit callbacks.
@@ -115,7 +115,7 @@ Goal: a creator can exercise every mechanic on a Mac alone; the jitter buffer is
 - [ ] `Packages/OmniSim/Sources/OmniSim/Rig/SensorRigScene.swift` — RealityKit avatar with device slots (head, wrists, hand, pocket, stylus); clicking a slot spawns a virtual device.
 - [ ] `Packages/OmniSim/Sources/OmniSim/Rig/GizmoController.swift` — transform gizmos and sliders driving a virtual device's orientation and position.
 - [ ] `Packages/OmniSim/Sources/OmniSim/Rig/GazeRaycaster.swift` — mouse-driven gaze ray from the head; click emits pinch.
-- [ ] `Packages/OmniSim/Sources/OmniSim/Feedback/SimOutputSink.swift` — `OutputSink` that shows haptic and audio commands on the virtual device (pulse ring, vibration icon, sound cone).
+- [ ] `Packages/OmniSim/Sources/OmniSim/Feedback/SimOutputSink.swift` — `OutputSink` that shows haptic and audio commands on the virtual device (pulse ring, vibration icon, sound cone). (Queues commands behind a Mutex; the rig drains it on the main actor each frame.)
 - [ ] `Packages/OmniSim/Tests/OmniSimTests/UsisRecorderPlayerTests.swift` — record → replay round-trip preserves packets and timing.
 - [ ] `Packages/OmniSim/Tests/OmniSimTests/NoiseModelTests.swift` — emitted rates and noise within tolerance of the declared model (exercises the jitter buffer in Sim mode).
 - [ ] `Packages/OmniSim/Tests/OmniSimTests/SimPipelineTests.swift` — virtual devices and `UsisPlayer` through `InputPipeline`: jitter-buffer interpolation at mixed rates, stale-freeze, calibration, and an `InputFrame` that carries no source (added after the plan.md audit; overview.md does not require it).
