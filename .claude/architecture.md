@@ -85,6 +85,7 @@ Where one package is swapped for another without the consumer changing. Studio's
 | `RemoteChannel` (OmniScript) | OmniStudio: `InMemoryRemoteChannel` (in `LocalTestSession.swift`) · later the player app's game-server connection | OmniScript `ScriptEngine`, `ServerScriptEngine` |
 | `CatalogSource` (OmniLibrary, Phase 9) | OmniCloud: `CloudClient` | OmniLibrary `LibraryModel` |
 | `SessionStore` (OmniLibrary, Phase 9) | OmniLibrary: Keychain store · in-memory store (tests) | OmniPlayer `PlayerModel` |
+| `GameSource` (OmniLibrary, Phase 9) | OmniCloud: `CloudClient` | OmniLibrary `StubGameLauncher` |
 | `GameLauncher` (OmniLibrary, Phase 9) | OmniLibrary: `StubGameLauncher` (fetches the bundle only) · later a launcher that hands it to OmniRuntime / OmniScript | OmniPlayer `PlayerModel` |
 
 ## Type Ownership
@@ -110,6 +111,7 @@ Where one package is swapped for another without the consumer changing. Studio's
 | `CloudClient` | OmniCloud | **(plan decision)** one HTTP client for sign-in, publish and fetch |
 | `CatalogEntry` | OmniCloud | **(plan decision)** one row of the public library (id, title, author, latest version, run mode, required tier) |
 | `DeviceProfile`, `Playability`, `LibraryModel` | OmniLibrary | **(plan decision)** what this device is, whether it can play an entry, and the browse state |
+| `StoredSession`, `SessionStore`, `GameSource`, `GameLauncher`, `LaunchResult` | OmniLibrary | **(plan decision)** the persisted sign-in, the fetch seam and the launch seam; `StubGameLauncher` is the only launcher this round |
 
 ## Apple Framework Use
 
@@ -127,7 +129,7 @@ Where one package is swapped for another without the consumer changing. Studio's
 | OmniCompanion iOS | Network (via `Shared/BridgeClient.swift`), CoreMotion, Core Haptics, WatchConnectivity, SwiftUI, UIKit |
 | OmniCompanion watchOS | HealthKit, CoreMotion, WatchConnectivity, SwiftUI |
 | OmniCloud | Foundation (`URLSession`) |
-| OmniLibrary | Foundation, Security (Keychain), Observation |
+| OmniLibrary | Foundation, Security (Keychain), Observation, Synchronization (`Mutex` in the in-memory session store) |
 | OmniPlayer | SwiftUI, AuthenticationServices (Sign in with Apple) |
 | OmniStudio | SwiftUI, RealityKit, AppKit, Observation, Synchronization |
 | Backend (Rust, not Apple) | axum (with `ws`), tokio, sqlx (Postgres), serde, serde_json, rquickjs 0.9 (provisional; deno_core not picked), jsonwebtoken 12 (`rust_crypto`) and reqwest 0.12 (`rustls-tls`) for Sign in with Apple (Phase 9), getrandom 0.3 for session tokens |
