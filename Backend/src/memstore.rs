@@ -10,13 +10,16 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::db::{catalog_tier, Account, CatalogRow, Game, GameVersion, NewGameVersion};
+use serde_json::Value;
+
+use crate::db::{catalog_tier, Account, CatalogRow, Game, GameVersion, NewGameVersion, Plugin, PluginSummary};
 
 #[derive(Default)]
 struct Inner {
     accounts: Vec<Account>,
     games: Vec<Game>,
     versions: Vec<GameVersion>,
+    plugins: Vec<Plugin>,
 }
 
 /// Cheap to clone: clones share the same data.
@@ -158,6 +161,47 @@ impl MemStore {
             .filter(|x| x.game_id == game_id && version.is_none_or(|n| x.version == n))
             .max_by_key(|x| x.version)
             .cloned()
+    }
+
+    /// Same rule as the SQL upsert: an existing plugin keeps its installs count.
+    pub fn upsert_plugin(&self, p: &Plugin) {
+        let mut s = self.lock();
+        match s.plugins.iter_mut().find(|x| x.id == p.id) {
+            Some(x) => *x = Plugin { installs: x.installs, ..p.clone() },
+            None => s.plugins.push(p.clone()),
+        }
+    }
+
+    /// Ordered by id, like the SQL `ORDER BY id`.
+    pub fn list_plugins(&self) -> Vec<PluginSummary> {
+        let mut out: Vec<PluginSummary> = self
+            .lock()
+            .plugins
+            .iter()
+            .map(|p| PluginSummary {
+                id: p.id.clone(),
+                name: p.name.clone(),
+                version: p.version.clone(),
+                author: p.author.clone(),
+                category: p.category.clone(),
+                description: p.description.clone(),
+                installs: p.installs,
+            })
+            .collect();
+        out.sort_by(|a, b| a.id.cmp(&b.id));
+        out
+    }
+
+    pub fn get_plugin_content(&self, id: &str) -> Option<(Value, Value)> {
+        let s = self.lock();
+        s.plugins.iter().find(|p| p.id == id).map(|p| (p.manifest.clone(), p.bundle.clone()))
+    }
+
+    pub fn add_plugin_install(&self, id: &str) -> Option<i64> {
+        let mut s = self.lock();
+        let p = s.plugins.iter_mut().find(|p| p.id == id)?;
+        p.installs += 1;
+        Some(p.installs)
     }
 
     /// Same result as the SQL in `db::list_catalog`: games with at least one version, newest-updated
