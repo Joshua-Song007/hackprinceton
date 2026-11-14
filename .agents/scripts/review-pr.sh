@@ -27,12 +27,18 @@ files=$(git diff --name-only "$base" "$ref")
 pkgs=$(sed -n 's#^Packages/\([^/]*\)/.*#\1#p' <<<"$files" | sort -u)
 
 section "Scope"
+if [[ "$head" =~ ^agent/[^/]+/integrator- ]]; then   # integrator lane (.agents/INTEGRATOR.md, settings.integrator.json): tooling paths only
+  echo "  · integrator branch: only .agents/scripts/, .agents/README.md, .github/workflows/, docs/agents/ are allowed"
+  lane_out=$(grep -v -E '^(\.agents/scripts/|\.agents/README\.md$|\.github/workflows/|docs/agents/)' <<<"$files" || true)
+  [ -n "$lane_out" ] && out "  ✗ files outside the integrator lane: $(tr '\n' ' ' <<<"$lane_out")" || out "  ✓ all files inside the integrator lane"
+else
 prot=$(grep -E '^(\.claude|\.agents|\.github)/' <<<"$files" || true)
 [ -n "$prot" ] && out "  ✗ touches protected paths: $(tr '\n' ' ' <<<"$prot")" || out "  ✓ no protected paths touched"
 npk=$(grep -c . <<<"$pkgs" || true)
 [ "$npk" -le 1 ] && out "  ✓ packages touched: ${pkgs:-none}" || out "  ✗ touches $npk packages: $(tr '\n' ' ' <<<"$pkgs")"
-extra=$(grep -v -E '^(Packages|Schema|Games|Apps|Recordings|Backend|docs/agents)/' <<<"$files" || true)
-[ -n "$extra" ] && out "  ✗ files outside Packages/, Schema/, Games/, Apps/, Recordings/, Backend/, docs/agents/: $(tr '\n' ' ' <<<"$extra")"
+extra=$(grep -v -E '^(Packages|Schema|Games|Apps|Recordings|Backend|docs/agents|Omni\.xcworkspace)/' <<<"$files" || true)   # the workspace file is a plan.md item (1.1, 4.1)
+[ -n "$extra" ] && out "  ✗ files outside Packages/, Schema/, Games/, Apps/, Recordings/, Backend/, docs/agents/, Omni.xcworkspace/: $(tr '\n' ' ' <<<"$extra")"
+fi
 grep -q '^Backend/target/' <<<"$files" && out "  ✗ Rust build output (Backend/target/) committed"
 
 section "Dependencies vs architecture.md graph"
@@ -72,7 +78,7 @@ blind=$(git grep -n -E 'import (OmniSim|OmniBridge)' "$ref" -- Packages/OmniRunt
 [ -n "$blind" ] && out "  ✗ hardware-blind rule broken: $(tr '\n' ';' <<<"$blind")" || out "  ✓ OmniRuntime, OmniScript, Games import neither OmniSim nor OmniBridge"
 
 section "Comments"
-rm_c=$(git diff "$base" "$ref" -- '*.swift' | grep -E '^-[[:space:]]*//' || true)
+rm_c=$(git diff --diff-filter=d "$base" "$ref" -- '*.swift' | grep -E '^-[[:space:]]*//' || true)   # a file the plan deletes (Module.swift markers) takes its comments with it
 if [ -n "$rm_c" ]; then out "  ✗ $(grep -c . <<<"$rm_c") comment line(s) removed:"; head -5 <<<"$rm_c" | sed 's/^/      /'; else out "  ✓ no comment lines removed"; fi
 
 section "Safety (added lines only)"
@@ -106,6 +112,9 @@ else echo "  · CI: ${ci:-no checks reported}"; fi
 echo "  · merge state: $(jq -r .mergeStateStatus <<<"$json"); $(git rev-list --count "$ref..origin/main") commit(s) behind main"
 for other in $(gh pr list --state open --json number --jq '.[].number' | grep -v -x "$n" || true); do
   both=$(comm -12 <(gh pr view "$other" --json files --jq '.files[].path' | sort) <(sort <<<"$files"))
+  list_only=$(grep -x -F '.agents/README.md' <<<"$both" || true)   # the script list: every tooling PR adds a line; a real clash shows as CONFLICTING above
+  both=$(grep -v -x -F '.agents/README.md' <<<"$both" || true)
+  [ -n "$list_only" ] && echo "  · shares .agents/README.md with open PR #$other (script list; merge one, then update the other)"
   [ -n "$both" ] && out "  ✗ overlaps open PR #$other: $(tr '\n' ' ' <<<"$both")"
 done
 
