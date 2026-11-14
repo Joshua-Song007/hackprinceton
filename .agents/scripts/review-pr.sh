@@ -28,7 +28,6 @@ pkgs=$(sed -n 's#^Packages/\([^/]*\)/.*#\1#p' <<<"$files" | sort -u)
 
 section "Scope"
 prot=$(grep -E '^(\.claude|\.agents|\.github)/' <<<"$files" || true)
-case "$head" in agent/*/plan-*) prot="";; esac   # orchestrator plan-sync branches legitimately edit .claude/plan.md and architecture.md
 [ -n "$prot" ] && out "  ✗ touches protected paths: $(tr '\n' ' ' <<<"$prot")" || out "  ✓ no protected paths touched"
 npk=$(grep -c . <<<"$pkgs" || true)
 [ "$npk" -le 1 ] && out "  ✓ packages touched: ${pkgs:-none}" || out "  ✗ touches $npk packages: $(tr '\n' ' ' <<<"$pkgs")"
