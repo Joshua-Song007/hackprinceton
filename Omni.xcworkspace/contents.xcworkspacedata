@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Workspace
+   version = "1.0">
+   <FileRef
+      location = "group:Packages/OmniCore">
+   </FileRef>
+   <FileRef
+      location = "group:Packages/OmniInput">
+   </FileRef>
+   <FileRef
+      location = "group:Packages/OmniOutput">
+   </FileRef>
+   <FileRef
+      location = "group:Packages/OmniRuntime">
+   </FileRef>
+   <FileRef
+      location = "group:Packages/OmniScript">
+   </FileRef>
+   <FileRef
+      location = "group:Packages/OmniSim">
+   </FileRef>
+   <FileRef
+      location = "group:Packages/OmniBridge">
+   </FileRef>
+   <FileRef
+      location = "group:Packages/OmniCollab">
+   </FileRef>
+   <FileRef
+      location = "group:Packages/OmniAdapters">
+   </FileRef>
+   <FileRef
+      location = "group:Apps/OmniStudio/OmniStudio.xcodeproj">
+   </FileRef>
+   <FileRef
+      location = "group:Apps/OmniCompanion/OmniCompanion.xcodeproj">
+   </FileRef>
+</Workspace>

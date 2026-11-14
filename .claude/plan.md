@@ -11,21 +11,21 @@
 Goal: every package exists with its dependency boundary enforced, USIS v1 is defined, and a RealityKit trigger fires from a hard-coded packet.
 
 ### 1.1 Workspace & package scaffold
-- [ ] `Omni.xcworkspace/contents.xcworkspacedata` — workspace referencing every local package and both app projects (Xcode-generated; commit as-is).
-- [ ] `Packages/OmniCore/Package.swift` — OmniCore manifest, no dependencies.
-- [ ] `Packages/OmniInput/Package.swift` — OmniInput manifest, depends on OmniCore.
-- [ ] `Packages/OmniOutput/Package.swift` — OmniOutput manifest, depends on OmniCore.
-- [ ] `Packages/OmniRuntime/Package.swift` — OmniRuntime manifest, depends on OmniCore and OmniInput only.
-- [ ] `Packages/OmniScript/Package.swift` — OmniScript manifest, depends on OmniRuntime.
-- [ ] `Packages/OmniScript/Sources/OmniScript/Module.swift` — empty module marker so the target compiles; removed when the first real OmniScript file lands (Phase 2).
-- [ ] `Packages/OmniSim/Package.swift` — OmniSim manifest, depends on OmniCore, OmniInput, OmniOutput.
-- [ ] `Packages/OmniSim/Sources/OmniSim/Module.swift` — empty module marker; removed in Phase 2.
-- [ ] `Packages/OmniBridge/Package.swift` — OmniBridge manifest, depends on OmniCore, OmniInput, OmniOutput.
-- [ ] `Packages/OmniBridge/Sources/OmniBridge/Module.swift` — empty module marker; removed in Phase 3.
-- [ ] `Packages/OmniCollab/Package.swift` — OmniCollab manifest (stretch), depends on OmniCore.
-- [ ] `Packages/OmniCollab/Sources/OmniCollab/Module.swift` — empty module marker; removed in Phase 6.
-- [ ] `Packages/OmniAdapters/Package.swift` — OmniAdapters manifest (stretch), depends on OmniCore and OmniInput.
-- [ ] `Packages/OmniAdapters/Sources/OmniAdapters/Module.swift` — empty module marker; stays until Phase 7.
+- [x] `Omni.xcworkspace/contents.xcworkspacedata` — workspace referencing every local package and both app projects (Xcode-generated; commit as-is).
+- [x] `Packages/OmniCore/Package.swift` — OmniCore manifest, no dependencies.
+- [x] `Packages/OmniInput/Package.swift` — OmniInput manifest, depends on OmniCore.
+- [x] `Packages/OmniOutput/Package.swift` — OmniOutput manifest, depends on OmniCore.
+- [x] `Packages/OmniRuntime/Package.swift` — OmniRuntime manifest, depends on OmniCore and OmniInput only.
+- [x] `Packages/OmniScript/Package.swift` — OmniScript manifest, depends on OmniRuntime.
+- [x] `Packages/OmniScript/Sources/OmniScript/Module.swift` — empty module marker so the target compiles; removed when the first real OmniScript file lands (Phase 2).
+- [x] `Packages/OmniSim/Package.swift` — OmniSim manifest, depends on OmniCore, OmniInput, OmniOutput.
+- [x] `Packages/OmniSim/Sources/OmniSim/Module.swift` — empty module marker; removed in Phase 2.
+- [x] `Packages/OmniBridge/Package.swift` — OmniBridge manifest, depends on OmniCore, OmniInput, OmniOutput.
+- [x] `Packages/OmniBridge/Sources/OmniBridge/Module.swift` — empty module marker; removed in Phase 3.
+- [x] `Packages/OmniCollab/Package.swift` — OmniCollab manifest (stretch), depends on OmniCore.
+- [x] `Packages/OmniCollab/Sources/OmniCollab/Module.swift` — empty module marker; removed in Phase 6.
+- [x] `Packages/OmniAdapters/Package.swift` — OmniAdapters manifest (stretch), depends on OmniCore and OmniInput.
+- [x] `Packages/OmniAdapters/Sources/OmniAdapters/Module.swift` — empty module marker; stays until Phase 7.
 
 ### 1.2 OmniCore — math and USIS types (pure, no I/O)
 - [ ] `Schema/usis.schema.json` — USIS v1 JSON Schema: envelope (`v`, `deviceId`, `kind`, `slot`, `source`, `t`, `seq`) and channels (orientation, position, accel, touch, gesture, heartRate, pencil). Source of truth for companions, sim and adapters.
