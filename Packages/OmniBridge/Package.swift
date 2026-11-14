@@ -26,6 +26,7 @@ let package = Package(
             dependencies: [
                 "OmniBridge",
                 .product(name: "OmniCore", package: "OmniCore"),
+                .product(name: "OmniInput", package: "OmniInput"),
             ]
         ),
     ]
