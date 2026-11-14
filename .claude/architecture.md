@@ -27,6 +27,7 @@ OmniCloud                          (no Omni deps; Studio's backend client)
 OmniStudio (macOS app)  ──►  every package above except OmniCompanion
 Games/Flagship          ──►  data only (scene + scripts) run through OmniRuntime + OmniScript
 Backend/ (Rust)         ──►  no Swift edges; reached over HTTP / WebSocket by OmniCloud
+                             (one file edge, not a package edge: `script_host.rs` includes OmniScript's `prelude.js`; see Placement Notes)
 ```
 
 | Package / target | Depends on |
@@ -69,10 +70,10 @@ Where one package is swapped for another without the consumer changing. Studio's
 |---|---|---|
 | `InputSource` (OmniInput) | OmniSim: `VirtualDevice` subclasses, `UsisPlayer` · OmniBridge: `BridgeInputSource`, `AirPodsMotionSource` · OmniAdapters (stretch) | `InputBus` (a source is started with the bus: `start(bus:)`) |
 | `InputBus` (OmniInput) | OmniInput: `InputPipeline` | OmniRuntime `SceneRunner` (via `InputFrame`), OmniStudio |
-| `OutputSink` (OmniOutput) | OmniSim: `SimOutputSink` · OmniBridge: `BridgeOutputSink` | `AppModel` (OmniStudio) drains the runtime's `OutputQueue` into the active sink |
+| `OutputSink` (OmniOutput) | OmniSim: `SimOutputSink` · OmniBridge: `BridgeOutputSink` · OmniStudio: `RecordingOutputSink` (placeholder in `AppModel.swift`, still the sim sink handed to `ModeController`) | `AppModel` (OmniStudio) drains the runtime's `OutputQueue` into the active sink |
 | `EventDispatcher` (OmniRuntime) | OmniScript: `ScriptEngine` | OmniRuntime `SceneRunner` |
 | `EventDeriver` (OmniRuntime) | OmniRuntime: `LookAtDetector`, `GestureEventMapper`, `HeartRateIntensity`, `RaycastHitDetector` (2.1) | OmniRuntime `SceneRunner` |
-| `RemoteChannel` (OmniScript) | OmniStudio: `LocalTestSession` (in memory) · later the player app's game-server connection | OmniScript `ScriptEngine`, `ServerScriptEngine` |
+| `RemoteChannel` (OmniScript) | OmniStudio: `InMemoryRemoteChannel` (in `LocalTestSession.swift`) · later the player app's game-server connection | OmniScript `ScriptEngine`, `ServerScriptEngine` |
 
 ## Type Ownership
 
@@ -92,7 +93,7 @@ Where one package is swapped for another without the consumer changing. Studio's
 | `GameEvent`, `EventDispatcher`, components, systems | OmniRuntime | |
 | `EventDeriver`, `OutputQueue`, `TriggerProbe` | OmniRuntime | **(plan decision)** detector extension point, per-frame output buffer and the trigger-test point type |
 | `SceneDescription`, `SceneLoader` | OmniRuntime | **(plan decision)** scene file format not in overview.md |
-| `ScriptEngine`, `SelfBridge`, `ContextBridge` | OmniScript | |
+| `ScriptEngine`, `SelfBridge`, `ContextBridge`, `ScriptReloader` | OmniScript | |
 | `ServerScriptEngine`, `RemoteChannel` | OmniScript | server scripts and the remote-event seam (overview.md Module 3) |
 | `CloudClient` | OmniCloud | **(plan decision)** one HTTP client for sign-in, publish and fetch |
 
@@ -103,17 +104,17 @@ Where one package is swapped for another without the consumer changing. Studio's
 | OmniCore | Foundation only |
 | OmniInput | Foundation, Synchronization (`Mutex`) |
 | OmniOutput | none (OmniCore only) |
-| OmniRuntime | RealityKit |
-| OmniScript | JavaScriptCore |
-| OmniSim | RealityKit (sensor rig) |
-| OmniBridge | Network, CoreMotion (`CMHeadphoneMotionManager`) |
-| OmniCollab | Automerge for Swift (third party) |
-| OmniAdapters | CoreBluetooth |
-| OmniCompanion iOS | Network, CoreMotion, Core Haptics, WatchConnectivity |
-| OmniCompanion watchOS | HealthKit, WatchConnectivity |
+| OmniRuntime | RealityKit, simd |
+| OmniScript | JavaScriptCore, RealityKit (`SelfBridge` sets `AudioEmitterComponent`) |
+| OmniSim | RealityKit (sensor rig), Synchronization |
+| OmniBridge | Network, CoreMotion (`CMHeadphoneMotionManager`), Synchronization |
+| OmniCollab | Automerge for Swift (third party; not added yet) |
+| OmniAdapters | CoreBluetooth (not used yet) |
+| OmniCompanion iOS | Network (via `Shared/BridgeClient.swift`), CoreMotion, Core Haptics, WatchConnectivity, SwiftUI, UIKit |
+| OmniCompanion watchOS | HealthKit, CoreMotion, WatchConnectivity, SwiftUI |
 | OmniCloud | Foundation (`URLSession`) |
-| OmniStudio | SwiftUI, RealityKit |
-| Backend (Rust, not Apple) | axum, tokio, sqlx, deno_core or rquickjs (not decided) |
+| OmniStudio | SwiftUI, RealityKit, AppKit, Observation, Synchronization |
+| Backend (Rust, not Apple) | axum (with `ws`), tokio, sqlx (Postgres), serde, serde_json, rquickjs 0.9 (provisional; deno_core not picked) |
 
 ## File Structure
 
@@ -201,6 +202,7 @@ Packages/
     Tests/OmniSimTests/
       UsisRecorderPlayerTests.swift  NoiseModelTests.swift                            [P2]
       SimPipelineTests.swift                                                          [P2]
+      PresetLibraryTests.swift  RigTests.swift  SimOutputSinkTests.swift              [P2, extra]
 
   OmniBridge/
     Package.swift                                   [P1]
@@ -210,6 +212,8 @@ Packages/
       BridgeOutputSink.swift  AirPodsMotionSource.swift                               [P3]
     Tests/OmniBridgeTests/
       DeviceSessionTests.swift                                                        [P3]
+      AirPodsMotionSourceTests.swift  BonjourListenerTests.swift
+      BridgeSourceSinkTests.swift                                                     [P3, extra]
 
   OmniCollab/                                                                         (stretch)
     Package.swift                                   [P1]
@@ -250,6 +254,7 @@ Apps/
 
   OmniCompanion/
     OmniCompanion.xcodeproj/project.pbxproj         [P3]
+    Info.plist  Watch-Info.plist  OmniWatch.entitlements                              [P3, extra]
     Shared/        BridgeClient.swift                                                 [P3]
     iOS/           OmniCompanionApp.swift  MotionStreamer.swift  TouchCapture.swift
                    HapticPlayer.swift  WatchConnectivityReceiver.swift                [P3]
@@ -271,17 +276,17 @@ Games/
     scripts/       enemy.js  player.js  game.js                                       [P4]
 
 Backend/                                            (plan decision: Rust Cargo project, not in the Xcode workspace)
-  Cargo.toml                                                                          [P4]
+  Cargo.toml  Cargo.lock                                                              [P4]
   migrations/      0001_init.sql                                                      [P4]
-  src/             main.rs  db.rs                                                     [P4]
-  src/api/         accounts.rs  games.rs                                              [P4]
-  src/game_server/ session.rs  script_host.rs                                         [P4]
+  src/             main.rs  db.rs  lib.rs                                             [P4]
+  src/api/         accounts.rs  games.rs  mod.rs                                      [P4]
+  src/game_server/ session.rs  script_host.rs  mod.rs                                 [P4]
   tests/           api.rs  script_host.rs                                             [P4]
 ```
 
 ## Placement Notes
 
-- `OmniStudio` is the composition root: it constructs the `InputPipeline`, the active `InputSource` / `OutputSink` pair, the `ScriptEngine` and the `SceneRunner`, and wires them together, in `AppModel.swift`. No package does this wiring. `AppModel` also drains the runtime's `OutputQueue` into the active sink each frame; `ModeController` (P3) takes over choosing the source/sink pair.
+- `OmniStudio` is the composition root: it constructs the `InputPipeline`, the active `InputSource` / `OutputSink` pair, the `ScriptEngine` and the `SceneRunner`, and wires them together, in `AppModel.swift`. No package does this wiring. `AppModel` also drains the runtime's `OutputQueue` into the active sink each frame; `ModeController` (P3) takes over choosing the source/sink pair. (Changed 2026-11-14: as built, `AppModel` constructs the `InputPipeline`, `SceneRunner`, one sim head device, a `RecordingOutputSink` placeholder, the `ModeController` and `DemoMode`, but no `ScriptEngine`; `ModeController` builds the live `BridgeInputSource`, `BridgeOutputSink` and `BonjourListener`; `ScriptEngine` and `ServerScriptEngine` are constructed only in `LocalTestSession`. `ScriptEditorView`, `InspectorView`, `SimulatorPanelView` and `DebugOverlayView` exist but are not mounted in the window yet.)
 - **(plan decision)** `SceneDescription.requiredTier` is a plain `Int` (1…3), so `OmniRuntime` stays off `CapabilityTier`; Studio maps it to `CapabilityTier` for the capability warning.
 - `BridgeClient` is shared by the iOS and watchOS targets under `Apps/OmniCompanion/Shared/`; the Watch reaches the Mac through the phone via `WatchRelay` → `WatchConnectivityReceiver`.
 - `Games/Flagship` holds data (scene + JS) only, so it cannot import Swift packages by construction; it reaches the engine through `OmniScript`'s `self` / `ctx` API.
@@ -289,5 +294,6 @@ Backend/                                            (plan decision: Rust Cargo p
 - Only `OmniStudio` (the composition root) depends on `OmniCloud`. It fetches a published game and hands the scene and script sources to `OmniRuntime` / `OmniScript`. `OmniCloud` carries game content only, never input, so the hardware-blind property holds.
 - `LocalTestSession` (Studio) is the composition root for a multiplayer test: one `ServerScriptEngine` plus several simulated players, each with its own `InputPipeline`, `SceneRunner` and client `ScriptEngine`, joined by an in-memory `RemoteChannel`. **(plan decision)** The viewport shows one selected player.
 - **(plan decision)** `Backend/src/game_server/script_host.rs` implements the same `serverScript` API as `ServerScriptEngine` in a different JS engine; `Backend/tests/script_host.rs` and `ServerScriptEngineTests.swift` run the same fixture so the two stay aligned.
-- `Tools/` holds validation tests that prove data can actually be read from each peripheral; it is not production code. Today they are the only working peripheral code: `AirPodsProbe` (AirPods head motion on the Mac via `CMHeadphoneMotionManager`), `PhoneProbe.swiftpm` (iPhone motion, touch and haptics over Bonjour + TCP) and `PhoneProbeHost` (the Mac side that receives it). They are standalone probes with no Omni package dependencies; their measured results are recorded in `plan.md` (Cross-Cutting: Hardware verification). The production sources are built from them in Phase 3: `AirPodsMotionSource` and the `OmniBridge` session code on the Mac, `MotionStreamer` / `TouchCapture` / `HapticPlayer` / `BridgeClient` in `OmniCompanion`.
+- **(plan decision)** `Backend/src/game_server/script_host.rs` includes `Packages/OmniScript/Sources/OmniScript/Resources/prelude.js` with `include_str!`, so the Rust and Swift engines share one `serverScript` definition. This is a file-level edge from `Backend/` into a Swift package: `Backend/` no longer builds standalone (Windows laptops need the whole repo checked out), and a change to `prelude.js` affects both engines. `overview.md` describes `Backend/` as a separate Rust project; the mismatch is flagged, not decided.
+- `Tools/` holds validation tests that prove data can actually be read from each peripheral; it is not production code. (Changed 2026-11-14: these were the only working peripheral code until Phase 3; the production sources now exist in `OmniBridge` and `OmniCompanion`, and the probes remain for reference.) They are: `AirPodsProbe` (AirPods head motion on the Mac via `CMHeadphoneMotionManager`), `PhoneProbe.swiftpm` (iPhone motion, touch and haptics over Bonjour + TCP) and `PhoneProbeHost` (the Mac side that receives it). They are standalone probes with no Omni package dependencies; their measured results are recorded in `plan.md` (Cross-Cutting: Hardware verification). The production sources are built from them in Phase 3: `AirPodsMotionSource` and the `OmniBridge` session code on the Mac, `MotionStreamer` / `TouchCapture` / `HapticPlayer` / `BridgeClient` in `OmniCompanion`.
 - **(plan decision)** `SceneDescription.runMode` (`screen` / `device`) is the game's declared run mode (overview.md Module 7).
