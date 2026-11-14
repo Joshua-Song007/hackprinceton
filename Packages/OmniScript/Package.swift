@@ -15,6 +15,9 @@ let package = Package(
             name: "OmniScript",
             dependencies: [
                 .product(name: "OmniRuntime", package: "OmniRuntime"),
+            ],
+            resources: [
+                .copy("Resources/prelude.js"),
             ]
         ),
     ]
