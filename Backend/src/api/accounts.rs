@@ -4,7 +4,6 @@
 // opaque random bearer token kept in server memory (lost on restart, single instance). Replace the
 // `signin` handler with a real provider check (Apple identity token) later; `authenticate` stays.
 // Runtime sqlx via db.rs only. No new crates: token randomness comes from std's OS-seeded RandomState.
-#![allow(dead_code)] // `authenticate` is consumed by games.rs (next item)
 
 use std::collections::hash_map::RandomState;
 use std::collections::HashMap;
@@ -103,6 +102,18 @@ fn bearer(headers: &HeaderMap) -> Option<&str> {
 /// The signed-in account for a request's `Authorization: Bearer <token>`, or None.
 pub fn authenticate(headers: &HeaderMap) -> Option<Account> {
     lookup_session(bearer(headers)?)
+}
+
+/// Test helper for other api modules: a live session token for a fake account with this id.
+#[cfg(test)]
+pub fn test_token(account_id: &str) -> String {
+    store_session(Account {
+        id: account_id.into(),
+        provider: "dev".into(),
+        subject: "s".into(),
+        display_name: "n".into(),
+        created_at: "t".into(),
+    })
 }
 
 fn dev_signin_enabled(flag: Option<&str>) -> bool {

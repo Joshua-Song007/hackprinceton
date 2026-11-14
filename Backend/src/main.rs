@@ -21,6 +21,7 @@ pub fn app(db: Option<PgPool>) -> Router {
     Router::new()
         .route("/health", get(health))
         .merge(api::accounts::routes())
+        .merge(api::games::routes())
         .with_state(AppState { db })
 }
 
