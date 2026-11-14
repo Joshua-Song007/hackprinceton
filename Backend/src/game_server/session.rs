@@ -73,7 +73,7 @@ struct Frame {
     data: Value,
 }
 
-pub type HostFactory =Box<dyn Fn(&str) -> Box<dyn ScriptHost> + Send + Sync>;
+pub type HostFactory = Box<dyn Fn(&str) -> Box<dyn ScriptHost> + Send + Sync>;
 
 struct Player {
     conn: u64,
