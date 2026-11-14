@@ -60,7 +60,7 @@ A cycle takes several minutes. Check once after it ends; do not poll in a loop.
 ## Controls (tell the human)
 - **Watch:** `tmux attach -t omni-loop` (detach with Ctrl-B, then D), or the log at `../omni.worktrees/logs/loop.out`. On GitHub: open PRs, the `Agent status` issue, and `[permission] ...` issues (a denied command; if it is legitimate, add an allow rule to `.agents/settings.orch.json`).
 - **Steer:** comment `DECISION: ...` on an issue; the `human-hold` label on a PR or issue stops agents from touching it.
-- **Plan ticks:** the orchestrator lists `plan.md` ticks in the `Plan sync` issue, and the human applies them (agents never edit `.claude/`).
+- **Plan ticks:** the orchestrator ticks `docs/agents/plan.md` in `plan-sync` PRs (agents never edit `.claude/`).
 - **Stop all laptops:** add a file named `STOP` to `main` (the web UI works from a phone). **Stop one laptop:** add `STOP-<laptop>`. The loop exits at its next cycle, and workers in flight finish first.
 - **Hard stop here:** `tmux kill-session -t omni-loop` on a Mac, or close the window on Windows. This kills workers mid-task; their worktrees stay in `../omni.worktrees/`.
 - **After merges:** `.agents/scripts/cleanup.sh --dry-run`, then run it without `--dry-run`.

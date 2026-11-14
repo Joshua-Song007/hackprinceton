@@ -26,16 +26,16 @@ GitHub is the shared workspace: the issue is the unit of work, the PR is the del
 - A denied command is a permission gap for the human to fix, never something to work around. Open a `[permission] <command>` issue (the orchestrator) or report the exact command (a worker), then move on.
 
 ## Read first (read-only)
-- `.claude/` is human-only. Every agent, orchestrator included, may read it and none may create, edit, rename or delete anything in it (`overview.md`, `plan.md`, `architecture.md`, `instructions.md`, `planHistory/`, all of it). To propose a change, put it in your report or open a `needs-tien` issue.
+- `.claude/` is human-only. Every agent, orchestrator included, may read it and none may create, edit, rename or delete anything in it (`overview.md`, `architecture.md`, `instructions.md`, `planHistory/`, all of it). `plan.md` lives in `docs/agents/`, not here. To propose a change, put it in your report or open a `needs-tien` issue.
 - `.claude/overview.md` — design source of truth.
-- `.claude/plan.md` — the spec for your task. One checklist item = one file.
+- `docs/agents/plan.md` — the spec for your task. One checklist item = one file.
 - `.claude/architecture.md` — layering rules and forbidden dependency edges.
 - `.agents/LOOP.md` cites rule IDs (for example `DOD-08`); their full text is in `.agents/agent-playbook.md`. Read it only when you need the reason behind a rule, and never edit it.
 
 ## Scope
 - Do only the task in your prompt (usually specific `plan.md` items). No drive-by refactors, no unrelated files. Other agents are working in parallel worktrees.
 - Never build Phase 7 or anything the plan does not list.
-- No agent, orchestrator included, writes to `.claude/`, `.agents/`, `.github/` or `CLAUDE.md`. Do not tick `plan.md` boxes or touch `currentDev.md`; a human ticks boxes after merge.
+- No agent, orchestrator included, writes to `.claude/`, `.agents/`, `.github/` or `CLAUDE.md`. Do not tick `docs/agents/plan.md` boxes or touch `currentDev.md`; workers never edit `plan.md`. The orchestrator ticks boxes after merge (`.agents/ORCHESTRATOR.md` step 3).
 - Items under `Apps/**` (OmniStudio, OmniCompanion) and any `.xcodeproj` are Mac-only. Their check is `xcodebuild -workspace Omni.xcworkspace -scheme <scheme> -destination 'platform=macOS' build` (iOS targets: `-destination 'generic/platform=iOS Simulator'`); paste its output in your Verification section. On a non-Mac laptop, stop and say so in your report.
 - New `.md` files are allowed anywhere except the repo root and the protected places above, for notes other agents will read (put them in `docs/agents/`). Never create or edit `overview.md`, `CLAUDE.md` or `.agents/HUMAN.md`.
 - No new third-party dependencies. If a task needs one, take no action on it and put the need in your report.
@@ -90,6 +90,6 @@ Last step before every push: re-read each `.md` you created or edited (your note
 ## Report (final message; the orchestrator pastes it into the PR)
 - `plan.md` items completed.
 - Items not completed, and why.
-- Any simplification or divergence from `overview.md` — write the parenthetical note a human should append to that `plan.md` line.
+- Any simplification or divergence from `overview.md` — write the parenthetical note the orchestrator will append to that `plan.md` line.
 - Provisional defaults you took, each marked `[provisional: needs-tien-review]`.
 - Verification commands run and their result, and the reviewer's final line copied verbatim (`VERDICT: APPROVE` or `VERDICT: CHANGES NEEDED`).

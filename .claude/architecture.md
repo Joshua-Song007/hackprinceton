@@ -1,6 +1,6 @@
 # Architecture
 
-File structure, component ownership, and dependency graph. Responsibility text for each file lives in `plan.md` — not duplicated here.
+File structure, component ownership, and dependency graph. Responsibility text for each file lives in `docs/agents/plan.md` — not duplicated here.
 
 Source of truth for the boundaries below is `overview.md` (Modular Workspace Architecture). Where this file adds a placement `overview.md` does not state, it is marked **(plan decision)** and traces to a parenthetical note in `plan.md`.
 

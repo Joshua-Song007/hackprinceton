@@ -32,6 +32,7 @@
 - task complete = IMMEDIATELY overwrite currentDev.md with: "## Status: Clear\nNo active task." do not wait. do not ask. overwrite on completion regardless of test status.
 
 ## plan.md Rules
+- `plan.md` is `docs/agents/plan.md`.
 - If a checklist item's implementation simplifies or diverges from overview.md's stated model, append a short parenthetical note to that item's line (e.g. "(Module.swift stub only; real sources not yet scheduled)") stating the simplification and whether a revisit point is scheduled.
 - Never edit the frozen text of a `planHistory/` file; see History Directory.
 
@@ -49,9 +50,10 @@
 - Applies only to agents launched through `.agents/` tooling (one orchestrator per laptop plus its subagents). Manual sessions never use it. On conflict with any rule above, this section and `.agents/AGENTS.md` win.
 - Git and GitHub: allowed. Workers commit inside their own worktree and push only their own `agent/<laptop>/<slug>` branch; they never use `gh`. The laptop orchestrator is the only role that uses `gh` (Issues, PRs, merges). Orchestrators have full GitHub access and may push `main` and force-push (exceptional; rules in `.agents/ORCHESTRATOR.md` Permissions); workers never push `main` and never force-push. Orchestrators coordinate across laptops only through GitHub.
 - `.claude/` is human-only: agents read it and never create, edit, rename or delete anything in it.
+- `plan.md` lives at `docs/agents/plan.md`, outside `.claude/`. The orchestrator alone edits it (ticks and divergence notes per `## plan.md Rules`, in `plan-sync` PRs); workers never do.
 - New `.md` files: agents may create and update them anywhere except the repo root and `.claude/`. Never touch `CLAUDE.md` or `.agents/HUMAN.md`. As the last step before every push, re-read the notes you wrote and delete anything stale.
 - Task state: in GitHub Issues (one per `plan.md` item, labels for state) and PRs, no side branch. `stage`, `apply` and `currentDev.md` are not used.
 - `overview.md` is read-only for every agent and stays the source of truth. An agent that needs a change opens an issue labeled `needs-tien`; only the user edits `overview.md`.
-- Progress is tracked in GitHub (issues closed or labeled `done`, merged PRs). The orchestrator keeps a `Plan sync` issue listing the `plan.md` ticks and divergence notes a human should apply.
+- Progress is tracked in GitHub (issues closed or labeled `done`, merged PRs). The orchestrator ticks `plan.md` and adds divergence notes itself, in `plan-sync` PRs.
 - Platform: laptops without macOS (Windows) never create or edit Swift; a Swift change from one is merged only after an agent on a Mac verifies it (see `.agents/AGENTS.md` Platform).
 - Models, same for every teammate: orchestrator = `claude-opus-5-5`; every subagent (workers, reviewer) = `claude-sonnet-5-5`; the integrator = `claude-opus-5-5` while building tooling, `claude-sonnet-5-5` while maintaining it. Pinned in `.agents/` launch config and `agents.json`, never taken from personal user settings.
