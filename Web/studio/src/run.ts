@@ -143,6 +143,8 @@ export class ViewportHost {
   private selected: string | null = null;
   private running: { devices: SimDevices; origin: readonly [number, number, number] } | null = null;
   private detachInput: (() => void)[] = [];
+  /** Click on the canvas while stopped: the entity under the pointer, or null for empty space. */
+  onPick?: (id: string | null) => void;
 
   /** Returns an error sentence when WebGL is unavailable. */
   attach(canvas: HTMLCanvasElement): string | undefined {
@@ -160,6 +162,11 @@ export class ViewportHost {
       this.viewport?.resize(Math.max(1, canvas.clientWidth * dpr), Math.max(1, canvas.clientHeight * dpr));
     });
     this.observer.observe(canvas);
+    canvas.onclick = (e) => {
+      if (this.running || !this.viewport) return; // while running a click is mouse-look
+      const r = canvas.getBoundingClientRect();
+      this.onPick?.(this.viewport.pick(((e.clientX - r.left) / r.width) * 2 - 1, 1 - ((e.clientY - r.top) / r.height) * 2));
+    };
     this.bindInput();
     const frame = () => {
       if (!this.viewport) return;

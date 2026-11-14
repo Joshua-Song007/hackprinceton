@@ -64,12 +64,18 @@ describe('ScriptRuntime with Flagship scripts', () => {
       'export default script({ onLookAt(self, ctx) { console.log("hi", 1, {a: 2}); console.warn("w"); ctx.haptic("tick", 1); throw new Error("boom"); } });',
     );
     const r = rt.call({ script: 't', entity: ref('E'), handler: 'onLookAt', args: [] });
-    expect(r.error).toBe('t.onLookAt: Error: boom');
+    expect(r.error).toBe('t.onLookAt: Error: boom (line 1)');
     expect(r.outputs).toEqual([
       { kind: 'log', level: 'log', text: 'hi 1 {"a":2}' },
       { kind: 'log', level: 'warn', text: 'w' },
       { kind: 'haptic', pattern: 'tick', intensity: 1 },
     ]);
+  });
+
+  it('reports the script line of a runtime error', () => {
+    const rt = new ScriptRuntime(prelude);
+    rt.load('m', ['// header', 'export default script({', '  onLookAt() {', '    undefinedThing.go();', '  },', '});'].join('\n'));
+    expect(rt.call({ script: 'm', entity: ref('E'), handler: 'onLookAt', args: [] }).error).toMatch(/is not defined \(line 4\)$/);
   });
 
   it('exposes self.position and hides page globals', () => {

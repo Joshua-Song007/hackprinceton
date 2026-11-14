@@ -68,6 +68,26 @@ export class Viewport {
     this.rebuild();
   }
 
+  /**
+   * Entity id under a canvas point in normalized device coordinates (-1..1, +y up); null on a miss.
+   * Boxes are translucent and rooms enclose their contents, so the smallest box on the ray wins, not the nearest.
+   */
+  pick(ndcX: number, ndcY: number): string | null {
+    this.camera.updateMatrixWorld();
+    const ray = new THREE.Raycaster();
+    ray.setFromCamera(new THREE.Vector2(ndcX, ndcY), this.camera);
+    let best: { id: string; volume: number } | null = null;
+    this.content.updateMatrixWorld(true); // groups rebuilt since the last render (e.g. by select) have stale matrices
+    for (const hit of ray.intersectObjects(this.content.children, true)) {
+      if (!(hit.object instanceof THREE.Mesh)) continue; // edge lines match within a 1 m threshold
+      const id = hit.object.parent?.userData.entityId;
+      const e = typeof id === 'string' ? this.entities.find((x) => x.id === id) : undefined;
+      const volume = e ? Math.abs(e.scale[0] * e.scale[1] * e.scale[2]) : Infinity;
+      if (e && (!best || volume < best.volume)) best = { id: e.id, volume };
+    }
+    return best?.id ?? null;
+  }
+
   /** Head pose drives the camera (-Z forward, like the schema). null returns to the fixed editor camera. */
   setHeadPose(pose: Pose | null): void {
     if (pose) {
@@ -122,6 +142,7 @@ export class Viewport {
       const isSelected = e.id === this.selected;
       const color = isSelected ? c.accent : c.text;
       const group = new THREE.Group();
+      group.userData.entityId = e.id;
       group.position.set(...e.position);
       group.quaternion.set(...e.rotation);
       group.scale.set(...e.scale);

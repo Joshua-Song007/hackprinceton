@@ -95,7 +95,10 @@ const omniHighlight = HighlightStyle.define([
 export function errorRange(source: string, message: string): { from: number; to: number } {
   const handler = /^(?:[\w-]+\.)?(\w+):/.exec(message)?.[1];
   const hit = handler ? new RegExp(`\\b${handler}\\b`).exec(source) : null;
-  const at = hit?.index ?? 0;
+  // A `(line N)` suffix from the sandbox wins over the handler name.
+  const line = Number(/\(line (\d+)\)$/.exec(message)?.[1]);
+  const lineAt = line > 0 ? source.split('\n').slice(0, line - 1).join('\n').length + (line > 1 ? 1 : 0) : -1;
+  const at = lineAt >= 0 && lineAt <= source.length ? lineAt : hit?.index ?? 0;
   const start = source.lastIndexOf('\n', at - 1) + 1;
   const end = source.indexOf('\n', at);
   return { from: start, to: end < 0 ? source.length : end };
