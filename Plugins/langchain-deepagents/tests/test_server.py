@@ -58,3 +58,22 @@ def test_health_and_fake_prompt_over_websocket(tmp_path, monkeypatch):
         assert (tmp_path / e["path"]).read_text(encoding="utf-8") == e["content"]
     assert '"name": "s"' in (tmp_path / "AGENTS.md").read_text(encoding="utf-8")
     assert (tmp_path / ".omni" / "skills" / "omni-scripting" / "SKILL.md").is_file()
+
+
+def test_fake_scripts_start_with_export_default():
+    assert server.CUBE_CLIENT_JS.startswith("export default")
+    assert server.TAGS_SERVER_JS.startswith("export default")
+
+
+def test_foreign_origin_websocket_is_rejected():
+    async def scenario():
+        async with serve(server.handle_socket, "127.0.0.1", 0, process_request=server.handle_request) as srv:
+            port = srv.sockets[0].getsockname()[1]
+            try:
+                async with connect(f"ws://127.0.0.1:{port}/ws", origin="http://evil.example"):
+                    return None
+            except Exception as exc:  # noqa: BLE001
+                return exc
+            
+    exc = asyncio.run(scenario())
+    assert exc is not None and "403" in str(exc)

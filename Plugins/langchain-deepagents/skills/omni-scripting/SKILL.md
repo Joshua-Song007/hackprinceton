@@ -10,7 +10,7 @@ Scripts are plain JavaScript in `/scripts/`. Only `/scripts/` is writable.
 - `scripts/<name>.client.js` is a **client script** (runs per player, attached to an entity).
 - `scripts/<name>.server.js` is a **server script** (runs once per room, never sees input).
 
-The first statement must be `export default`; keep helpers and state inside an IIFE. `script` and `serverScript` are globals (no imports).
+The file must begin with `export default` as its very first characters (no leading comments or blank lines; the engine only rewrites sources starting with it, so put comments inside the IIFE); keep helpers and state inside an IIFE. `script` and `serverScript` are globals (no imports).
 
 ```js
 export default (function () {

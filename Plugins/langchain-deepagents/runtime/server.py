@@ -42,9 +42,9 @@ SUBAGENTS = [
     },
 ]
 
-CUBE_CLIENT_JS = """// Cube pulse (client script): looking at the cube pulses it and tags the look for the server.
-// [provisional] self.scale, self.name and ctx.haptic follow the Flagship scripts; prelude.js does not define self/ctx shapes.
-export default (function () {
+CUBE_CLIENT_JS = """export default (function () {
+  // Cube pulse (client script): looking at the cube pulses it and tags the look for the server.
+  // [provisional] self.scale, self.name and ctx.haptic follow the Flagship scripts; prelude.js does not define self/ctx shapes.
   return script({
     onLookAt(self, ctx) {
       self.scale = 1.25;
@@ -60,8 +60,8 @@ export default (function () {
 })();
 """
 
-TAGS_SERVER_JS = """// Tag counter (server script): counts each tag per player and confirms to everyone.
-export default (function () {
+TAGS_SERVER_JS = """export default (function () {
+  // Tag counter (server script): counts each tag per player and confirms to everyone.
   function init(ctx) {
     if (!ctx.state.tags) ctx.state.tags = {};
   }
@@ -171,6 +171,10 @@ async def run_prompt(message: dict, project_dir: Path):
         yield {"type": "error", "message": f"{type(exc).__name__}: {exc}"}
 
 
+ALLOWED_ORIGINS = {"http://localhost:5173", "http://127.0.0.1:5173", "tauri://localhost",
+                   "http://tauri.localhost", "https://tauri.localhost"}
+
+
 def handle_request(connection, request):
     if request.path == "/health":
         response = connection.respond(HTTPStatus.OK, json.dumps({"status": "ok", "deepagents": version("deepagents")}))
@@ -179,6 +183,9 @@ def handle_request(connection, request):
         return response
     if request.path != "/ws":
         return connection.respond(HTTPStatus.NOT_FOUND, "not found\n")
+    origin = request.headers.get("Origin")
+    if origin is not None and origin not in ALLOWED_ORIGINS:
+        return connection.respond(HTTPStatus.FORBIDDEN, "origin not allowed\n")
     return None
 
 

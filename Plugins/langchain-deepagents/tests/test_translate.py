@@ -1,5 +1,6 @@
 from langchain_core.messages import AIMessage, ToolMessage
 
+import translate as translate_module
 from translate import new_state, translate
 
 
@@ -46,3 +47,9 @@ def test_failed_write_and_non_script_write_emit_nothing(tmp_path):
     events += translate(updates((), ai(("write_file", {"file_path": "/AGENTS.md"}, "w2"))), tmp_path, state)
     events += translate(updates((), ToolMessage(content="ok", tool_call_id="w2", name="write_file")), tmp_path, state)
     assert events == []
+
+
+def test_scripts_path_traversal_is_not_a_script_write(tmp_path):
+    (tmp_path / "x.js").write_text("x")
+    assert not translate_module._in_scripts(tmp_path, "/scripts/../x.js")
+    assert translate_module._in_scripts(tmp_path, "/scripts/a.js")

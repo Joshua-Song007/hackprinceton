@@ -42,6 +42,12 @@ def _status(name: str, status: str, detail: str) -> dict:
     return {"type": "subagent_status", "name": name, "state": status, "detail": detail}
 
 
+def _in_scripts(project_dir: Path, file_path) -> bool:
+    if not isinstance(file_path, str) or not file_path.startswith("/"):
+        return False
+    return (project_dir / file_path.lstrip("/")).resolve().is_relative_to((project_dir / "scripts").resolve())
+
+
 def _message_events(namespace, message, project_dir: Path, state: dict) -> list[dict]:
     events: list[dict] = []
     kind = getattr(message, "type", None)
@@ -55,7 +61,7 @@ def _message_events(namespace, message, project_dir: Path, state: dict) -> list[
                 name = args.get("subagent_type", "")
                 state["tasks"][call["id"]] = name
                 events.append(_status(name, "started", args.get("description", "")))
-            elif call["name"] in SCRIPT_TOOLS and str(args.get("file_path", "")).startswith("/scripts/"):
+            elif call["name"] in SCRIPT_TOOLS and _in_scripts(project_dir, args.get("file_path")):
                 state["writes"][call["id"]] = args["file_path"].lstrip("/")
         if not message.tool_calls and not namespace:
             state["summary"] = _text(message.content)
