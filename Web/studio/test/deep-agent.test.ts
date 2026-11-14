@@ -137,6 +137,41 @@ describe('deep-agent.ts', () => {
     expect(root.find((n) => n.attrs.role === 'alert')[0]!.textContent).toContain('model key missing');
   });
 
+  it('adds a script named after an Object.prototype key instead of treating it as existing', () => {
+    const { ws, prompt, project } = setup();
+    const id = prompt('go');
+    const added = vi.spyOn(project, 'addScript');
+    ws.push({ type: 'file_written', id, path: 'scripts/constructor.client.js', content: 'x' });
+    expect(added).toHaveBeenCalledWith('client', 'constructor');
+    expect(Object.hasOwn(project.clientScripts, 'constructor')).toBe(true);
+  });
+
+  it('ignores every runtime message before any prompt was sent', () => {
+    const { root, ws, project } = setup();
+    for (const id of [null, undefined, 'p1']) {
+      ws.push({ type: 'todos', id, items: [{ content: 'early todo', status: 'pending' }] });
+      ws.push({ type: 'file_written', id, path: 'scripts/early.client.js', content: 'x' });
+      ws.push({ type: 'error', id, message: 'early error' });
+    }
+    expect(root.byLabel('Todos').textContent).toBe('');
+    expect(root.byLabel('Files').textContent).toBe('');
+    expect(root.find((n) => n.attrs.role === 'alert')[0]!.textContent).toBe('');
+    expect(project.clientScripts.early).toBeUndefined();
+  });
+
+  it('clears the textarea after a send and says so when the prompt is empty', () => {
+    const { root, ws, prompt } = setup();
+    const box = root.find((n) => n.tag === 'textarea')[0]!;
+    box.value = '   ';
+    root.buttons().find((b) => b.textContent === 'Send')!.fire('click');
+    expect(ws.sent).toHaveLength(0);
+    expect(root.find((n) => n.attrs.role === 'alert')[0]!.textContent).toContain('Write a prompt');
+    prompt('make a cube');
+    expect(ws.sent).toHaveLength(1);
+    expect(box.value).toBe('');
+    expect(root.find((n) => n.attrs.role === 'alert')[0]!.textContent).toBe('');
+  });
+
   it('sends on Ctrl+Enter and not on plain Enter', () => {
     const { root, ws } = setup();
     const box = root.find((n) => n.tag === 'textarea')[0]!;

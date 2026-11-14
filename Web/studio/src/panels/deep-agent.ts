@@ -121,7 +121,11 @@ function createView({ url, project, openScript, WebSocketImpl }: DeepAgentOption
 
   const submit = () => {
     const text = input.value.trim();
-    if (!text) return;
+    if (!text) {
+      errors = ['Write a prompt before sending.'];
+      render();
+      return;
+    }
     if (!socket || socket.readyState !== OPEN) {
       errors = ['Not connected to the Deep Agent runtime yet.'];
       render();
@@ -133,6 +137,7 @@ function createView({ url, project, openScript, WebSocketImpl }: DeepAgentOption
     files = [];
     errors = [];
     run = 'Working';
+    input.value = '';
     const scripts = (['client', 'server'] as const).flatMap((kind) => Object.entries(project.scripts(kind)).map(([name, source]) => ({ kind, name, source })));
     socket.send(JSON.stringify({ type: 'prompt', id: currentId, text, project: { scene: project.scene, scripts, peripherals: [] } }));
     render();
@@ -145,7 +150,7 @@ function createView({ url, project, openScript, WebSocketImpl }: DeepAgentOption
     } catch {
       return;
     }
-    if (!msg || msg.id !== currentId) return;
+    if (!msg || currentId === null || msg.id !== currentId) return;
     switch (msg.type) {
       case 'todos':
         todos = msg.items;
@@ -156,7 +161,7 @@ function createView({ url, project, openScript, WebSocketImpl }: DeepAgentOption
       case 'file_written': {
         const ref = scriptRef(msg.path);
         if (ref) {
-          if (!(ref.name in project.scripts(ref.kind))) project.addScript(ref.kind, ref.name);
+          if (!Object.hasOwn(project.scripts(ref.kind), ref.name)) project.addScript(ref.kind, ref.name);
           project.setScript(ref.kind, ref.name, msg.content);
         }
         files.push({ path: msg.path, ref });
