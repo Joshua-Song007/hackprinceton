@@ -11,13 +11,13 @@ repo=$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")
 root="$(dirname "$repo")/$(basename "$repo").worktrees"; mkdir -p "$root/logs"
 out="$root/logs/verify-$n.out"; wt="$root/verify-$n"; res=""; mac=0; [ "$(uname -s)" = Darwin ] && mac=1
 {
-  if ! git -C "$repo" fetch -q origin "pull/$n/head"; then res="VERIFY-FAILED unknown"
+  if ! git -C "$repo" fetch -q origin main || ! git -C "$repo" fetch -q origin "pull/$n/head"; then res="VERIFY-FAILED unknown"
   else
     sha=$(git -C "$repo" rev-parse FETCH_HEAD)
     git -C "$repo" worktree remove --force "$wt" 2>/dev/null; git -C "$repo" worktree prune   # a crashed earlier run may have left it
     if ! git -C "$repo" worktree add -q --detach "$wt" "$sha"; then res="VERIFY-FAILED $sha"
     elif (cd "$wt" && { [ "$mac" = 0 ] || .agents/scripts/verify-swift.sh; } && .agents/scripts/verify-nonswift.sh \
-          && { ! git diff --name-only origin/main...HEAD | grep -q '^Backend/' || { .agents/scripts/verify-backend.sh && echo "verify-backend: OK"; }; }); then
+          && files=$(git diff --name-only origin/main...HEAD) && case "$files" in *Backend/*) .agents/scripts/verify-backend.sh ;; *) true ;; esac); then
       if [ "$mac" = 1 ]; then res="MAC-VERIFIED $sha"; else res="VERIFIED $sha"; fi
     else res="VERIFY-FAILED $sha"; fi
     git -C "$repo" worktree remove --force "$wt" 2>/dev/null
