@@ -5,7 +5,7 @@ set -uo pipefail
 n=${1:?usage: review-pr.sh <pr-number>}
 cd "$(git rev-parse --show-toplevel)"
 
-json=$(gh pr view "$n" --json title,headRefName,body,additions,deletions,commits,mergeable,mergeStateStatus,state) || exit 1
+json=$(gh pr view "$n" --json title,headRefName,body,additions,deletions,commits,mergeable,mergeStateStatus,state,labels,headRefOid) || exit 1
 head=$(jq -r .headRefName <<<"$json"); state=$(jq -r .state <<<"$json")
 git fetch -q origin main || exit 1
 if [ "$state" = MERGED ]; then   # reviewing after the fact: the squash commit is the PR's net change
@@ -56,7 +56,8 @@ for p in os.environ["PKGS"].split():
     else: print("  ✓ " + p + ": deps match the graph (" + (", ".join(local) or "none") + ")")
     if ext: print("  ✗ " + p + ": third-party dependency (check branchDep.md and needs-tien): " + ", ".join(ext))
 PY
-deps_out=$(PKGS="$pkgs" REF="$ref" python3 -c "$PYDEPS")
+py=python3; "$py" -c 1 >/dev/null 2>&1 || py=python   # on Windows python3 is often a Store stub that does nothing
+deps_out=$(PKGS="$pkgs" REF="$ref" "$py" -c "$PYDEPS")
 while IFS= read -r l; do [ -n "$l" ] && out "$l"; done <<<"$deps_out"
 
 section "Purity and hardware-blind rule"
@@ -84,6 +85,14 @@ for f in $(git diff --name-only --diff-filter=AM "$base" "$ref" -- 'Packages/*/S
   t=$(grep -c "^Packages/$p/Tests/" <<<"$files" || true)
   [ "$l" -ge 40 ] && [ "$t" = 0 ] && out "  ✗ $f: $l lines, no test changes in $p" || echo "  · $f: $l lines, $t changed test file(s) in $p"
 done
+
+section "Mac verification (Swift changed from a laptop without macOS)"
+swiftfiles=$(grep -E '\.swift$|(^|/)Package\.swift$|^Apps/|^Packages/|^Schema/usis\.schema\.json$' <<<"$files" || true)
+if [ -z "$swiftfiles" ]; then echo "  · no Swift-gated paths changed"
+elif jq -e '[.labels[].name] | index("needs-mac-verify")' <<<"$json" >/dev/null; then
+  sha=$(jq -r .headRefOid <<<"$json")
+  gh pr view "$n" --json comments --jq '.comments[].body' | grep -q "MAC-VERIFIED $sha" && out "  ✓ MAC-VERIFIED $sha present" || out "  ✗ labeled needs-mac-verify but no 'MAC-VERIFIED $sha' comment for the current head"
+else echo "  · Swift-gated paths changed, no needs-mac-verify label (fine for a macOS laptop's PR; a Windows laptop must add the label)"; fi
 
 section "CI and merge state"
 ci=$(gh pr checks "$n" 2>&1 | head -3)

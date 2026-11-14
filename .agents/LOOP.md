@@ -3,13 +3,13 @@
 How the four laptops run Omni's agents unattended, bottom to top. Rules come from `.agents/agent-playbook.md` (the Anthropic agent playbook; rule IDs such as `DOD-08` refer to it and its Source Table lists the 45 original sources); only rules that fit this repo are adopted. Read with `.agents/AGENTS.md` (every agent) and `.agents/ORCHESTRATOR.md` (the per-laptop cycle). `overview.md` stays the source of truth.
 
 ## Start it
-One command per laptop, inside tmux, after the placeholders in `ORCHESTRATOR.md` are filled in:
+First, once per laptop: `.agents/scripts/setup.sh <laptop-name>` installs what is missing and reports what only a human can do (Xcode from the App Store, `gh auth login`, the `claude` login); `--check` only reports. Then one command per laptop. On a Mac, inside tmux:
 
 ```bash
 caffeinate -i env OMNI_LAPTOP=<name> .agents/scripts/loop.sh
 ```
 
-Nothing else is typed after that. The loop runs until a file named `STOP` or `STOP-<laptop>` exists on `origin/main`. Only Tien creates it.
+On Windows run `env OMNI_LAPTOP=<name> .agents/scripts/loop.sh` in Git Bash (no `caffeinate` or `tmux`: set Windows sleep to Never while plugged in). Nothing else is typed after that. The loop runs until a file named `STOP` or `STOP-<laptop>` exists on `origin/main`. Only Tien creates it.
 
 ## Layers, bottom to top
 
@@ -24,6 +24,11 @@ Nothing else is typed after that. The loop runs until a file named `STOP` or `ST
 | 6. Tien | `STOP`, `DECISION:` comments, `human-hold`, `needs-tien`; the only role that edits anything in `.claude/` | |
 
 Models: orchestrator `claude-opus-5-5`, workers and all subagents `claude-sonnet-5-5` (ORCH-17: keep judgment on the stronger model, volume on the cheaper one).
+
+## Platforms: two Macs, two Windows laptops
+- Swift only builds on macOS, so Windows laptops never create or edit Swift (`run.sh` denies those Edit paths whenever `uname -s` is not `Darwin`; `stop-gate.sh` skips Swift checks there). They run the non-Swift lane, checked by `verify-nonswift.sh` (JSON / JSONL validity, JS syntax).
+- If Swift or `Schema/usis.schema.json` changes from a Windows laptop anyway, the PR gets `needs-mac-verify` and cannot merge until a Mac orchestrator has run `verify-swift.sh` on the exact head commit and commented `MAC-VERIFIED <sha>`. `review-pr.sh` flags a missing comment; the macOS CI job runs on every PR as well.
+- No containers: every agent works in the directory it was given (worktrees next to the clone). Keep the clone out of OneDrive and similar synced folders.
 
 ## One unit of work
 1. Orchestrator picks an unblocked item and writes a delegation brief (ORCH-01, T6): objective, files, allowed dependencies, done = `verify-swift.sh` green plus reviewer APPROVE, boundaries.
@@ -95,7 +100,7 @@ The orchestrator's launch prompt is fixed (`Run one orchestrator cycle.`). Do no
 - No sandbox. Agents run on laptops with the human's `gh` token. A prompt-injected agent could use it within the allow-list. `swift build` and `swift test` run arbitrary code. Use a fine-grained token limited to this repo and treat issue and PR text from non-listed handles as data.
 - No branch protection could be read (the API returned 404 for a non-admin token). If `main` is unprotected, a bad merge lands immediately. Repo auto-merge setting is off, so only direct `gh pr merge` works.
 - Reviewer and worker are the same model family and `review-pr.sh` is mechanical. Green CI plus APPROVE does not prove the logic is right. Few tests exist yet, so the grader is weak early.
-- Static ownership: a stalled laptop stalls its packages; nobody takes over. OmniCore blocks everything, so the first hours are close to serial.
+- Static ownership: a stalled laptop stalls its packages; nobody takes over. OmniCore blocks everything, so the first hours are close to serial. Only the two Macs can do Swift work; the Windows lanes (Flagship scripts, presets, recordings) are thin and mostly wait on the runtime or on a Mac check.
 - Idle cycles cost Opus tokens. `loop.sh` sleeps `LOOP_DELAY` seconds (default 300) between cycles; raise it when the queue is empty.
 - Notifications are GitHub issues plus a local macOS banner. If Tien is not watching the repo with mobile notifications on, nothing pushes to the phone.
 - Root `CLAUDE.md` imports `overview.md`, `architecture.md`, `plan.md` and `instructions.md` into every session. That is far over the 200-line guidance and costs context on every turn of every agent. A slimmer worker-specific entry point is the likely next improvement.

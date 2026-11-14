@@ -37,6 +37,12 @@ Applies to agents launched via `.agents/scripts/run.sh` (the laptop orchestrator
 - Orchestrator: push only `agent/<laptop>/*` branches and open PRs with `gh pr create`. Never push to `main`. No force-push, rebase, reset, or checkout of other branches. Merge only your own PRs, under the conditions in `.agents/ORCHESTRATOR.md` step 2.
 - PR body: never put a line starting with `#` inside the `gh pr create --body "..."` command. The permission check denies it. Use bold labels (`**Completed**`) instead of Markdown headings. The body can still be multi-line.
 
+## Platform: macOS vs Windows
+- `uname -s` prints `Darwin` on a Mac. Anything else (Git Bash on Windows prints `MINGW…`) is a no-Mac laptop. Two laptops are Macs and two are Windows.
+- A no-Mac laptop never creates, edits or deletes Swift: `*.swift`, `Package.swift`, anything under `Packages/` or `Apps/`, `*.xcodeproj`, `*.xcworkspace`, or `Schema/usis.schema.json` (`run.sh` denies the Edit tools on these). It cannot build or test Swift either, so do not install or fake a toolchain. Its work is the non-Swift lane (see `ORCHESTRATOR.md`), checked by `.agents/scripts/verify-nonswift.sh`.
+- If Swift or the schema ends up changed from a no-Mac laptop anyway (a Bash write, an unavoidable one-line fix), the PR gets the label `needs-mac-verify` and is never merged until an agent running on a Mac has run `.agents/scripts/verify-swift.sh` on that exact head commit and posted a PR comment `MAC-VERIFIED <full head sha>` with the output. Any new push needs a new verification. The macOS CI job is an extra check, not a replacement.
+- A Mac agent posts `MAC-VERIFIED` only after running `verify-swift.sh` itself on that commit, never from CI output or from another agent's claim.
+
 ## Tools and denied commands
 - Read, search and list files with the Read, Grep and Glob tools, not shell text tools (`cat`, `wc`, `head`, `find`). The shell allow-list is narrow on purpose.
 - A denied command is not a broken shell. Other allowed commands (`.agents/scripts/*`, `swift`, `git`) still work. Try another tool. If the task truly can't proceed, report the exact denied command in your final message and continue with whatever you can still do.

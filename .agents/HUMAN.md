@@ -10,7 +10,11 @@ gh pr create --fill                       # open the PR
 gh pr checks --watch                      # wait for CI to go green
 gh pr merge --squash --delete-branch      # merge it once green
 
-Running agents (one clone per laptop, outside OneDrive; macOS only, RealityKit)
+First time on a laptop (installs missing tools, reports what only you can do; --check only reports)
+
+.agents/scripts/setup.sh <laptop>
+
+Running agents (one clone per laptop, outside OneDrive; Swift work needs a Mac, Windows laptops run the non-Swift lane only)
 
 export OMNI_LAPTOP=<name>                                               # lowercase letters, digits, dashes
 .agents/scripts/run.sh <slug> "implement plan.md items 1.3"             # one worker: Sonnet, commits only, $5 cap
@@ -22,7 +26,7 @@ Worktrees land at ../omni.worktrees/<slug> on branch agent/<laptop>/<slug>. The 
 
 Overnight loop (one tmux window per laptop; untested, watch the first few cycles)
 
-caffeinate -i .agents/scripts/loop.sh      # backoff, STOP check, failure issue after 5 bad cycles; LOOP_DELAY=<secs> sets the idle gap (default 300). Full design: .agents/LOOP.md
+caffeinate -i .agents/scripts/loop.sh      # Mac, inside tmux (Windows: run it without caffeinate in Git Bash, sleep set to Never). backoff, STOP check, failure issue after 5 bad cycles; LOOP_DELAY=<secs> sets the idle gap (default 300). Full design: .agents/LOOP.md
 
 To stop: add a file named STOP (everyone) or STOP-<laptop> to main (the GitHub web UI works from a phone). Only you do this.
 Handles and laptop names are filled in .agents/ORCHESTRATOR.md (provisional package split: check it before the first run).

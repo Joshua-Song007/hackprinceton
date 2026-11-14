@@ -12,6 +12,8 @@ Instructions and tooling for autonomous agents. `.claude/` is human-only: agents
 - `HUMAN.md` — human cheat sheet, hidden from agents (never materialized in an agent worktree).
 - `scripts/run.sh` — launcher: new worktree + `agent/<laptop>/<slug>` branch, then `claude -p`. Worker = Sonnet 5.5; `--orch` = Opus 5.5.
 - `scripts/loop.sh` — per-laptop overnight loop: orchestrator cycle, backoff, STOP check, failure issue + local notification.
+- `scripts/setup.sh <laptop> [--check]` — installs and checks the tools the loop needs (Homebrew on macOS, winget on Windows); lists what only a human can do.
+- `scripts/verify-nonswift.sh` — JSON / JSONL validity and JS syntax; runs on macOS and Windows (the Windows lanes' check, also run in CI).
 - `scripts/verify-swift.sh` — the checks (`swift build` + `swift test` per package). Same script runs in CI, the stop-hook, and by hand.
 - `scripts/stop-gate.sh` — stop-hook: agent can't finish while checks fail for the packages it changed and their dependents.
 - `scripts/review-pr.sh <n>` — mechanical first-pass review of an agent PR (scope, deps vs graph, purity, hardware-blind rule, comments, tests, CI). Read-only.

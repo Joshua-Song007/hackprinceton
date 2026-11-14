@@ -9,3 +9,4 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: bash .agents/scripts/verify-swift.sh
+      - run: bash .agents/scripts/verify-nonswift.sh

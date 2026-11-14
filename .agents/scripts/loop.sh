@@ -14,7 +14,7 @@ while true; do
   rm -f "$logs/orch.json"   # a stale success from an earlier cycle must not mask a launch failure
   .agents/scripts/run.sh --orch orch "Run one orchestrator cycle." || true   # run.sh swallows claude's exit code; read the JSON result instead
   jq -r '.permission_denials[]?.tool_input.command' "$logs/orch.json" 2>/dev/null | sort -u | while IFS= read -r cmd; do   # silent dontAsk denials: tell Tien once per command
-    f="$logs/.denied-$laptop-$(printf %s "$cmd" | shasum | cut -c1-12)"; [ -e "$f" ] && continue
+    f="$logs/.denied-$laptop-$(printf %s "$cmd" | cksum | cut -d' ' -f1)"; [ -e "$f" ] && continue
     notify "permission denied: $cmd"; gh label create needs-human >/dev/null 2>&1 || true
     gh issue create --title "[permission] $cmd" --label needs-human --body "**$laptop** orchestrator was denied \`$cmd\` by dontAsk. If it is legitimate, add a matching rule to the allow list in .agents/settings.orch.json." >/dev/null 2>&1 && touch "$f"
   done

@@ -23,7 +23,7 @@ git -C "$repo" fetch -q origin main
 [ -d "$wt" ] || git -C "$repo" worktree add -q --no-track -b "agent/$laptop/$slug" "$wt" origin/main
 [ "$role" = orch ] && git -C "$wt" merge -q --ff-only origin/main || true   # orchestrator worktree stays on fresh main; its work goes on other branches
 rm -f "$(git -C "$wt" rev-parse --git-dir)/agent-stopgate"
-git -C "$wt" sparse-checkout set --no-cone '/*' '!/.agents/HUMAN.md'   # human-only doc: never materialized in an agent's worktree
+git -C "$wt" sparse-checkout set --no-cone '*' '!.agents/HUMAN.md'   # human-only doc: never materialized in an agent's worktree
 rmdir "$root/.setup.lock"; trap - EXIT
 cd "$wt"
 
@@ -38,9 +38,11 @@ args=(
   --append-system-prompt "You are an autonomous agent on branch agent/$laptop/$slug. Follow .agents/AGENTS.md.$extra"
 )
 [ -f .agents/agents.json ] && args+=(--agents "$(cat .agents/agents.json)")
+# no-Mac laptops (Windows reports MINGW*): Swift is off limits, enforced here instead of by prompt. A Bash write can still slip past; the needs-mac-verify PR gate is the backstop.
+[ "$(uname -s)" = Darwin ] || args+=(--disallowedTools "Edit(**/*.swift)" "Edit(**/Package.swift)" "Edit(Packages/**)" "Edit(Apps/**)" "Edit(**/*.xcodeproj/**)" "Edit(**/*.xcworkspace/**)")
 
 if [ "$interactive" = 1 ]; then
-  exec claude "${args[@]}" "$task"
+  exec claude "$task" "${args[@]}"   # task first: --disallowedTools is variadic and would swallow a trailing prompt
 fi
 mkdir -p "$root/logs"
 out=$(claude -p "$task" "${args[@]}" --permission-prompts none --max-budget-usd "${AGENT_BUDGET:-$budget}" --max-turns "${AGENT_TURNS:-60}" --output-format json) || true
