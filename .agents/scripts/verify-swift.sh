@@ -8,6 +8,7 @@ if [ $# -gt 0 ]; then pkgs=("$@"); else pkgs=(); for d in Packages/*/; do pkgs+=
 for p in "${pkgs[@]}"; do
   [[ "$p" =~ ^Omni[A-Za-z]+$ ]] || { echo "verify-swift: bad package name: $p" >&2; exit 2; }
   echo "== $p"
+  [ -d "Packages/$p/Sources" ] || { echo "skip $p (no Sources/ yet)"; continue; }   # scaffold packages awaiting their first files would fail swift build
   swift build --package-path "Packages/$p"
   [ -d "Packages/$p/Tests" ] && swift test --package-path "Packages/$p"
 done

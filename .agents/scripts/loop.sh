@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+# Per-laptop overnight loop: one orchestrator cycle at a time until a STOP file lands on origin/main.
+# usage: caffeinate -i env OMNI_LAPTOP=<name> .agents/scripts/loop.sh      (run inside tmux)
+# Untested on a real run; watch the first few cycles. Needs git, gh, jq. The orchestrator itself raises needs-tien / needs-human issues; this script only covers "the orchestrator cannot run at all".
+set -uo pipefail
+cd "$(dirname "$0")/../.."
+laptop=${OMNI_LAPTOP:?set OMNI_LAPTOP}
+logs="$(dirname "$PWD")/$(basename "$PWD").worktrees/logs"; flag="$logs/.loop-failing-$laptop"
+base=${LOOP_DELAY:-300}; fails=0; delay=$base
+notify() { echo "NOTIFY: $1"; osascript -e "display notification \"$1\" with title \"Omni loop $laptop\"" 2>/dev/null || true; }
+while true; do
+  git fetch -q origin || { sleep 60; continue; }
+  if git cat-file -e origin/main:STOP 2>/dev/null || git cat-file -e "origin/main:STOP-$laptop" 2>/dev/null; then notify "STOP found; loop ended"; exit 0; fi
+  .agents/scripts/run.sh --orch orch "Run one orchestrator cycle." || true   # run.sh swallows claude's exit code; read the JSON result instead
+  if jq -e '.is_error == false' "$logs/orch.json" >/dev/null 2>&1; then
+    fails=0; delay=$base; rm -f "$flag"
+  else
+    fails=$((fails+1)); delay=$(( delay * 2 > 1800 ? 1800 : delay * 2 ))   # exponential backoff, capped at 30 min
+    if [ "$fails" -ge 5 ] && [ ! -e "$flag" ]; then
+      notify "orchestrator failed $fails cycles in a row"
+      gh issue create --title "[loop] $laptop orchestrator failing" --label needs-human --body "**$laptop** orchestrator failed $fails cycles in a row. Last result: $logs/orch.json on that laptop. Likely a rate limit, a denied command or a broken setup." >/dev/null 2>&1 && touch "$flag"
+    fi
+  fi
+  sleep "$delay"
+done

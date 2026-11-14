@@ -22,7 +22,7 @@ Worktrees land at ../omni.worktrees/<slug> on branch agent/<laptop>/<slug>. The 
 
 Overnight loop (one tmux window per laptop; untested, watch the first few cycles)
 
-caffeinate -i bash -c 'while true; do git fetch -q origin; git cat-file -e origin/main:STOP 2>/dev/null && break; git cat-file -e "origin/main:STOP-$OMNI_LAPTOP" 2>/dev/null && break; .agents/scripts/run.sh --orch orch "Run one orchestrator cycle."; sleep 120; done'
+caffeinate -i .agents/scripts/loop.sh      # backoff, STOP check, failure issue after 5 bad cycles; LOOP_DELAY=<secs> sets the idle gap (default 300). Full design: .agents/LOOP.md
 
 To stop: add a file named STOP (everyone) or STOP-<laptop> to main (the GitHub web UI works from a phone). Only you do this.
 Fill in the handles and the real laptop names in .agents/ORCHESTRATOR.md before the first run.
