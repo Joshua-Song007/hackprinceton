@@ -81,6 +81,101 @@ struct NoiseModelTests {
         d.deliverFeedback(OutputCommand(target: "sim-2", type: .haptic, pattern: "thud", intensity: 1, durationMs: 50))
         #expect(got.value == "thud")
     }
+
+    private func assertValid(_ packets: [UsisPacket]) {
+        let validator = PacketValidator()
+        for p in packets { #expect(validator.validate(p) == nil) }
+    }
+
+    @Test func airpodsSendOrientationOnlyAndNoPosition() {
+        let d = VirtualAirPods(seed: 1)
+        d.targetOrientation = Quaternion(0.1, 0.5, 0, 1)
+        d.targetPosition = Vector3(1, 2, 3)
+        let ps = (0..<100).map { d.makePacket(hostNowMs: Double($0) * 20) }
+        assertValid(ps)
+        #expect(ps.allSatisfy { $0.kind == .airpods && $0.slot == .head && $0.source == .sim })
+        #expect(ps.allSatisfy { $0.ch.orientation != nil && $0.ch.position == nil && $0.ch.accel == nil })
+        #expect(d.descriptors.first?.sampleRateHz == 50)
+    }
+
+    @Test func watchHeartRateSpikeDecaysAndNeverNegative() {
+        let d = VirtualWatch(restingBpm: 70, noise: NoiseModel(sampleRateHz: 5), seed: 2)
+        #expect(d.makePacket(hostNowMs: 0).ch.heartRate == 70)
+        d.spike(by: 50)
+        let first = d.makePacket(hostNowMs: 200).ch.heartRate ?? 0
+        #expect(first == 120)
+        var last = first
+        for i in 0..<200 { last = d.makePacket(hostNowMs: Double(i)).ch.heartRate ?? -1 }
+        #expect(last == 70)
+
+        d.heartRate = -30
+        let noisy = VirtualWatch(restingBpm: -5, noise: NoiseModel(sampleRateHz: 5, heartRateNoiseBpm: 40), seed: 3)
+        let ps = (0..<200).map { noisy.makePacket(hostNowMs: Double($0)) }
+        #expect(ps.allSatisfy { ($0.ch.heartRate ?? -1) >= 0 })
+        assertValid(ps)
+        #expect(d.makePacket(hostNowMs: 0).ch.heartRate == 0)
+    }
+
+    @Test func watchGesturesAreSentOnceInOrder() {
+        let d = VirtualWatch(seed: 4)
+        d.queueGesture(.flick, dir: Vector3(1, 0, 0))
+        d.queueGesture(.doubleTap)
+        let ps = (0..<4).map { d.makePacket(hostNowMs: Double($0)) }
+        #expect(ps[0].ch.gesture == GestureEvent(type: .flick, dir: Vector3(1, 0, 0)))
+        #expect(ps[1].ch.gesture == GestureEvent(type: .doubleTap))
+        #expect(ps[2].ch.gesture == nil && ps[3].ch.gesture == nil)
+        #expect(ps.allSatisfy { $0.kind == .watch && $0.ch.heartRate != nil })
+        assertValid(ps)
+    }
+
+    @Test func phoneSendsAccelAndTouchOnce() {
+        let d = VirtualPhone(seed: 5)
+        d.targetAccel = Vector3(0, 9.81, .nan)
+        d.sendTouch(id: 1, x: 0.2, y: 1.7, phase: .began)
+        d.sendTouch(id: 1, x: 0.3, y: 0.5, phase: .moved)
+        d.sendTouch(id: 1, x: 0.4, y: 0.5, phase: .moved)
+        d.sendTouch(id: 1, x: 0.4, y: 0.5, phase: .ended)
+        let p0 = d.makePacket(hostNowMs: 0)
+        let p1 = d.makePacket(hostNowMs: 10)
+        #expect(p0.ch.touch?.map(\.phase) == [.began, .moved, .ended])
+        #expect(p0.ch.touch?[0].y == 1)
+        #expect(p0.ch.touch?[1].x == 0.4)
+        #expect(p1.ch.touch == nil)
+        #expect(abs((p0.ch.accel?.y ?? 0) - 9.81) < 0.5)
+        #expect(abs(p0.ch.accel?.z ?? 1) < 0.5)
+        #expect(p0.kind == .phone && d.descriptors.first?.sampleRateHz == 100)
+        assertValid([p0, p1])
+    }
+
+    @Test func pencilContactAndHoverPackets() {
+        let d = VirtualPencil(seed: 6)
+        d.touchDown(tip: Vector3(0.1, 0, 0.2), pressure: 4, roll: 1.5)
+        let contact = d.makePacket(hostNowMs: 0)
+        #expect(contact.ch.pencil?.pressure == 1)
+        #expect(contact.ch.pencil?.roll == 1.5)
+        #expect(contact.ch.pencil?.hover == 0)
+
+        d.hover(tip: Vector3(0.1, 0, 0.2), height: 0.02)
+        let hover = d.makePacket(hostNowMs: 4)
+        #expect(hover.ch.pencil?.roll == 0)
+        #expect(hover.ch.pencil?.pressure == 0)
+        #expect(hover.ch.pencil?.hover == 0.02)
+        assertValid([contact, hover])
+        #expect(contact.kind == .pencil && contact.slot == .stylus)
+        #expect(d.descriptors.first?.sampleRateHz == 240)
+    }
+
+    @Test func pencilIntervalsFollowContactAndHoverRates() {
+        let d = VirtualPencil(seed: 7)
+        func rate() -> Double {
+            let total = (0..<2000).reduce(0.0) { acc, _ in acc + d.nextIntervalMs() }
+            return 2000 / (total / 1000)
+        }
+        d.touchDown(tip: Vector3(0, 0, 0), pressure: 0.5)
+        #expect(abs(rate() - 240) / 240 < 0.05)
+        d.hover(tip: Vector3(0, 0, 0), height: 0.01)
+        #expect(abs(rate() - 60) / 60 < 0.05)
+    }
 }
 
 private final class Box: @unchecked Sendable {
