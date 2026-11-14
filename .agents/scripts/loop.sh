@@ -2,6 +2,7 @@
 # Per-laptop overnight loop: one agent cycle at a time until a STOP file lands on origin/main.
 # usage: cd <clone> && env OMNI_LAPTOP=<name> [OMNI_ROLE=orch|integrator] .agents/scripts/loop.sh      (normally started by .agents/scripts/start.sh; start it from the primary clone, not a worktree)
 # OMNI_ROLE=orch (default) runs the orchestrator; OMNI_ROLE=integrator runs the tooling integrator (INTEGRATOR.md): fast cycles in the build phase, then slow ones in maintain.
+# Optional: NIGHT_BUDGET_USD=<n> stops the loop (after posting OUT + handoff) once this loop's own cycles spent NEAR_PCT (default 90) % of it today.
 # Needs git, gh, jq, claude. The agents raise needs-tien / needs-human issues themselves; this script only covers "the agent cannot run at all" and denied commands.
 set -uo pipefail
 cd "$(dirname "$0")/../.."
@@ -24,7 +25,19 @@ post_capacity() {   # OUT|BACK: tell the other laptops through GitHub; gh needs 
   local n; n=$(gh issue list --search 'Loop capacity in:title' --state open --json number --jq '.[0].number' 2>/dev/null)
   [ -n "$n" ] || n=$(gh issue create --title "Loop capacity" --body "Each loop posts one line when it runs out of credits (OUT) and when it is back (BACK): OUT laptop=<l> role=<r> t=<epoch> reason=<text>. Orchestrators read this in ORCHESTRATOR.md step 1c and take over the lane of a laptop that is OUT." 2>/dev/null | grep -oE '[0-9]+$')
   [ -n "$n" ] && gh issue comment "$n" --body "$1 laptop=$laptop role=$role t=$(date +%s) reason=$2 $([ "$1" = OUT ] && echo @tienvu-lol)" >/dev/null 2>&1 || true
+  [ "$1" = OUT ] || return 0
+  for i in $(gh issue list --state open --label "claimed:$laptop" --json number --jq '.[].number' 2>/dev/null); do   # handoff: say where the work stands so a taker can continue it
+    gh issue comment "$i" --body "handoff: $laptop $role offline ($2). takeover: ORCHESTRATOR.md 1c. pushed work: agent/$laptop/* branch or open PR, if any. workers in flight still finish." >/dev/null 2>&1 || true
+  done
 }
+near_limit() { [ -s "$logs/$slug.json" ] && jq -r '.result // ""' "$logs/$slug.json" 2>/dev/null | grep -qiE 'approaching (your |the )?(usage|rate|weekly) limit|nearing (your |the )?(usage|rate|weekly) limit|limit (resets|will reset) soon|[89][0-9]% of your (usage|weekly|rate) limit|^[*]*OFFLINE:'; }   # warned before the hard stop, or the agent itself said OFFLINE:
+spentfile="$logs/.spend-$laptop-$slug"
+add_spend() {   # this loop's own cycles only (workers bill separately); resets each day
+  local today c; today=$(date +%F); c=$(jq -r '.total_cost_usd // 0' "$logs/$slug.json" 2>/dev/null || echo 0)
+  [ "$(cut -d' ' -f1 "$spentfile" 2>/dev/null)" = "$today" ] || echo "$today 0" > "$spentfile"
+  awk -v d="$today" -v c="${c:-0}" '{printf "%s %.4f\n", d, $2 + c}' "$spentfile" > "$spentfile.tmp" && mv "$spentfile.tmp" "$spentfile"
+}
+go_offline() { post_capacity OUT "$1"; notify "going offline: $1; posted OUT and handoff"; exit 0; }
 fix() { notify "preflight failed: $1"; exit 1; }   # an unattended loop with broken permissions would only fail all night
 command -v jq >/dev/null 2>&1 || fix "jq missing (run .agents/scripts/setup.sh $laptop)"
 command -v claude >/dev/null 2>&1 || fix "claude CLI missing (run .agents/scripts/setup.sh $laptop)"
@@ -45,6 +58,9 @@ while true; do
     notify "permission denied: $cmd"; gh label create needs-human >/dev/null 2>&1 || true
     gh issue create --title "[permission] $cmd" --label needs-human --body "@tienvu-lol the **$laptop** $slug was denied \`$cmd\` by dontAsk. If it is legitimate, add a matching rule to the allow list in .agents/settings.orch.json (or settings.integrator.json / settings.json)." >/dev/null 2>&1 && touch "$f"
   done
+  add_spend
+  if [ -n "${NIGHT_BUDGET_USD:-}" ] && awk -v b="$NIGHT_BUDGET_USD" -v p="${NEAR_PCT:-90}" '{exit !($2 >= b * p / 100)}' "$spentfile" 2>/dev/null; then go_offline "near-budget $(cut -d' ' -f2 "$spentfile") of $NIGHT_BUDGET_USD usd"; fi
+  near_limit && go_offline "near-usage-limit"
   if jq -e '.is_error == false' "$logs/$slug.json" >/dev/null 2>&1; then
     fails=0; rm -f "$flag"; cap_fails=0
     if [ "$out_posted" = 1 ]; then post_capacity BACK ""; out_posted=0; notify "credits are back; told the Loop capacity issue"; fi
@@ -64,7 +80,7 @@ while true; do
     fi
   elif cap_error; then   # out of credits or rate limited: say so on GitHub, wait, keep trying; not a failure to file issues about
     cap_fails=$((cap_fails+1))
-    if [ "$cap_fails" -ge 2 ] && [ "$out_posted" = 0 ]; then post_capacity OUT "$(jq -r '.result // ""' "$logs/$slug.json" | tr '\n' ' ' | cut -c1-80)"; out_posted=1; notify "out of credits or rate limited; posted OUT to the Loop capacity issue"; fi
+    if [ "$cap_fails" -ge 1 ] && [ "$out_posted" = 0 ]; then post_capacity OUT "$(jq -r '.result // ""' "$logs/$slug.json" | tr '\n' ' ' | cut -c1-80)"; out_posted=1; notify "out of credits or rate limited; posted OUT to the Loop capacity issue"; fi   # first hit: alert at once so the others take over
     delay=${CREDIT_WAIT:-1800}; [ "$cap_fails" -ge 4 ] && delay=3600
   else
     fails=$((fails+1)); delay=$(( delay * 2 > 1800 ? 1800 : delay * 2 ))   # exponential backoff, capped at 30 min
