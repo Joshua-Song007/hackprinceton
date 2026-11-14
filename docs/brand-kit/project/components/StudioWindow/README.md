@@ -1,3 +1,0 @@
-# StudioWindow
-
-The Omni Studio main window, which every Studio screen follows. Toolbar on top (Run, Stop, scene, activity, input picker). Left sidebar: devices grouped Simulator and Live, then a section per virtual device with its controls. Middle: the viewport on mid-grey `viewport`, with issues as a bar across its top. Right: the inspector for the selection. Bottom: the debug area with Devices, Packets, Issues and Console tabs, then the status bar. Panels are flat and split by hairlines; the viewport gets every spare pixel. Switch the input picker to Live to see the toolbar edge and status bar change. Minimum window 1200 × 720; narrower, the inspector collapses first, then the debug area.

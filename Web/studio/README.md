@@ -7,7 +7,7 @@ The creator app for Omni games: scene, scripts, simulated devices, local and ser
 
 All input in this Studio is simulated. Live AirPods, iPhone and Apple Watch input is only in the native macOS Studio (`Apps/OmniStudio`, needs a Mac and Xcode).
 
-Spec: `.claude/plan.md`, section Phase 8. Brand and layout rules: `docs/brand-kit/project/README.md`.
+Spec: `.claude/plan.md`, section Phase 8. Brand kit: `docs/brand-kit/index.html`. The Studio still uses the previous kit's tokens and components, kept in `src/studio-tokens.css` and `src/studio-components.css`.
 
 ## Prerequisites
 
@@ -119,7 +119,7 @@ cd Web/studio && npx tauri build
 | `src/debug-panel.ts` | Console panel: client output and server rows merged, State column, Packets (Advanced) |
 | `src/editor.ts`, `explorer.ts`, `inspector.ts` | Script editor, entity tree, entity inspector |
 | `src/account.ts`, `preferences.ts`, `project.ts` | Sign-in and publish, settings, project model and autosave |
-| `src/theme.css` | Imports the brand-kit `tokens.css` and `bundle.css`; no new colors |
+| `src/theme.css` | Imports `studio-tokens.css` and `studio-components.css` (the previous brand kit); no new colors |
 | `src-tauri/` | Desktop shell (Tauri 2) |
 | `test/` | Unit tests and the e2e (`e2e.test.ts`) |
 

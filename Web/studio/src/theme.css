@@ -1,6 +1,6 @@
 /* Brand kit imported as-is; everything below uses its tokens only (no new colors). */
-@import '../../../docs/brand-kit/project/tokens.css';
-@import '../../../docs/brand-kit/project/components/bundle.css';
+@import './studio-tokens.css';
+@import './studio-components.css';
 @import 'dockview-core/dist/styles/dockview.css';
 
 /* High contrast: dark tokens with the quiet greys promoted to full text strength. */
