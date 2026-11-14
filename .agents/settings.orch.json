@@ -36,8 +36,7 @@
       "Bash(cd *)"
     ],
     "deny": [
-      "Edit(**/.claude/overview.md)",
-      "Edit(**/.claude/instructions.md)",
+      "Edit(**/.claude/**)",
       "Edit(**/CLAUDE.md)",
       "Edit(**/.agents/**)",
       "Edit(**/.github/**)",

@@ -15,13 +15,13 @@ Nothing else is typed after that. The loop runs until a file named `STOP` or `ST
 
 | Layer | What | Enforced by |
 |---|---|---|
-| 0. Guardrails | Allow/deny lists, `overview.md` read-only, no push to `main`, workers cannot push or use `gh`, `HUMAN.md` hidden, CI on every PR | `settings*.json`, sparse-checkout, `verify.yml` (SEC-05, CFG-01: deterministic, not prompts) |
+| 0. Guardrails | Allow/deny lists, `.claude/` human-only (read yes, write never), no push to `main`, workers cannot push or use `gh`, `HUMAN.md` hidden, CI on every PR | `settings*.json`, sparse-checkout, `verify.yml` (SEC-05, CFG-01: deterministic, not prompts) |
 | 1. Worker | One headless Sonnet per task, own worktree, one `plan.md` item = one file, builds, tests, runs the reviewer, commits locally | `run.sh`, `stop-gate.sh` (cannot finish while `verify-swift.sh` fails), `--max-turns 60`, `--max-budget-usd 5` |
 | 2. Reviewer | Read-only Sonnet subagent in a fresh context; reports BLOCKING / NON-BLOCKING and an APPROVE or CHANGES NEEDED line | `agents.json` (VER-05, REV-01) |
 | 3. Laptop orchestrator | Opus, one cycle per run: triage PRs, pick unblocked items, launch up to 4 workers, push, open PRs, run `review-pr.sh`, merge, post status | `ORCHESTRATOR.md`, `settings.orch.json` |
 | 4. Cross-laptop | Laptops never message each other. Shared state is GitHub Issues, PRs and labels. Package ownership is static, so there are no claims to race on | ARCH-11 |
 | 5. Loop | Backoff, STOP, a failure issue after 5 bad cycles, a local notification | `loop.sh` |
-| 6. Tien | `STOP`, `DECISION:` comments, `human-hold`, `needs-tien`; the only role that edits `overview.md` | |
+| 6. Tien | `STOP`, `DECISION:` comments, `human-hold`, `needs-tien`; the only role that edits anything in `.claude/` | |
 
 Models: orchestrator `claude-opus-5-5`, workers and all subagents `claude-sonnet-5-5` (ORCH-17: keep judgment on the stronger model, volume on the cheaper one).
 
@@ -30,7 +30,7 @@ Models: orchestrator `claude-opus-5-5`, workers and all subagents `claude-sonnet
 2. Worker builds, tests, reviews, commits. Report format is fixed in `AGENTS.md`.
 3. Orchestrator pushes, opens the PR, runs `review-pr.sh`, posts the output as a comment.
 4. Flags or CHANGES NEEDED: the worker is relaunched on the same branch with the findings. Maximum 3 rounds (REV-08); after that the issue gets `needs-human` and the dead ends are written in an issue comment (HAR-06, kept per issue so parallel agents never share a file).
-5. Green, 0 flags, APPROVE: the orchestrator merges its own PR (squash). Then a plan-sync PR ticks `plan.md`.
+5. Green, 0 flags, APPROVE: the orchestrator merges its own PR (squash), closes the issue with `done`, and adds the `plan.md` tick and any divergence note to the `Plan sync` issue. `.claude/` is human-only: no agent ever edits it, so Tien applies the ticks.
 
 ## Discrepancies: when the user is told, and how
 Every row ends in a GitHub issue assigned to Tien with `@<tien-handle>` in the body (GitHub notifies by email and mobile if watching is on), plus a local macOS notification from `loop.sh` when a laptop's own loop is failing. The agent keeps working on something else (smallest reversible default marked `[provisional: needs-tien-review]`).

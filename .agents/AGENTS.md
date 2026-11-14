@@ -7,16 +7,17 @@ Applies to agents launched via `.agents/scripts/run.sh` (the laptop orchestrator
 - Worker (`run.sh`) and every subagent (`reviewer`, `swift-package-worker`): `claude-sonnet-5-5`. Workers commit locally and never push.
 - Same for every teammate. Models are pinned in `run.sh` and `agents.json`, never taken from personal settings.
 
-## Read first (read-only unless stated)
-- `.claude/overview.md` — design source of truth. No agent edits it.
-- `.claude/plan.md` — the spec for your task. One checklist item = one file. Only the orchestrator edits it (through a PR).
-- `.claude/architecture.md` — layering rules and forbidden dependency edges. Only the orchestrator edits it (through a PR).
+## Read first (read-only)
+- `.claude/` is human-only. Every agent, orchestrator included, may read it and none may create, edit, rename or delete anything in it (`overview.md`, `plan.md`, `architecture.md`, `instructions.md`, `planHistory/`, all of it). To propose a change, put it in your report or open a `needs-tien` issue.
+- `.claude/overview.md` — design source of truth.
+- `.claude/plan.md` — the spec for your task. One checklist item = one file.
+- `.claude/architecture.md` — layering rules and forbidden dependency edges.
 
 ## Scope
 - Do only the task in your prompt (usually specific `plan.md` items). No drive-by refactors, no unrelated files. Other agents are working in parallel worktrees.
 - Never build Phase 7 or anything the plan does not list.
-- Workers never write to `.claude/`, `.agents/`, `.github/` or `CLAUDE.md`. Do not tick `plan.md` boxes or touch `currentDev.md`; the orchestrator ticks boxes after merge.
-- New `.md` files are allowed anywhere except the repo root, for notes other agents will read (put them in `docs/agents/`). Never create or edit `overview.md`, `CLAUDE.md` or `.agents/HUMAN.md`.
+- No agent writes to `.claude/`. Workers also never write to `.agents/`, `.github/` or `CLAUDE.md`. Do not tick `plan.md` boxes or touch `currentDev.md`; a human ticks boxes after merge.
+- New `.md` files are allowed anywhere except the repo root and `.claude/`, for notes other agents will read (put them in `docs/agents/`). Never create or edit `overview.md`, `CLAUDE.md` or `.agents/HUMAN.md`.
 - No new third-party dependencies. If a task needs one, take no action on it and put the need in your report.
 - If the plan contradicts `overview.md` or `architecture.md`, stop that item and report it. Do not guess.
 - If a requirement is merely ambiguous, take the smallest reversible default, keep going, and list it in your report as `[provisional: needs-tien-review]`.
