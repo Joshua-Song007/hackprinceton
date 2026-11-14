@@ -12,7 +12,7 @@ import { LocalRun, type EffectOutput } from '../src/run';
 class NodeWorkerLike implements WorkerLike {
   onmessage: WorkerLike['onmessage'] = null;
   onerror: WorkerLike['onerror'] = null;
-  private worker = new Worker(new URL('../../packages/omni-script/test/node-worker.ts', import.meta.url));
+  private worker = new Worker(new URL('../../packages/omni-script/test/node-worker.ts', import.meta.url), { execArgv: ['--experimental-strip-types'] }); // Node < 22.18 does not strip TS types by default
   constructor() {
     this.worker.on('message', (data) => this.onmessage?.({ data }));
     this.worker.on('error', (e) => this.onerror?.({ message: e.message }));
