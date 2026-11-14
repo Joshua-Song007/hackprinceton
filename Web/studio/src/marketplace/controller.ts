@@ -6,7 +6,13 @@ import type { PluginInstaller } from './installer';
 import type { PluginManifest, PluginSummary, RegistryClient } from './registry';
 
 export const DEEP_AGENTS_ID = 'langchain-deepagents';
-export const RUNTIME_URL = 'http://localhost:9410';
+const DEFAULT_RUNTIME_PORT = 9410;
+
+/** The port the plugin's runtime listens on (manifest.runtime.port), 9410 when the manifest names none. */
+export function runtimePort(manifest: PluginManifest): number {
+  const port = (manifest.runtime as { port?: unknown } | undefined)?.port;
+  return typeof port === 'number' && Number.isInteger(port) && port > 0 && port < 65536 ? port : DEFAULT_RUNTIME_PORT;
+}
 
 type StoredPlugin = { state: 'installed'; manifest: PluginManifest } | { state: 'uninstalled' };
 
@@ -23,7 +29,7 @@ export interface MarketplaceDeps {
   installer: PluginInstaller;
   host: Pick<LayoutManager, 'register' | 'unregister' | 'openRight'>;
   /** Plugin id -> its dockable panel, for plugins that have one. */
-  panels: Record<string, () => PanelSpec>;
+  panels: Record<string, (manifest: PluginManifest) => PanelSpec>;
   projectId: () => string;
   storage: Pick<Storage, 'getItem' | 'setItem'>;
   fetchFn?: typeof fetch;
@@ -156,7 +162,8 @@ export class MarketplaceController {
     const projectId = this.deps.projectId();
     await this.deps.installer.stop(projectId);
     await this.deps.installer.uninstall(projectId, id);
-    const panel = this.deps.panels[id]?.();
+    const stored = this.read()[id];
+    const panel = stored?.state === 'installed' ? this.deps.panels[id]?.(stored.manifest) : undefined;
     if (panel) this.deps.host.unregister(panel.id);
     this.write(id, { state: 'uninstalled' });
     this.progress.delete(id);
@@ -169,13 +176,13 @@ export class MarketplaceController {
     this.step(id, `Runtime starting.${hint}`);
     await this.deps.installer.start(projectId, manifest);
     try {
-      await waitHealthy(`${RUNTIME_URL}/health`, { fetchFn: this.deps.fetchFn, sleep: this.deps.sleep, timeoutMs: this.deps.healthTimeoutMs });
+      await waitHealthy(`http://localhost:${runtimePort(manifest)}/health`, { fetchFn: this.deps.fetchFn, sleep: this.deps.sleep, timeoutMs: this.deps.healthTimeoutMs });
     } catch (e) {
       await this.deps.installer.stop(projectId).catch(() => {});
       throw new Error(`${e instanceof Error ? e.message : String(e)}.${hint}`);
     }
     this.step(id, 'Healthy');
-    const panel = this.deps.panels[id]?.();
+    const panel = this.deps.panels[id]?.(manifest);
     if (panel) {
       this.deps.host.register(panel);
       this.deps.host.openRight(panel.id);
@@ -185,7 +192,7 @@ export class MarketplaceController {
   /** Registers the panels of installed plugins. Call before layout.start() so a saved layout that names them is kept. */
   registerInstalled(): void {
     for (const [id, p] of Object.entries(this.read())) {
-      const panel = p.state === 'installed' ? this.deps.panels[id]?.() : undefined;
+      const panel = p.state === 'installed' ? this.deps.panels[id]?.(p.manifest) : undefined;
       if (panel) this.deps.host.register(panel);
     }
   }

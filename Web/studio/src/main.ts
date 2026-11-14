@@ -7,11 +7,11 @@ import { DebugStore, createOutputPanel, createPacketsPanel, createServerPanel, c
 import { EditorBus, createEditorPanel } from './editor';
 import { Selection, createExplorerPanel } from './explorer';
 import { LayoutManager, type PanelSpec } from './layout';
-import { MarketplaceController } from './marketplace/controller';
-import { deepAgentPanel } from './marketplace/deep-agent-stub';
+import { MarketplaceController, runtimePort } from './marketplace/controller';
 import { BrowserInstaller, TauriInstaller } from './marketplace/installer';
 import { MARKETPLACE_PANEL_ID, marketplacePanel } from './marketplace/panel';
 import { RegistryClient } from './marketplace/registry';
+import { deepAgentPanel } from './panels/deep-agent';
 import { PreferenceStore, bindPreferences, inDesktopApp, openSettingsSheet } from './preferences';
 import { Project, TEMPLATES, attachAutosave, loadDraft, templateSnapshot, type ProjectSnapshot } from './project';
 import { RunController, ViewportHost, createDevicesPanel, createViewportPanel } from './run';
@@ -47,7 +47,7 @@ const marketplace = new MarketplaceController({
   registry: new RegistryClient(() => prefs.get().serverUrl),
   installer: inDesktopApp() ? new TauriInstaller() : new BrowserInstaller(),
   host: { register: (spec) => layout.register(spec), unregister: (id) => layout.unregister(id), openRight: (id) => layout.openRight(id) },
-  panels: { 'langchain-deepagents': () => deepAgentPanel({ url: 'ws://localhost:9410/ws', project, openScript: (ref) => editor.open(ref) }) },
+  panels: { 'langchain-deepagents': (manifest) => deepAgentPanel({ url: `ws://localhost:${runtimePort(manifest)}/ws`, project, openScript: (ref) => editor.open(ref) }) },
   projectId: () => (project.gameId ?? 'local').replace(/[^A-Za-z0-9_-]/g, '_'),
   storage: localStorage,
 });
