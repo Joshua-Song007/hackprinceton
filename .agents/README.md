@@ -25,6 +25,7 @@ Instructions and tooling for autonomous agents. `.claude/` is human-only: agents
 - `scripts/review-pr.sh <n>` — mechanical first-pass review of an agent PR (scope, deps vs graph, purity, hardware-blind rule, comments, tests, CI). Read-only.
 - `scripts/maintain.sh [--apply] [--idle-min N]` — deterministic GitHub hygiene, run by the lead orchestrator every cycle (ORCHESTRATOR.md step 2f): squash-merges agent PRs that pass every mechanical gate, closes superseded PRs, done and duplicate issues, deletes merged `agent/*` branches, creates missing labels. Dry run by default.
 - `scripts/cleanup.sh [--dry-run] [--closed]` — remove worktrees and branches of merged agent PRs (skips dirty or unmerged work).
+- `scripts/prs.sh [list|update|close-stale] [--apply] [--days N]` — open agent PRs with CI, review, mergeable and behind-main state; `update` runs `gh pr update-branch` on behind PRs (not conflicting, not `human-hold`); `close-stale` closes PRs idle for N days (default 3). Dry run unless `--apply`.
 - `scripts/check-docs.sh` — last step before a push: fails when `.agents/*.md` or `docs/agents/` notes point at missing files, a script is not listed here, or retired wording is still there.
 - `../.github/workflows/verify.yml` — on macOS for every PR and push to `main`: `verify-swift.sh`, `verify-nonswift.sh`, `check-docs.sh`; on Linux: `verify-backend.sh`.
 
