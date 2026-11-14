@@ -25,7 +25,7 @@ Overnight loop (one tmux window per laptop; untested, watch the first few cycles
 caffeinate -i .agents/scripts/loop.sh      # backoff, STOP check, failure issue after 5 bad cycles; LOOP_DELAY=<secs> sets the idle gap (default 300). Full design: .agents/LOOP.md
 
 To stop: add a file named STOP (everyone) or STOP-<laptop> to main (the GitHub web UI works from a phone). Only you do this.
-Fill in the handles and the real laptop names in .agents/ORCHESTRATOR.md before the first run.
+Handles and laptop names are filled in .agents/ORCHESTRATOR.md (provisional package split: check it before the first run).
 
 Reviewing an agent's work
 

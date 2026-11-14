@@ -47,7 +47,7 @@
 
 ## Autonomous Mode
 - Applies only to agents launched through `.agents/` tooling (one orchestrator per laptop plus its subagents). Manual sessions never use it. On conflict with any rule above, this section and `.agents/AGENTS.md` win.
-- Git and GitHub: allowed. Subagents commit only inside their own worktree and never push. The laptop orchestrator is the only role that pushes (`agent/*` branches and the `comms` branch) and uses `gh` (Issues, PRs). Orchestrators coordinate across laptops only through GitHub. Never push to `main`, never force-push.
+- Git and GitHub: allowed. Subagents commit only inside their own worktree and never push. The laptop orchestrator is the only role that pushes (`agent/*` branches) and uses `gh` (Issues, PRs). Orchestrators coordinate across laptops only through GitHub. Never push to `main`, never force-push.
 - `.claude/` is human-only: agents read it and never create, edit, rename or delete anything in it.
 - New `.md` files: agents may create and update them anywhere except the repo root and `.claude/`. Never touch `CLAUDE.md` or `.agents/HUMAN.md`.
 - Task state: in GitHub Issues (one per `plan.md` item, labels for state) and PRs, no side branch. `stage`, `apply` and `currentDev.md` are not used.
