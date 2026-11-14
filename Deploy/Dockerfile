@@ -1,0 +1,29 @@
+# Omni backend + Studio. Build context is the repo root (compose sets it): the Studio and the
+# backend both read shared files outside their folders (prelude.js, Schema, Games, brand kit).
+#   docker build -f Deploy/Dockerfile -t omni .
+
+FROM node:22-bookworm-slim AS studio
+WORKDIR /repo
+COPY . .
+WORKDIR /repo/Web
+RUN npm ci && npm run build
+
+FROM rust:1-bookworm AS backend
+WORKDIR /repo
+COPY . .
+WORKDIR /repo/Backend
+RUN cargo build --release --locked
+
+FROM debian:bookworm-slim
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends ca-certificates curl \
+ && rm -rf /var/lib/apt/lists/*
+WORKDIR /app
+COPY --from=backend /repo/Backend/target/release/omni-backend /app/omni-backend
+COPY --from=studio /repo/Web/studio/dist /app/studio
+# /download is a directory in the Studio build, served by the backend's static fallback.
+COPY Deploy/download.html /app/studio/download/index.html
+COPY docs/brand-kit/project/tokens.css /app/studio/download/tokens.css
+ENV PORT=8080 OMNI_STUDIO_DIR=/app/studio
+EXPOSE 8080
+CMD ["/app/omni-backend"]

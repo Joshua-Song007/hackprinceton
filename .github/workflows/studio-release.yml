@@ -1,0 +1,75 @@
+# Builds Omni Studio desktop installers on a `studio-v*` tag push (or manually) and
+# attaches them plus the updater manifest (latest.json) to a GitHub Release.
+# Code-signing certificates are a human purchase: without the secrets the build still
+# runs and the artifacts are unsigned (flagged with a ::warning::).
+name: studio-release
+on:
+  push:
+    tags: ['studio-v*']
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  release:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            rust_targets: ''
+            args: ''
+          - os: macos-latest
+            rust_targets: aarch64-apple-darwin,x86_64-apple-darwin
+            args: --target universal-apple-darwin
+    runs-on: ${{ matrix.os }}
+    env:
+      TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+      WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
+      WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+      APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+      APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+      APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+      APPLE_ID: ${{ secrets.APPLE_ID }}
+      APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: Web/package-lock.json
+      - run: npm ci
+        working-directory: Web
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust_targets }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: Web/studio/src-tauri -> target
+      - name: Warn about unsigned artifacts
+        shell: bash
+        run: |
+          if [ -z "$TAURI_SIGNING_PRIVATE_KEY" ]; then
+            echo "::warning::TAURI_SIGNING_PRIVATE_KEY is not set: updater artifacts are unsigned and installed apps will reject this update."
+          fi
+          if [ "$RUNNER_OS" = "Windows" ] && [ -z "$WINDOWS_CERTIFICATE" ]; then
+            echo "::warning::WINDOWS_CERTIFICATE is not set: the Windows installer is unsigned (SmartScreen will warn)."
+          fi
+          if [ "$RUNNER_OS" = "macOS" ] && { [ -z "$APPLE_CERTIFICATE" ] || [ -z "$APPLE_SIGNING_IDENTITY" ]; }; then
+            echo "::warning::Apple signing secrets are not set: the macOS app is unsigned and not notarized (Gatekeeper will block it)."
+          fi
+          if [ "$RUNNER_OS" = "macOS" ] && { [ -z "$APPLE_ID" ] || [ -z "$APPLE_PASSWORD" ] || [ -z "$APPLE_TEAM_ID" ]; }; then
+            echo "::warning::APPLE_ID / APPLE_PASSWORD / APPLE_TEAM_ID are not all set: the macOS app is not notarized."
+          fi
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          projectPath: Web/studio
+          tagName: ${{ github.ref_name }}
+          releaseName: Omni Studio __VERSION__
+          releaseDraft: false
+          includeUpdaterJson: true
+          args: ${{ matrix.args }}
