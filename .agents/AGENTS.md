@@ -32,7 +32,7 @@ Applies to agents launched via `.agents/scripts/run.sh` (the laptop orchestrator
 ## Git
 - You work in your own worktree on branch `agent/<laptop>/<slug>`. Commit there freely, in small commits.
 - Workers: never push, never use `gh`. Finish with your work committed in the worktree; the orchestrator pushes. If the branch is behind, `git fetch` then `git merge origin/main`.
-- Orchestrator: push only `agent/<laptop>/*` branches and open PRs with `gh pr create`. Never push to `main`. No force-push, rebase, reset, or checkout of other branches. Do not merge PRs (provisional; a human merges).
+- Orchestrator: push only `agent/<laptop>/*` branches and open PRs with `gh pr create`. Never push to `main`. No force-push, rebase, reset, or checkout of other branches. Merge only your own PRs, under the conditions in `.agents/ORCHESTRATOR.md` step 2.
 - PR body: never put a line starting with `#` inside the `gh pr create --body "..."` command. The permission check denies it. Use bold labels (`**Completed**`) instead of Markdown headings. The body can still be multi-line.
 
 ## Tools and denied commands

@@ -35,7 +35,7 @@ gh pr view <n>                            # description with the agent's report
 gh pr diff <n>                            # read the logic yourself; nothing automated checks it
 gh pr checkout <n>                        # try the branch locally
 gh pr merge <n> --squash --delete-branch  # merge ONE at a time when you're happy
-Orchestrators cannot merge (denied in .agents/settings.orch.json). To let them merge green, reviewed PRs, move "Bash(gh pr merge*)" from deny to allow there, and add the rule to ORCHESTRATOR.md step 2.
+Orchestrators merge their own PRs when CI is green, review-pr.sh has 0 flags and the reviewer approved (ORCHESTRATOR.md step 2). To stop that, move "Bash(gh pr merge*)" from allow to deny in .agents/settings.orch.json, or label the PR human-hold.
 The orchestrator ticks plan.md boxes and appends divergence notes through a plan-sync PR after your merge. Design decisions go in overview.md, by you only.
 
 Running the checks by hand
