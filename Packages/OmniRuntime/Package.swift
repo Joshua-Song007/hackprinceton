@@ -19,5 +19,13 @@ let package = Package(
                 .product(name: "OmniInput", package: "OmniInput"),
             ]
         ),
+        .testTarget(
+            name: "OmniRuntimeTests",
+            dependencies: [
+                "OmniRuntime",
+                .product(name: "OmniCore", package: "OmniCore"),
+                .product(name: "OmniInput", package: "OmniInput"),
+            ]
+        ),
     ]
 )

@@ -65,6 +65,7 @@ Where one package is swapped for another without the consumer changing. Studio's
 | `InputBus` (OmniInput) | OmniInput: `InputPipeline` | OmniRuntime `SceneRunner` (via `InputFrame`), OmniStudio |
 | `OutputSink` (OmniOutput) | OmniSim: `SimOutputSink` · OmniBridge: `BridgeOutputSink` | `AppModel` (OmniStudio) drains the runtime's `OutputQueue` into the active sink |
 | `EventDispatcher` (OmniRuntime) | OmniScript: `ScriptEngine` | OmniRuntime `SceneRunner` |
+| `EventDeriver` (OmniRuntime) | OmniRuntime: `LookAtDetector`, `GestureEventMapper`, `HeartRateIntensity`, `RaycastHitDetector` (2.1) | OmniRuntime `SceneRunner` |
 
 ## Type Ownership
 
@@ -82,6 +83,7 @@ Where one package is swapped for another without the consumer changing. Studio's
 | `DeviceDescriptor`, `ChannelKind`, `PacketValidationError`, `HostClock` | OmniInput | **(plan decision)** supporting types for sources, capability tiers, validation and the host clock |
 | `OutputSink` | OmniOutput | |
 | `GameEvent`, `EventDispatcher`, components, systems | OmniRuntime | |
+| `EventDeriver`, `OutputQueue`, `TriggerProbe` | OmniRuntime | **(plan decision)** detector extension point, per-frame output buffer and the trigger-test point type |
 | `SceneDescription`, `SceneLoader` | OmniRuntime | **(plan decision)** scene file format not in overview.md |
 | `ScriptEngine`, `SelfBridge`, `ContextBridge` | OmniScript | |
 
@@ -149,7 +151,7 @@ Packages/
       SceneRunner.swift                                                               [P1]
       Components/  TriggerComponent.swift  AudioEmitterComponent.swift
                    ScriptComponent.swift                                              [P1]
-      Events/      GameEvent.swift  EventDispatcher.swift                             [P1]
+      Events/      GameEvent.swift  EventDispatcher.swift  EventDeriver.swift         [P1]
                    LookAtDetector.swift  GestureEventMapper.swift
                    HeartRateIntensity.swift  RaycastHitDetector.swift                 [P2]
       Systems/     TriggerSystem.swift                                                [P1]

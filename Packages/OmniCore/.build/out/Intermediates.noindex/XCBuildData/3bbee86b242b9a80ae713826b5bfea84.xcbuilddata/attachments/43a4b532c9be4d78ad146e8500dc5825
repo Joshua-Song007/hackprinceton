@@ -1,4 +1,0 @@
-module OmniCore {
-header "OmniCore-Swift.h"
-export *
-}

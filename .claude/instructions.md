@@ -47,10 +47,11 @@
 
 ## Autonomous Mode
 - Applies only to agents launched through `.agents/` tooling (one orchestrator per laptop plus its subagents). Manual sessions never use it. On conflict with any rule above, this section and `.agents/AGENTS.md` win.
-- Git and GitHub: allowed. Subagents commit only inside their own worktree and never push. The laptop orchestrator is the only role that pushes (`agent/*` branches) and uses `gh` (Issues, PRs). Orchestrators coordinate across laptops only through GitHub. Never push to `main`, never force-push.
+- Git and GitHub: allowed. Workers commit inside their own worktree and push only their own `agent/<laptop>/<slug>` branch; they never use `gh`. The laptop orchestrator is the only role that uses `gh` (Issues, PRs, merges). Orchestrators have full GitHub access and may push `main` and force-push (exceptional; rules in `.agents/ORCHESTRATOR.md` Permissions); workers never push `main` and never force-push. Orchestrators coordinate across laptops only through GitHub.
 - `.claude/` is human-only: agents read it and never create, edit, rename or delete anything in it.
-- New `.md` files: agents may create and update them anywhere except the repo root and `.claude/`. Never touch `CLAUDE.md` or `.agents/HUMAN.md`.
+- New `.md` files: agents may create and update them anywhere except the repo root and `.claude/`. Never touch `CLAUDE.md` or `.agents/HUMAN.md`. As the last step before every push, re-read the notes you wrote and delete anything stale.
 - Task state: in GitHub Issues (one per `plan.md` item, labels for state) and PRs, no side branch. `stage`, `apply` and `currentDev.md` are not used.
 - `overview.md` is read-only for every agent and stays the source of truth. An agent that needs a change opens an issue labeled `needs-tien`; only the user edits `overview.md`.
 - Progress is tracked in GitHub (issues closed or labeled `done`, merged PRs). The orchestrator keeps a `Plan sync` issue listing the `plan.md` ticks and divergence notes a human should apply.
+- Platform: laptops without macOS (Windows) never create or edit Swift; a Swift change from one is merged only after an agent on a Mac verifies it (see `.agents/AGENTS.md` Platform).
 - Models, same for every teammate: orchestrator = `claude-opus-5-5`; every subagent (workers, reviewer) = `claude-sonnet-5-5`. Pinned in `.agents/` launch config and `agents.json`, never taken from personal user settings.
