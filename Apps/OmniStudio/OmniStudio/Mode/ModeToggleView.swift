@@ -3,6 +3,8 @@ import SwiftUI
 /// Toolbar toggle bound to `ModeController`: Sim / Live segmented picker plus a short Live status line.
 struct ModeToggleView: View {
     let controller: ModeController
+    /// [provisional: needs-tien-review] Demo toggle and failure text; wiring is not a plan.md item.
+    let demo: DemoMode
 
     var body: some View {
         HStack(spacing: 8) {
@@ -19,6 +21,20 @@ struct ModeToggleView: View {
                 Text(Self.status(controller))
                     .font(.caption.monospacedDigit())
                     .foregroundStyle(.secondary)
+            }
+            Toggle("Demo", isOn: Binding(get: { demo.isOn }, set: { demo.setOn($0) }))
+                .toggleStyle(.switch)
+            switch demo.status {
+            case .off:
+                EmptyView()
+            case .replaying(let packets):
+                Text("replaying \(packets) packets")
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.secondary)
+            case .failed(let message):
+                Text(message)
+                    .font(.caption)
+                    .foregroundStyle(.red)
             }
         }
     }
