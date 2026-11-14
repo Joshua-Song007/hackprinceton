@@ -94,7 +94,10 @@ final class ModeController {
             let listener = BonjourListener(
                 onConnection: { connection in bridge.accept(connection) },
                 onState: { [weak self] state in
-                    Task { @MainActor in self?.listenerState = state }
+                    Task { @MainActor in
+                        // A late callback after leaving Live must not resurrect the status.
+                        if self?.mode == .live { self?.listenerState = state }
+                    }
                 })
             self.listener = listener
             listener.start()
