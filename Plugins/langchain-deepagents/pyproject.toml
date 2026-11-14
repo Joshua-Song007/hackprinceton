@@ -1,0 +1,11 @@
+[project]
+name = "omni-langchain-deepagents"
+version = "0.7.37"
+requires-python = ">=3.11"
+dependencies = ["deepagents==0.7.38", "websockets"]
+
+[dependency-groups]
+dev = ["pytest"]
+
+[tool.pytest.ini_options]
+pythonpath = ["runtime"]
