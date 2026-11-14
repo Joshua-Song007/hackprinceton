@@ -14,7 +14,7 @@ enum DeviceClock {
 /// `@unchecked Sendable`: every mutable property is read and written only on `queue`; the public
 /// methods just hop onto it, so the instance can be shared with CoreMotion / UIKit callbacks.
 final class BridgeClient: @unchecked Sendable {
-    /// Provisional: the production service type is chosen by `BonjourListener` (3.2), which does not exist yet.
+    /// Must match `BonjourListener`'s service type (`_omni._tcp`, OmniBridge, merged).
     static let serviceType = "_omni._tcp"
     static let protocolVersion = 1
 
@@ -136,7 +136,8 @@ final class BridgeClient: @unchecked Sendable {
             }
         }
         b.browseResultsChangedHandler = { [weak self] _, _ in
-            self?.queue.async { self?.connectIfIdle() }
+            guard let self else { return }
+            queue.async { [self] in connectIfIdle() }
         }
         browser = b
         b.start(queue: queue)
@@ -221,7 +222,8 @@ final class BridgeClient: @unchecked Sendable {
     private func write(_ data: Data, on c: NWConnection) {
         inFlight += 1
         c.send(content: data, completion: .contentProcessed { [weak self] _ in
-            self?.queue.async { self?.inFlight = max(0, (self?.inFlight ?? 1) - 1) }
+            guard let self else { return }
+            queue.async { [self] in inFlight = max(0, inFlight - 1) }
         })
     }
 }
