@@ -22,10 +22,10 @@ Worktrees land at ../omni.worktrees/<slug> on branch agent/<laptop>/<slug>. The 
 
 Overnight loop (one tmux window per laptop; untested, watch the first few cycles)
 
-caffeinate -i bash -c 'while true; do git fetch -q origin; git cat-file -e origin/main:STOP 2>/dev/null && break; git cat-file -e "origin/main:STOP-$OMNI_LAPTOP" 2>/dev/null && break; .agents/scripts/run.sh --orch orch "Run one orchestrator cycle."; sleep 120; done'
+caffeinate -i .agents/scripts/loop.sh      # backoff, STOP check, failure issue after 5 bad cycles; LOOP_DELAY=<secs> sets the idle gap (default 300). Full design: .agents/LOOP.md
 
 To stop: add a file named STOP (everyone) or STOP-<laptop> to main (the GitHub web UI works from a phone). Only you do this.
-Fill in the handles and the real laptop names in .agents/ORCHESTRATOR.md before the first run.
+Handles and laptop names are filled in .agents/ORCHESTRATOR.md (provisional package split: check it before the first run).
 
 Reviewing an agent's work
 
@@ -36,7 +36,7 @@ gh pr diff <n>                            # read the logic yourself; nothing aut
 gh pr checkout <n>                        # try the branch locally
 gh pr merge <n> --squash --delete-branch  # merge ONE at a time when you're happy
 Orchestrators merge their own PRs when CI is green, review-pr.sh has 0 flags and the reviewer approved (ORCHESTRATOR.md step 2). To stop that, move "Bash(gh pr merge*)" from allow to deny in .agents/settings.orch.json, or label the PR human-hold.
-The orchestrator ticks plan.md boxes and appends divergence notes through a plan-sync PR after your merge. Design decisions go in overview.md, by you only.
+.claude/ is human-only: agents never edit it. The orchestrator lists plan.md ticks and divergence notes in the "Plan sync" issue; you apply them. Design decisions go in overview.md, by you only.
 
 Running the checks by hand
 

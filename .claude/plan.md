@@ -13,7 +13,7 @@ Goal: every package exists with its dependency boundary enforced, USIS v1 is def
 ### 1.1 Workspace & package scaffold
 - [x] `Omni.xcworkspace/contents.xcworkspacedata` — workspace referencing every local package and both app projects (Xcode-generated; commit as-is). (Refs to `Apps/OmniStudio/OmniStudio.xcodeproj` (1.6) and `Apps/OmniCompanion/OmniCompanion.xcodeproj` (3.3) dangle until those files are created; no revisit needed.)
 - [x] `Packages/OmniCore/Package.swift` — OmniCore manifest, no dependencies. (testTarget `OmniCoreTests` added in Phase 1.2 so `swift test` can run; no other package has a testTarget yet.)
-- [x] `Packages/OmniInput/Package.swift` — OmniInput manifest, depends on OmniCore. (testTarget `OmniInputTests` to be added when the first test file lands, 1.3.)
+- [x] `Packages/OmniInput/Package.swift` — OmniInput manifest, depends on OmniCore. (testTarget `OmniInputTests` added in 1.3.)
 - [x] `Packages/OmniOutput/Package.swift` — OmniOutput manifest, depends on OmniCore.
 - [x] `Packages/OmniRuntime/Package.swift` — OmniRuntime manifest, depends on OmniCore and OmniInput only. (testTarget `OmniRuntimeTests` to be added when the first test file lands, 1.5.)
 - [x] `Packages/OmniScript/Package.swift` — OmniScript manifest, depends on OmniRuntime. (testTarget `OmniScriptTests` to be added when the first test file lands, 2.3; declare `Resources/prelude.js` as a resource when it lands, 2.3.)
@@ -42,23 +42,23 @@ Goal: every package exists with its dependency boundary enforced, USIS v1 is def
 - [x] `Packages/OmniCore/Tests/OmniCoreTests/UsisPacketTests.swift` — encode/decode round-trip of the overview.md example packet; unknown channels ignored; partial channels. (Also covers `OutputCommand` round-trip and clamping, since no separate test item exists for it.)
 
 ### 1.3 OmniInput — protocols, validation, pipeline
-- [ ] `Packages/OmniInput/Sources/OmniInput/InputSource.swift` — `InputSource` protocol: emits `UsisPacket`s, declares device descriptor (kind, slot, sample rate).
-- [ ] `Packages/OmniInput/Sources/OmniInput/InputBus.swift` — `InputBus` protocol: accepts packets from any source, serves `InputFrame`s.
-- [ ] `Packages/OmniInput/Sources/OmniInput/PacketValidator.swift` — decode + schema-conformance check of raw JSON; invalid packets dropped and counted (hand-written Swift mirror of `Schema/usis.schema.json`, kept honest by the validator test). (Enforces the schema rules `UsisPacket` decoding does not: `v == 1`, `t`/`seq` ≥ 0, non-empty `deviceId`, unit-norm quaternion within tolerance, touch `x`/`y` in 0–1, pencil `pressure` in 0–1, `heartRate` ≥ 0.)
-- [ ] `Packages/OmniInput/Sources/OmniInput/ClockSync.swift` — ping-exchange offset estimate `t_host − (t_send + rtt/2)`, periodic re-estimate, device→host time conversion.
-- [ ] `Packages/OmniInput/Sources/OmniInput/JitterBuffer.swift` — per-device ring buffer; sample at `t_render = now − D` (D=50 ms default, tunable); slerp orientation, lerp vectors, sample-and-hold + EMA scalars; stale after 500 ms.
-- [ ] `Packages/OmniInput/Sources/OmniInput/Calibration.swift` — capture `q_cal`, apply `q_world = q_cal⁻¹ · q_raw`; yaw-only mode for AirPods.
-- [ ] `Packages/OmniInput/Sources/OmniInput/CapabilityTier.swift` — Tier 1/2/3 definitions and "can these devices satisfy tier N" check.
-- [ ] `Packages/OmniInput/Sources/OmniInput/DeviceStats.swift` — per-device rate, latency, seq-gap count, stale flag, schema-error count (feeds Studio debug overlay; the only place `source` is retained).
-- [ ] `Packages/OmniInput/Sources/OmniInput/InputPipeline.swift` — concrete `InputBus`: ingest → validate → clock-convert → buffer; per-frame sample → calibrate → build `InputFrame` with `source` stripped.
-- [ ] `Packages/OmniInput/Tests/OmniInputTests/PacketValidatorTests.swift` — valid/invalid packets, versioning, drop counting.
-- [ ] `Packages/OmniInput/Tests/OmniInputTests/ClockSyncTests.swift` — offset estimate with synthetic rtt and skew.
-- [ ] `Packages/OmniInput/Tests/OmniInputTests/JitterBufferTests.swift` — interpolation at mixed rates, hold, stale-freeze.
-- [ ] `Packages/OmniInput/Tests/OmniInputTests/CalibrationTests.swift` — world-frame result after a calibration tap; yaw-only.
-- [ ] `Packages/OmniInput/Tests/OmniInputTests/SourceStrippingTests.swift` — asserts `InputFrame` carries no source information.
+- [x] `Packages/OmniInput/Sources/OmniInput/InputSource.swift` — `InputSource` protocol: emits `UsisPacket`s, declares device descriptor (kind, slot, sample rate). (Push model: a source is started with the `InputBus` via `start(bus:)` and calls `ingest` / `recordClockSample` on it; `DeviceDescriptor` also declares the channels a device provides.)
+- [x] `Packages/OmniInput/Sources/OmniInput/InputBus.swift` — `InputBus` protocol: accepts packets from any source, serves `InputFrame`s. (Also carries `recordClockSample` so sources can report ping exchanges; calibration and stats live on the concrete `InputPipeline`, not on the protocol.)
+- [x] `Packages/OmniInput/Sources/OmniInput/PacketValidator.swift` — decode + schema-conformance check of raw JSON; invalid packets dropped and counted (hand-written Swift mirror of `Schema/usis.schema.json`, kept honest by the validator test). (Enforces the schema rules `UsisPacket` decoding does not: `v == 1`, `t`/`seq` ≥ 0, non-empty `deviceId`, unit-norm quaternion within tolerance, touch `x`/`y` in 0–1, pencil `pressure` in 0–1, `heartRate` ≥ 0.) (Stateless: drop counting lives in `InputPipeline` / `DeviceStats`; also rejects a `deviceId` longer than 128 characters.)
+- [x] `Packages/OmniInput/Sources/OmniInput/ClockSync.swift` — ping-exchange offset estimate `t_host − (t_send + rtt/2)`, periodic re-estimate, device→host time conversion. (Uses the lowest-rtt sample of the last 8 within 30 s; host time is monotonic uptime, and before the first ping the first packet anchors the device clock — plan decision, overview.md specifies neither; no revisit scheduled.)
+- [x] `Packages/OmniInput/Sources/OmniInput/JitterBuffer.swift` — per-device ring buffer; sample at `t_render = now − D` (D=50 ms default, tunable); slerp orientation, lerp vectors, sample-and-hold + EMA scalars; stale after 500 ms. (The overview's "ring buffer" is implemented as time-pruned, size-capped sorted arrays per channel; gestures and touches are queued events delivered once (late ones on the next frame, events older than 1 s discarded); heart-rate EMA is time-based with τ = 1 s; no revisit scheduled.)
+- [x] `Packages/OmniInput/Sources/OmniInput/Calibration.swift` — capture `q_cal`, apply `q_world = q_cal⁻¹ · q_raw`; yaw-only mode for AirPods. (Position and accel are not calibrated; AirPods default to yaw-only.)
+- [x] `Packages/OmniInput/Sources/OmniInput/CapabilityTier.swift` — Tier 1/2/3 definitions and "can these devices satisfy tier N" check. (Orientation is the baseline for every tier and touch is required by none, since overview.md lists AirPods as Tier 1; Tier 2 = orientation + position, Tier 3 = orientation + heartRate; hand tracking and gaze have no USIS v1 channel so they are not checked — plan decision.)
+- [x] `Packages/OmniInput/Sources/OmniInput/DeviceStats.swift` — per-device rate, latency, seq-gap count, stale flag, schema-error count (feeds Studio debug overlay; the only place `source` is retained).
+- [x] `Packages/OmniInput/Sources/OmniInput/InputPipeline.swift` — concrete `InputBus`: ingest → validate → clock-convert → buffer; per-frame sample → calibrate → build `InputFrame` with `source` stripped. (State is guarded by a `Mutex` (Synchronization) rather than an actor because RealityKit updates are synchronous; tracks at most 16 devices and counts rejected ones; ping results that arrive before a device's first packet are held until it appears.)
+- [x] `Packages/OmniInput/Tests/OmniInputTests/PacketValidatorTests.swift` — valid/invalid packets, versioning, drop counting. (Drop counting is exercised through `InputPipeline`.)
+- [x] `Packages/OmniInput/Tests/OmniInputTests/ClockSyncTests.swift` — offset estimate with synthetic rtt and skew.
+- [x] `Packages/OmniInput/Tests/OmniInputTests/JitterBufferTests.swift` — interpolation at mixed rates, hold, stale-freeze.
+- [x] `Packages/OmniInput/Tests/OmniInputTests/CalibrationTests.swift` — world-frame result after a calibration tap; yaw-only.
+- [x] `Packages/OmniInput/Tests/OmniInputTests/SourceStrippingTests.swift` — asserts `InputFrame` carries no source information.
 
 ### 1.4 OmniOutput
-- [ ] `Packages/OmniOutput/Sources/OmniOutput/OutputSink.swift` — `OutputSink` protocol: receives `OutputCommand`s and delivers them to live devices or the simulator.
+- [x] `Packages/OmniOutput/Sources/OmniOutput/OutputSink.swift` — `OutputSink` protocol: receives `OutputCommand`s and delivers them to live devices or the simulator. (Synchronous, non-throwing batch `send`; implementations must be thread-safe and cannot be `@MainActor` classes (checked by compile); delivery failures are the sink's to count; no test item since it is a bare protocol, exercised by its first two implementations in 2.2 and 3.2.)
 
 ### 1.5 OmniRuntime — scene runner and first trigger
 - [ ] `Packages/OmniRuntime/Sources/OmniRuntime/Components/TriggerComponent.swift` — RealityKit component: collision-volume trigger with enter/exit callbacks.
@@ -100,13 +100,13 @@ Goal: a creator can exercise every mechanic on a Mac alone; the jitter buffer is
 
 ### 2.2 OmniSim — virtual devices and recording
 - [ ] `Packages/OmniSim/Sources/OmniSim/NoiseModel.swift` — per-device sample rate and noise parameters roughly matching real hardware (AirPods ~50 Hz, Watch 1–10 Hz, phone 60–120 Hz). (Also deletes `Module.swift`.)
-- [ ] `Packages/OmniSim/Sources/OmniSim/VirtualDevice.swift` — base `InputSource` virtual device that exposes a feedback hook driven by `SimOutputSink` (only `SimOutputSink` conforms to `OutputSink`); stamps `source: "sim"`, advances `seq`, emits at its sample rate.
+- [ ] `Packages/OmniSim/Sources/OmniSim/VirtualDevice.swift` — base `InputSource` virtual device that exposes a feedback hook driven by `SimOutputSink` (only `SimOutputSink` conforms to `OutputSink`); stamps `source: "sim"`, advances `seq`, emits at its sample rate. (Stamps `t` from `HostClock` and emits unit quaternions even with noise, so the validator's 0.01 tolerance holds.)
 - [ ] `Packages/OmniSim/Sources/OmniSim/Devices/VirtualAirPods.swift` — head orientation source, slot `head`.
 - [ ] `Packages/OmniSim/Sources/OmniSim/Devices/VirtualWatch.swift` — wrist orientation, heart rate, gesture source.
 - [ ] `Packages/OmniSim/Sources/OmniSim/Devices/VirtualPhone.swift` — orientation, accel, touch source.
 - [ ] `Packages/OmniSim/Sources/OmniSim/Devices/VirtualPencil.swift` — tip, pressure, roll, hover source.
 - [ ] `Packages/OmniSim/Sources/OmniSim/Recording/UsisRecorder.swift` — writes packets to `.usis.jsonl`, one per line.
-- [ ] `Packages/OmniSim/Sources/OmniSim/Recording/UsisPlayer.swift` — replays a `.usis.jsonl` file as an `InputSource` with original timing.
+- [ ] `Packages/OmniSim/Sources/OmniSim/Recording/UsisPlayer.swift` — replays a `.usis.jsonl` file as an `InputSource` with original timing. (Re-stamps `t` from `HostClock` and `seq` on looped replays so clock anchoring and seq-gap stats stay correct.)
 - [ ] `Packages/OmniSim/Sources/OmniSim/Presets/PresetLibrary.swift` — lists and loads bundled gesture presets.
 - [ ] `Packages/OmniSim/Sources/OmniSim/Presets/airpods-head-pitch.usis.jsonl` — recorded preset: AirPods head pitch.
 - [ ] `Packages/OmniSim/Sources/OmniSim/Presets/watch-double-tap.usis.jsonl` — recorded preset: Watch double-tap.
@@ -115,7 +115,7 @@ Goal: a creator can exercise every mechanic on a Mac alone; the jitter buffer is
 - [ ] `Packages/OmniSim/Sources/OmniSim/Rig/SensorRigScene.swift` — RealityKit avatar with device slots (head, wrists, hand, pocket, stylus); clicking a slot spawns a virtual device.
 - [ ] `Packages/OmniSim/Sources/OmniSim/Rig/GizmoController.swift` — transform gizmos and sliders driving a virtual device's orientation and position.
 - [ ] `Packages/OmniSim/Sources/OmniSim/Rig/GazeRaycaster.swift` — mouse-driven gaze ray from the head; click emits pinch.
-- [ ] `Packages/OmniSim/Sources/OmniSim/Feedback/SimOutputSink.swift` — `OutputSink` that shows haptic and audio commands on the virtual device (pulse ring, vibration icon, sound cone).
+- [ ] `Packages/OmniSim/Sources/OmniSim/Feedback/SimOutputSink.swift` — `OutputSink` that shows haptic and audio commands on the virtual device (pulse ring, vibration icon, sound cone). (Queues commands behind a Mutex; the rig drains it on the main actor each frame.)
 - [ ] `Packages/OmniSim/Tests/OmniSimTests/UsisRecorderPlayerTests.swift` — record → replay round-trip preserves packets and timing.
 - [ ] `Packages/OmniSim/Tests/OmniSimTests/NoiseModelTests.swift` — emitted rates and noise within tolerance of the declared model (exercises the jitter buffer in Sim mode).
 - [ ] `Packages/OmniSim/Tests/OmniSimTests/SimPipelineTests.swift` — virtual devices and `UsisPlayer` through `InputPipeline`: jitter-buffer interpolation at mixed rates, stale-freeze, calibration, and an `InputFrame` that carries no source (added after the plan.md audit; overview.md does not require it).

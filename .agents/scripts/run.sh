@@ -43,7 +43,7 @@ if [ "$interactive" = 1 ]; then
   exec claude "${args[@]}" "$task"
 fi
 mkdir -p "$root/logs"
-out=$(claude -p "$task" "${args[@]}" --permission-prompts none --max-budget-usd "${AGENT_BUDGET:-$budget}" --output-format json) || true
+out=$(claude -p "$task" "${args[@]}" --permission-prompts none --max-budget-usd "${AGENT_BUDGET:-$budget}" --max-turns "${AGENT_TURNS:-60}" --output-format json) || true
 echo "$out" > "$root/logs/$slug.json"
 # ponytail: needs jq. On a subscription the dollar figure is a relative usage measure, not a bill.
 if jq -e . >/dev/null 2>&1 <<<"$out"; then
