@@ -19,6 +19,12 @@ let package = Package(
                 .product(name: "OmniCore", package: "OmniCore"),
                 .product(name: "OmniInput", package: "OmniInput"),
                 .product(name: "OmniOutput", package: "OmniOutput"),
+            ],
+            resources: [
+                .copy("Presets/airpods-head-pitch.usis.jsonl"),
+                .copy("Presets/watch-double-tap.usis.jsonl"),
+                .copy("Presets/watch-flick.usis.jsonl"),
+                .copy("Presets/pencil-barrel-roll.usis.jsonl"),
             ]
         ),
         .testTarget(
