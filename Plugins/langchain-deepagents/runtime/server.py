@@ -72,6 +72,8 @@ def env_secrets(env) -> list[str]:
 
 PERMISSIONS = [
     FilesystemPermission(operations=["write"], paths=["/scripts/**"]),
+    # The scene: written from the panel's snapshot before each prompt; the panel validates edits before applying them.
+    FilesystemPermission(operations=["write"], paths=["/scene.json"]),
     FilesystemPermission(operations=["write"], paths=["/**"], mode="deny"),
 ]
 
@@ -110,8 +112,9 @@ def build_agent(project_dir: Path, model=None):
 
 
 def prepare_project(project_dir: Path, snapshot: dict) -> None:
-    """Copy the skills into the project and render AGENTS.md from the prompt's project snapshot."""
+    """Copy the skills into the project, write scene.json and render AGENTS.md from the prompt's project snapshot."""
     shutil.copytree(PLUGIN_DIR / "skills", project_dir / ".omni" / "skills", dirs_exist_ok=True)
+    (project_dir / "scene.json").write_text(json.dumps(snapshot.get("scene") or {}, indent=2), encoding="utf-8")
     dump = lambda key: json.dumps(snapshot.get(key), indent=2)  # noqa: E731
     template = Template((PLUGIN_DIR / "AGENTS.md.tmpl").read_text(encoding="utf-8"))
     text = template.safe_substitute(scene=dump("scene"), scripts=dump("scripts"), peripherals=dump("peripherals"))

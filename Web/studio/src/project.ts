@@ -215,6 +215,23 @@ export class Project {
     this.touch('script');
   }
 
+  /**
+   * Replaces the scene (the Deep Agent's scene.json) as one undoable step. The script lists follow the
+   * project's scripts, not the given JSON. Returns an error sentence when the scene is invalid; nothing changes then.
+   */
+  setScene(scene: SceneJson): string | undefined {
+    const next = structuredClone(scene);
+    next.clientScripts = Object.keys(this.clientScripts);
+    next.serverScripts = Object.keys(this.serverScripts);
+    try {
+      parseScene(next);
+    } catch (e) {
+      return e instanceof Error ? e.message : String(e);
+    }
+    this.scene = next;
+    this.touch('scene');
+  }
+
   private syncNames(): void {
     this.scene.clientScripts = Object.keys(this.clientScripts);
     this.scene.serverScripts = Object.keys(this.serverScripts);

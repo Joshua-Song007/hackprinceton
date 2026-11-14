@@ -116,6 +116,32 @@ describe('deep-agent.ts', () => {
     expect(root.find((n) => n.attrs.role === 'status')[0]!.textContent).toContain('Done: all good');
   });
 
+  it('applies an agent scene.json as one undoable step, keeping the project script lists', () => {
+    const { root, ws, prompt, project } = setup();
+    const id = prompt('add a sphere');
+    const before = structuredClone(project.scene);
+    const scene = { ...structuredClone(project.scene), clientScripts: [], entities: [...(project.scene.entities as unknown[]), { name: 'Sphere', shape: 'sphere', position: [1.5, 1.2, -3] }] };
+    ws.push({ type: 'file_written', id, path: 'scene.json', content: JSON.stringify(scene) });
+    expect((project.scene.entities as { name: string }[]).map((e) => e.name)).toContain('Sphere');
+    expect(project.scene.clientScripts).toEqual(Object.keys(project.clientScripts));
+    expect(root.byLabel('Files').textContent).toContain('scene.json (applied to the scene)');
+    project.undo();
+    expect(project.scene).toEqual(before);
+  });
+
+  it('rejects an invalid or unparsable scene.json without touching the scene', () => {
+    const { root, ws, prompt, project } = setup();
+    const id = prompt('break it');
+    const before = structuredClone(project.scene);
+    ws.push({ type: 'file_written', id, path: 'scene.json', content: JSON.stringify({ ...project.scene, requiredTier: 9 }) });
+    ws.push({ type: 'file_written', id, path: 'scene.json', content: '{ not json' });
+    expect(project.scene).toEqual(before);
+    expect(project.canUndo).toBe(false);
+    const alerts = root.find((n) => n.attrs.role === 'alert')[0]!.textContent;
+    expect(alerts.match(/scene.json not applied/g)).toHaveLength(2);
+    expect(root.byLabel('Files').textContent).toContain('scene.json (not applied)');
+  });
+
   it('updates an existing script instead of failing on the duplicate name', () => {
     const { ws, prompt, project } = setup();
     const id = prompt('go');

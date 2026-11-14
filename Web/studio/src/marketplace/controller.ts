@@ -108,11 +108,28 @@ export class MarketplaceController {
   }
 
   saveModelKey(provider: ModelProvider, key: string): Promise<void> {
-    return this.keyAction(() => this.deps.registry.setModelKey(provider, key));
+    return this.keyAction(async () => {
+      await this.deps.registry.setModelKey(provider, key);
+      this.remountPanels();
+    });
   }
 
   removeModelKey(): Promise<void> {
-    return this.keyAction(() => this.deps.registry.deleteModelKey());
+    return this.keyAction(async () => {
+      await this.deps.registry.deleteModelKey();
+      this.remountPanels();
+    });
+  }
+
+  /** The hosted runtime reads the account's key when a panel connects, so a key change reopens installed plugins' panels. */
+  private remountPanels(): void {
+    for (const [id, p] of Object.entries(this.read())) {
+      const panel = p.state === 'installed' ? this.deps.panels[id]?.(p.manifest) : undefined;
+      if (!panel) continue;
+      this.deps.host.unregister(panel.id);
+      this.deps.host.register(panel);
+      this.deps.host.openRight(panel.id);
+    }
   }
 
   onChange(listener: () => void): () => void {

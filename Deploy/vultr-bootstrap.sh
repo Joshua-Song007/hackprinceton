@@ -48,6 +48,10 @@ fi
 
 if [ -d "$DIR/.git" ]; then
   git -C "$DIR" pull --ff-only
+  # The pull may have updated this script: run the new copy for the rest (once; the guard stops a loop).
+  if [ -z "${OMNI_BOOTSTRAP_REEXEC:-}" ]; then
+    OMNI_BOOTSTRAP_REEXEC=1 exec bash "$DIR/Deploy/vultr-bootstrap.sh" "$@"
+  fi
 else
   command -v git >/dev/null 2>&1 || { apt-get update -qq && apt-get install -y -qq git; }
   git clone "$REPO_URL" "$DIR"

@@ -101,3 +101,5 @@ DEMO-TIMED: pending - human step. No browser automation on this machine and no m
 - 10.1-10.7 and 10.9 built; see .claude/plan.md Phase 10 status lines. Local check: Postgres 17 + SeaweedFS (S3, SigV4 checked: wrong secret rejected) + runtime container in hosted mode.
 - 10.8 live models: BLOCKED for all three providers, no API key in this environment (Anthropic, OpenAI, Google untested; OpenAI key reported earlier as out of credits). Google default `google_genai:gemini-2.5-pro` unverified. The hosted path reached Anthropic and got 401 for a fake key, so routing works; one real prompt per provider is still owed.
 - Fake mode (OMNI_AGENT_FAKE) is gone; demo rehearsal needs a real key.
+- 2026-11-14 10.8 Anthropic: PASSED on the hosted Vultr runtime with an account key (real reply). OpenAI, Google still to run.
+- 2026-11-14 Plugin 0.7.39: the agent may edit /scene.json (entities, shapes); the panel validates with parseScene and applies it as one undo step.

@@ -45,6 +45,17 @@ One packet per device sample, only changed channels present:
 - `ch.orientation` `[x,y,z,w]` unit quaternion; `ch.position`, `ch.accel` `[x,y,z]`. Frame: +X right, +Y up, -Z forward.
 - `ch.touch` `[{id, x, y (0..1), phase: began|moved|ended}]`; `ch.gesture` `{type, dir?}`; `ch.heartRate` bpm; `ch.pencil` `{tip, pressure, roll, hover}`.
 
+## Scene (`/scene.json`)
+One JSON object. Axes: +X right, +Y up, -Z forward; meters.
+- Scene fields: `name`, `requiredTier` (1-3), `playerOrigin` [x,y,z], `runMode` (`screen` | `device`), `inputs`,
+  `entities`. Leave `clientScripts` / `serverScripts` alone: the Studio fills them from the script files.
+- Entity: `name` (unique among its siblings), `position` [x,y,z], `rotation` quaternion [x,y,z,w], `scale` [x,y,z],
+  `shape` (`box` default or `sphere`), `color` (CSS colour), `children`, `components`.
+- Components: `{"type":"script","name":"<client script>"}`; `{"type":"trigger","shape":"sphere","radius":1}` or
+  `{"type":"trigger","shape":"box","size":[x,y,z]}`; `{"type":"audioEmitter","soundName":"...","gain":1,"loops":false}`.
+- Example entity: `{"name": "Sphere", "shape": "sphere", "position": [1.5, 1.2, -3], "scale": [0.6, 0.6, 0.6], "color": "#4da3ff"}`.
+- Entities are fixed in the scene file; `ctx.spawn` is not simulated in local runs, so add entities here instead.
+
 ## Workflow
 
 Read `/AGENTS.md` for the current scene, scripts and peripherals. Write small scripts, one per behaviour; use `edit_file` to change existing ones.

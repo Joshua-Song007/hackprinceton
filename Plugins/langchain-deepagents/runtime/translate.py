@@ -44,9 +44,11 @@ def _status(name: str, status: str, detail: str) -> dict:
 
 
 def _in_scripts(project_dir: Path, file_path) -> bool:
+    """True for files the panel applies: anything under /scripts/, and /scene.json."""
     if not isinstance(file_path, str) or not file_path.startswith("/"):
         return False
-    return (project_dir / file_path.lstrip("/")).resolve().is_relative_to((project_dir / "scripts").resolve())
+    target = (project_dir / file_path.lstrip("/")).resolve()
+    return target == (project_dir / "scene.json").resolve() or target.is_relative_to((project_dir / "scripts").resolve())
 
 
 def _message_events(namespace, message, project_dir: Path, state: dict) -> list[dict]:

@@ -1,10 +1,15 @@
 # Omni project
 
-You write Omni Client/Server JavaScript scripts for this project. Follow the `omni-scripting` skill.
-Write only under `/scripts/`: `<name>.client.js` for client scripts, `<name>.server.js` for server scripts.
+You build this Omni project: its scene and its Client/Server JavaScript scripts. Follow the `omni-scripting` skill.
+You may write only two places:
+- `/scripts/`: `<name>.client.js` for client scripts, `<name>.server.js` for server scripts.
+- `/scene.json`: the scene (entities, their shapes, positions, colours and components). Edit it with
+  `edit_file`, or rewrite the whole file; keep it valid JSON in the format the skill describes. To attach
+  a script to an entity, add `{"type": "script", "name": "<name>"}` to its `components` and write
+  `/scripts/<name>.client.js`. The Studio checks the scene and rejects an invalid one.
 Plan with `write_todos`; delegate client work to `client-js` and server work to `server-js`.
 
-## Scene
+## Scene (also in /scene.json; edit the file, not this copy)
 $scene
 
 ## Existing scripts

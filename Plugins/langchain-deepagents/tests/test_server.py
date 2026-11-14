@@ -19,6 +19,8 @@ def test_write_outside_scripts_is_denied(tmp_path):
     model = ScriptedModel(replies=[
         call("write_file", "w1", file_path="/escape.js", content="x"),
         call("write_file", "w2", file_path="/scripts/ok.js", content="y"),
+        call("write_file", "w3", file_path="/scene.json", content="{}"),
+        call("write_file", "w4", file_path="/AGENTS.md", content="x"),
         say("end"),
     ])
     agent = create_deep_agent(model=model, backend=FilesystemBackend(root_dir=tmp_path, virtual_mode=True),
@@ -26,6 +28,8 @@ def test_write_outside_scripts_is_denied(tmp_path):
     result = asyncio.run(agent.ainvoke({"messages": [{"role": "user", "content": "go"}]}))
     assert not (tmp_path / "escape.js").exists()
     assert (tmp_path / "scripts" / "ok.js").read_text() == "y"
+    assert (tmp_path / "scene.json").read_text() == "{}"
+    assert not (tmp_path / "AGENTS.md").exists()
     assert "permission denied" in result["messages"][2].content
 
 
@@ -236,3 +240,9 @@ def test_hosted_model_uses_the_header_key_for_its_provider():
     assert key == "sk-header-key-123" and model.openai_api_key.get_secret_value() == "sk-header-key-123"
     assert server.hosted_model({"X-Omni-Model-Provider": "nope", "X-Omni-Model-Key": "k"}) == (None, None)
     assert server.hosted_model({}) == (None, None)
+
+
+def test_prepare_project_writes_the_scene_snapshot(tmp_path):
+    server.prepare_project(tmp_path, {"scene": {"name": "s", "entities": [{"name": "Cube"}]}})
+    assert json.loads((tmp_path / "scene.json").read_text(encoding="utf-8"))["entities"] == [{"name": "Cube"}]
+    assert "/scene.json" in (tmp_path / "AGENTS.md").read_text(encoding="utf-8")

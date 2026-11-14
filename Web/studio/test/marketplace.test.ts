@@ -205,6 +205,20 @@ describe('marketplace account sync', () => {
   });
 });
 
+describe('marketplace model key', () => {
+  it('saving a key reopens the installed plugin panel so it reconnects with the key', async () => {
+    const { controller, log, deps } = setup();
+    deps.registry.setModelKey = async () => void log.push('PUT key');
+    deps.registry.modelKey = async () => ({ provider: 'anthropic', set: true });
+    await controller.refresh();
+    await controller.install(DEEP_AGENTS_ID);
+    log.length = 0;
+    await controller.saveModelKey('anthropic', 'sk-ant-test-key');
+    expect(log).toEqual(['PUT key', 'unregister panel.deepagents', 'register panel.deepagents', 'openRight panel.deepagents']);
+    expect(controller.modelKey).toEqual({ provider: 'anthropic', set: true });
+  });
+});
+
 describe('marketplace runtime port', () => {
   it('runtimePort reads manifest.runtime.port and falls back to 9410', () => {
     expect(runtimePort({ id: 'x', runtime: { port: 9555 } })).toBe(9555);

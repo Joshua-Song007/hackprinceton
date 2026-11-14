@@ -446,7 +446,7 @@ Goal: the live AI path is run once for real; today only `OMNI_AGENT_FAKE=1` is e
 - Touches: `Plugins/langchain-deepagents/runtime` (default model ids), `docs/agents/progress/omni-marketplace.md` (record results).
 - Status: Anthropic and Google keys are untested; OpenAI is blocked on account credits; the Google default model id is unverified.
 - Done when: one prompt succeeds per provider (or is recorded as blocked with the reason), the Google default model id is confirmed against the provider's model list, and the demo notes say which providers were run live.
-- Status (2026-11-14): BLOCKED, no model API key in this environment; recorded in `docs/agents/progress/omni-marketplace.md`. Google default model id still unverified.
+- Status (2026-11-14): Anthropic PASSED on the hosted Vultr runtime (account key saved in the Marketplace panel, real model reply). OpenAI and Google not run yet; Google default model id still unverified. Recorded in `docs/agents/progress/omni-marketplace.md`.
 
 ### 10.9 Remaining marketplace fixes (open after PR #162)
 - [x] Ship `uv.lock` in bundles: raise `MAX_FILE_BYTES` to 1 MiB in `Backend/src/api/marketplace.rs` (done and tested on branch `agent/tienvu-lol/omni-ws1-registry`; needs review and merge). (2026-11-14: done on main instead: tarball bundles, 1 MiB per file, dotfiles kept; that branch is not on the remote.)
