@@ -37,6 +37,7 @@ merged_of() { awk -F'\t' -v t="$1" '$2==t {print $1; exit}' <<<"$merged_titles";
 
 echo "== 1. merge ready agent PRs (idle >= ${idle} min)"
 jq -r --argjson idle "$idle" '.[] | select(.state=="OPEN" and (.headRefName|startswith("agent/")) and (.isDraft|not))
+  | select(.body | contains("AUTONOMY-V2") | not)
   | select([.labels[].name] | (index("human-hold") or index("URGENT-HUMAN")) | not)
   | select(((now - (.updatedAt|fromdateiso8601))/60) >= $idle)
   | "\(.number)\t\(.headRefOid)\t\(.mergeable)\t\(.headRefName)\t\(.body | split("\n") | any(test("^[[:space:]*>-]*VERDICT: APPROVE")))"' <<<"$prs" |

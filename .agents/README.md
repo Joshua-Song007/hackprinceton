@@ -1,5 +1,19 @@
 # .agents
 
+## Current: one planner, deterministic workers
+
+- Setup and security gates: `docs/agents/autonomy-setup.md`.
+- Investigation and ranked proposal: `docs/agents/autonomy-findings.md`.
+- `scripts/start.sh <laptop> --worker` (default) or `--orch [--local-workers N]` dispatches to `scripts/start-autonomy.sh`; add `--dry-run` for a no-network preview.
+- `scripts/loop.sh` is the plain worker/orchestrator launcher. `scripts/autonomy.py` owns atomic claims, worktrees, bounded sessions, checks, fresh review, merge, shared capacity and summaries.
+- `scripts/dry-run.sh` runs `scripts/test_autonomy.py`: real local Git and mocked model/GitHub delivery, zero model spend.
+- `settings.worker.json` is the slim V2 worker permission set without the legacy Stop hook.
+- `scripts/ci-dod.py` runs independent brief build/tests/lint on the hosted `agent-dod` CI job, never on the merge-credential machine.
+- `scripts/legacy-loop.sh` preserves the prior loop, accessible only through explicit `OMNI_LEGACY=1`; never run both architectures concurrently.
+- The generated context pack and small role prompts are under `docs/agents/`. V2 does not read the full-doc rules below.
+
+## Legacy reference (not the current launch instructions)
+
 Instructions and tooling for autonomous agents. `.claude/` is human-only: agents read it and never write to it.
 
 - `AGENTS.md` — rules every autonomous agent follows (rules in `.claude/instructions.md` under `## Autonomous Mode`).
