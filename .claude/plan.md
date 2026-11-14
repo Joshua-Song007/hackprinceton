@@ -184,7 +184,7 @@ Goal: real devices stream USIS into the same pipeline; Sim ↔ Live is a one-cli
 
 Goal: a game playable by a stranger in under 60 s using at least two input types, built only through the public runtime and script API. Name and design are unscheduled (`<Flagship>` placeholder). Also: creators sign in and publish from Studio to the Rust backend (4.1, 4.2).
 
-- [x] `Games/Flagship/scene.json` — `SceneDescription` for the game world. (Sets `requiredTier`.) (`SceneDescription` has no mesh component, so no visuals in the scene file [provisional: needs-tien-review].)
+- [x] `Games/Flagship/scene.json` — `SceneDescription` for the game world. (Sets `requiredTier`.) (`SceneDescription` has no mesh component, so no visuals in the scene file [provisional: needs-tien-review].) (Changed 2026-11-14: `requiredTier` 3 → 1; heart rate only scales aggression and the game plays without it, so phones show it playable. Published to Vultr as "Hollow Choir" by dev account "Omni", game `15d5eaa5-5ce8-4f87-a87a-08614e9ac91b` v1.)
 - [x] `Games/Flagship/scripts/enemy.js` — enemy behavior: `onLookAt` audio lock-on, `onHeartRate` aggression scaling. (API names `self.name`, `self.speed`, `self.audio.play`, `ctx.haptic` and plain `ctx.state` assumed; server uses `fireAll` only; sound and haptic names invented; same for `player.js` and `game.js` [provisional: needs-tien-review].)
 - [x] `Games/Flagship/scripts/player.js` — player abilities: `onGesture` actions, haptic feedback via `ctx`.
 - [x] `Games/Flagship/scripts/game.js` — win/lose flow and difficulty tuning.
