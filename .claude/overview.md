@@ -127,13 +127,13 @@ JSON type
 Units / convention
 orientation
 [x, y, z, w]
-Unit quaternion, device frame, right-handed
+Unit quaternion, device attitude before calibration, in Omni axes (see Coordinate Frame)
 position
 [x, y, z]
 Meters, world frame after calibration
 accel
 [x, y, z]
-m/s², device frame
+m/s², device frame, in Omni axes (CoreMotion reports g; sources multiply by 9.81)
 touch
 [{ id, x, y, phase }]
 Screen coords normalized 0–1; phase = began, moved, ended
@@ -146,6 +146,7 @@ bpm
 pencil
 { tip, pressure, roll, hover }
 Meters, 0–1, radians, meters
+• Coordinate Frame: every USIS vector and quaternion uses one right-handed frame: +X right, +Y up, −Z forward (RealityKit's convention). Each source converts from its native frame before emitting. CoreMotion frames are Z-up; the AirPods frame was measured as X right, Y forward, Z up, so AirPods map vectors (x, y, z) → (x, z, −y) and quaternions [x, y, z, w] → [x, z, −y, w]. Phone and Watch frames are converted the same way once measured.
 • Format Rules: a packet carries only the channels that changed. Unknown channels are ignored, so newer devices don't break older apps. A breaking change bumps v.
 • Recording: input sessions save as .usis.jsonl (one packet per line). Simulator gesture presets are just recorded files, and a bug report can attach a recording to replay.
 • Capability Tiers: games declare the tier they need; the Studio warns when the connected (or simulated) devices can't satisfy it.
@@ -153,7 +154,7 @@ Meters, 0–1, radians, meters
     ◦ Tier 2: 6DOF pose + hand tracking (LiDAR phone, headset)
     ◦ Tier 3: biometrics / gaze (Watch heart rate, headset eye tracking)
 • Clock Sync: on connect, each source runs a short ping exchange; offset = t_host − (t_send + rtt/2), re-estimated every few seconds. All timestamps are converted to host time.
-• Jitter Buffer: devices sample at different rates (AirPods ~50 Hz, Watch ~1–10 Hz, phone 60–120 Hz). Each device keeps a short ring buffer, and the frame samples at t_render = now − D (start with D = 50 ms). For the two samples bracketing t_render, u = (t_render − t_a) / (t_b − t_a):
+• Jitter Buffer: devices sample at different rates (AirPods 50 Hz, measured, steady 20 ms intervals; Watch ~1–10 Hz, phone 60–120 Hz). Each device keeps a short ring buffer, and the frame samples at t_render = now − D (start with D = 50 ms). For the two samples bracketing t_render, u = (t_render − t_a) / (t_b − t_a):
     ◦ orientation: slerp(q_a, q_b, u)
     ◦ vectors: lerp(v_a, v_b, u)
     ◦ scalars like heart rate: sample-and-hold, smoothed with an EMA
@@ -196,7 +197,7 @@ Module 5: Hardware Bridge & Companion Apps
 • Core Responsibility: Gets real device data into USIS JSON with minimal latency and sends output commands back.
 • Sources:
     ◦ iPhone / iPad (P0): companion app streams CoreMotion orientation, touch and optional ARKit pose; plays Core Haptics patterns.
-    ◦ AirPods (P1): read directly on the Mac with CMHeadphoneMotionManager when paired to it, so no companion is needed.
+    ◦ AirPods (P1): read directly on the Mac with CMHeadphoneMotionManager when paired to it, so no companion is needed. Orientation, rotation rate and acceleration only (no position). Data streams from one bud at a time; when the streaming bud is removed the other takes over after a ~1.4 s gap with an orientation jump of up to ~90°, so the source re-anchors on a bud change. The Mac app needs NSMotionUsageDescription, and AirPods auto-switching to the iPhone must be off for demos.
     ◦ Apple Watch (P1): watchOS app reads heart rate (workout session) and wrist gestures, relayed through the phone with WatchConnectivity.
 • Discovery: the Mac advertises a Bonjour service; companions find it and connect over local Wi-Fi or a hotspot.
 • Network Rule: never route sensor data through the cloud. Only published game content is cloud-hosted (Module 11).

@@ -2,3 +2,6 @@
 .swiftpm/
 xcuserdata/
 .DS_Store
+Tools/AirPodsProbe/*.jsonl
+Tools/AirPodsProbe/*.log
+Tools/AirPodsProbe/*.cues.json

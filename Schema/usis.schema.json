@@ -58,6 +58,7 @@
   },
   "$defs": {
     "vec3": {
+      "description": "[x, y, z] in the same frame as quaternion: +X right, +Y up, -Z forward.",
       "type": "array",
       "items": { "type": "number" },
       "minItems": 3,
@@ -68,7 +69,7 @@
       "items": { "type": "number" },
       "minItems": 4,
       "maxItems": 4,
-      "description": "[x, y, z, w] unit quaternion, right-handed, +Y up. Unit norm is checked by the validator."
+      "description": "[x, y, z, w] unit quaternion, right-handed, +X right, +Y up, -Z forward. Sources convert from their native frame (CoreMotion is Z-up). Unit norm is checked by the validator."
     }
   }
 }

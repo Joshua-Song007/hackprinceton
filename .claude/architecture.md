@@ -71,7 +71,7 @@ Where one package is swapped for another without the consumer changing. Studio's
 | Type | Owner | Notes |
 |---|---|---|
 | `UsisPacket`, `UsisChannels`, USIS enums | OmniCore | Mirror `Schema/usis.schema.json` |
-| `Vector3`, `Quaternion`, `Pose` | OmniCore | |
+| `Vector3`, `Quaternion`, `Pose` | OmniCore | world frame (overview.md Coordinate Frame) is right-handed, +X right, +Y up, −Z forward (RealityKit convention); every live source converts from its device frame (AirPods: `[x, z, −y, w]`) |
 | `InputFrame` | OmniCore | **(plan decision)** lets OmniRuntime avoid more than OmniInput's protocols |
 | `OutputCommand` | OmniCore | **(plan decision)** lets OmniRuntime queue commands without OmniOutput |
 | `TouchPoint`, `GestureEvent`, `PencilState` | OmniCore | **(plan decision)** channel payload types, shared by `UsisChannels` and `InputFrame` |
@@ -229,6 +229,11 @@ Apps/
                    HapticPlayer.swift  WatchConnectivityReceiver.swift                [P3]
     watchOS/       WatchApp.swift  HeartRateWorkout.swift
                    WristGestureDetector.swift  WatchRelay.swift                       [P3]
+
+Tools/                                              (plan decision: hardware probes, no Omni deps, no graph edges)
+  AirPodsProbe/
+    Package.swift  Info.plist  bundle.sh                                              [HW]
+    Sources/AirPodsProbe/main.swift                                                   [HW]
 
 Games/
   Flagship/                                         (name unscheduled)

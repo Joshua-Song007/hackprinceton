@@ -31,7 +31,7 @@ Goal: every package exists with its dependency boundary enforced, USIS v1 is def
 ### 1.2 OmniCore — math and USIS types (pure, no I/O)
 - [x] `Schema/usis.schema.json` — USIS v1 JSON Schema: envelope (`v`, `deviceId`, `kind`, `slot`, `source`, `t`, `seq`) and channels (orientation, position, accel, touch, gesture, heartRate, pencil). Source of truth for companions, sim and adapters.
 - [x] `Packages/OmniCore/Sources/OmniCore/Math/Vector3.swift` — 3-vector value type with lerp, dot, normalize, length. (Double precision, no `simd`, to keep OmniCore Foundation-only; OmniRuntime converts to Float at the RealityKit edge; no direct Vector3 tests scheduled.)
-- [x] `Packages/OmniCore/Sources/OmniCore/Math/Quaternion.swift` — unit quaternion `[x,y,z,w]` with multiply, inverse, slerp, yaw-only extraction, angle-between. (Up axis is +Y — a plan decision, not stated in overview.md; CoreMotion reference frames are Z-up, so companions and `AirPodsMotionSource` must convert; yaw-only reads the +Z axis heading, exact for Ry·Rx·Rz with |pitch| < 90°, yaw 0 when +Z is vertical; revisit when Phase 3 sources land.)
+- [x] `Packages/OmniCore/Sources/OmniCore/Math/Quaternion.swift` — unit quaternion `[x,y,z,w]` with multiply, inverse, slerp, yaw-only extraction, angle-between. (Up axis is +Y — a plan decision, not stated in overview.md; CoreMotion reference frames are Z-up, so companions and `AirPodsMotionSource` must convert; yaw-only reads the +Z axis heading, exact for Ry·Rx·Rz with |pitch| < 90°, yaw 0 when +Z is vertical; revisit when Phase 3 sources land.) (Changed 2026-11-14: forward is −Z, right +X, up +Y (RealityKit convention), now stated in overview.md (Module 1, Coordinate Frame). AirPods frame measured as X right / Y forward / Z up, so `AirPodsMotionSource` maps vectors `(x, y, z) → (x, z, −y)` and quaternions `[x, y, z, w] → [x, z, −y, w]`; see the AirPodsProbe item. iPhone/Watch frames not yet measured.)
 - [x] `Packages/OmniCore/Sources/OmniCore/Math/Pose.swift` — position + orientation value type.
 - [x] `Packages/OmniCore/Sources/OmniCore/USIS/UsisEnums.swift` — `DeviceKind`, `Slot`, `PacketSource`, `GestureType`, `TouchPhase` string-backed enums matching the schema.
 - [x] `Packages/OmniCore/Sources/OmniCore/USIS/UsisChannels.swift` — optional-per-channel Codable struct (a packet carries only changed channels; unknown channels ignored on decode). (`pencil.tip` modelled as Vector3 meters and `hover` as scalar meters — overview.md says only "Meters"; no revisit scheduled.)
@@ -149,7 +149,7 @@ Goal: real devices stream USIS into the same pipeline; Sim ↔ Live is a one-cli
 - [ ] `Packages/OmniBridge/Sources/OmniBridge/DeviceSession.swift` — one `NWConnection` per device: framing, `hello`, ping/pong for clock sync, packet decode, seq-gap reporting.
 - [ ] `Packages/OmniBridge/Sources/OmniBridge/BridgeInputSource.swift` — `InputSource` merging all device sessions onto the `InputBus` (stamps `source: "live"`).
 - [ ] `Packages/OmniBridge/Sources/OmniBridge/BridgeOutputSink.swift` — `OutputSink` forwarding `OutputCommand`s to the addressed device session.
-- [ ] `Packages/OmniBridge/Sources/OmniBridge/AirPodsMotionSource.swift` — `CMHeadphoneMotionManager` → USIS `head` packets directly on the Mac.
+- [ ] `Packages/OmniBridge/Sources/OmniBridge/AirPodsMotionSource.swift` — `CMHeadphoneMotionManager` → USIS `head` packets directly on the Mac. (From the 2026-11-14 probe: convert Apple Z-up to Omni −Z-forward/+Y-up with `[x, z, −y, w]`; `userAcceleration` is in g, multiply by 9.81 for USIS `accel`; a `sensorLocation` change (bud handoff) jumps orientation 55–90°, so re-anchor by carrying the last pre-handoff orientation over the ~1.4 s gap, or prompt calibration; on `headphoneMotionManagerDidConnect` stop and restart device-motion updates instead of relying on resume; the app target needs `NSMotionUsageDescription`.)
 - [ ] `Packages/OmniBridge/Tests/OmniBridgeTests/DeviceSessionTests.swift` — loopback session: hello, ping/pong, dropped-device goes stale rather than stopping the loop.
 
 ### 3.3 OmniCompanion — iOS
@@ -205,6 +205,17 @@ Not file-bound: local hotspot setup, pre-paired devices, recorded fallback video
 - [ ] `Packages/OmniCollab/Sources/OmniCollab/PeerSync.swift` — Bonjour peer discovery and change exchange.
 - [ ] `Packages/OmniCollab/Sources/OmniCollab/Presence.swift` — collaborator cursors, selections, "who's editing" state. Syncs the project only; never touches input.
 - [ ] `Apps/OmniStudio/OmniStudio/Collab/PresenceOverlayView.swift` — cursors in the script editor, selection highlights in the viewport, entity badges.
+
+---
+
+## Cross-Cutting: Hardware verification
+
+Throwaway probes that confirm what each real device delivers before its Phase 3 source is built (not in overview.md's module list; no Omni package deps; results feed `AirPodsMotionSource` and `NoiseModel`; delete or keep after Phase 3).
+
+- [x] `Tools/AirPodsProbe/Package.swift` — standalone SwiftPM executable, macOS 14, embeds `Info.plist` via linker `-sectcreate`.
+- [x] `Tools/AirPodsProbe/Info.plist` — bundle id + `NSMotionUsageDescription` for the probe.
+- [x] `Tools/AirPodsProbe/Sources/AirPodsProbe/main.swift` — `CMHeadphoneMotionManager` probe: logs raw samples to `.jsonl`, prints rate / interval / gap / latency stats every 2 s and per session, connect/disconnect events, `--selftest` for the stats. (A bare CLI run aborts in TCC — the terminal is the responsible process, so the embedded plist is ignored; launch through `bundle.sh` instead.) (Results 2026-11-14, AirPods 4 on macOS (last run confirmed as product ID 0x201B; earlier runs' pair not recorded): rate 50.0 Hz, interval 20 ms p50/p95; delivery latency p50 ≈20 ms, p95 ≈50 ms (one run p95 112 ms); noise while still: rotation sd ≤0.03 rad/s, user accel sd ≤0.003 g; yaw drift ≈7° over 55 s still, 4° error returning to forward; axes X right / Y forward / Z up (nod +X = up, turn left +Z, left ear down −Y); bud handoff works both ways, with a ~1.3–1.4 s gap, disconnect/connect flapping and a 55–90° orientation jump; case test: first run the AirPods auto-switched to the iPhone and never returned to the Mac (Mac and iPhone auto-switching set off), second run never disconnected (unclear whether the buds reached the closed case), so resume-from-case is unverified and covered by the restart-on-connect note on `AirPodsMotionSource`. FLAGGED: jitter delay D for AirPods could drop to 20–30 ms (fresh sample every 20 ms); not decided. AirPods Pro not tested.)
+- [x] `Tools/AirPodsProbe/bundle.sh` — builds the probe into a minimal ad-hoc-signed `.app` and launches it with `open` so TCC reads the probe's own `Info.plist`; tails the log; Ctrl-C stops with a session summary.
 
 ---
 
