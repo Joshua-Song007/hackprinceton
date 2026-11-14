@@ -3,7 +3,7 @@
 # smoke runs of prs.sh / worktrees.sh / health.sh against a throwaway git repo and a stub gh, then check-docs.sh.
 # usage: .agents/scripts/selftest.sh [--keep]
 #   --keep   leave the throwaway directory in place and print its path
-# Changes nothing outside a temp directory. Exits non-zero on the first failing section's end.
+# Changes nothing outside a temp directory. Runs every section, then exits 1 if any check failed.
 set -uo pipefail
 keep=0
 case "${1:-}" in --keep) keep=1;; -h|--help) sed -n '2,6p' "$0" | sed 's/^# \{0,1\}//'; exit 0;; '') ;; *) echo "usage: selftest.sh [--keep]"; exit 2;; esac
