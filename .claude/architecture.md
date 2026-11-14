@@ -130,7 +130,7 @@ Where one package is swapped for another without the consumer changing. Studio's
 | OmniLibrary | Foundation, Security (Keychain), Observation |
 | OmniPlayer | SwiftUI, AuthenticationServices (Sign in with Apple) |
 | OmniStudio | SwiftUI, RealityKit, AppKit, Observation, Synchronization |
-| Backend (Rust, not Apple) | axum (with `ws`), tokio, sqlx (Postgres), serde, serde_json, rquickjs 0.9 (provisional; deno_core not picked) |
+| Backend (Rust, not Apple) | axum (with `ws`), tokio, sqlx (Postgres), serde, serde_json, rquickjs 0.9 (provisional; deno_core not picked), jsonwebtoken 12 (`rust_crypto`) and reqwest 0.12 (`rustls-tls`) for Sign in with Apple (Phase 9), getrandom 0.3 for session tokens |
 
 ## File Structure
 

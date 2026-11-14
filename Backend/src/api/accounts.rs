@@ -5,12 +5,9 @@
 // `signin` handler with a real provider check (Apple identity token) later; `authenticate` stays.
 // Runtime sqlx via db.rs only. No new crates: token randomness comes from std's OS-seeded RandomState.
 
-use std::collections::hash_map::RandomState;
 use std::collections::HashMap;
-use std::hash::{BuildHasher, Hasher};
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Mutex, OnceLock};
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant};
 
 use axum::extract::State;
 use axum::http::{header, HeaderMap, StatusCode};
@@ -38,24 +35,13 @@ fn sessions() -> &'static Mutex<HashMap<String, Session>> {
 /// them per instance; four instances hash a counter and the clock. Not a CSPRNG: dev sign-in only.
 /// Before any real sign-in uses this, switch to `getrandom`/`rand` (OS CSPRNG).
 fn new_token() -> String {
-    static COUNTER: AtomicU64 = AtomicU64::new(0);
-    let n = COUNTER.fetch_add(1, Ordering::Relaxed);
-    let nanos = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_nanos() as u64)
-        .unwrap_or(0);
-    let mut out = String::with_capacity(64);
-    for i in 0..4u64 {
-        let mut h = RandomState::new().build_hasher();
-        h.write_u64(n);
-        h.write_u64(nanos);
-        h.write_u64(i);
-        out.push_str(&format!("{:016x}", h.finish()));
-    }
-    out
+    let mut bytes = [0u8; 32];
+    // Fails closed: no fallback generator if the OS cannot supply randomness.
+    getrandom::fill(&mut bytes).expect("OS randomness unavailable");
+    bytes.iter().map(|b| format!("{b:02x}")).collect()
 }
 
-fn store_session(account: Account) -> String {
+pub(crate) fn store_session(account: Account) -> String {
     let token = new_token();
     let mut map = sessions().lock().unwrap_or_else(|p| p.into_inner());
     let now = Instant::now();

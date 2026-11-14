@@ -53,6 +53,8 @@ pub fn app_with_studio(db: Option<Db>, studio_dir: Option<PathBuf>) -> Router {
         .route("/health", get(health))
         .merge(api::accounts::routes())
         .merge(api::games::routes())
+        .merge(api::library::routes())
+        .merge(api::apple::routes())
         .merge(game_server::session::routes())
         .merge(game_server::debug::routes());
     let router = match studio_dir {
