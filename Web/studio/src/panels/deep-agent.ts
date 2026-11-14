@@ -1,4 +1,4 @@
-// Deep Agent panel: prompt -> runtime WebSocket, live todos, subagent status, and generated scripts written into the Project.
+// Deep Agent panel: prompt -> runtime WebSocket, live todos, subagent status, and generated scripts and scene edits written into the Project.
 // Protocol: Plugins/langchain-deepagents (every runtime message carries the id of the prompt it answers).
 import type { ScriptRef } from '../editor';
 import type { PanelSpec, PanelView } from '../layout';
@@ -8,7 +8,7 @@ import './deep-agent.css';
 
 interface TodoItem { content: string; status: 'pending' | 'in_progress' | 'completed' }
 interface AgentRow { state: string; detail: string }
-interface FileLink { path: string; ref: ScriptRef | null }
+interface FileLink { path: string; ref: ScriptRef | null; note?: string }
 
 type RuntimeMessage =
   | { type: 'todos'; id: string; items: TodoItem[] }
@@ -87,7 +87,7 @@ function createView({ url, project, openScript, WebSocketImpl }: DeepAgentOption
     agentList.replaceChildren(...[...agents].map(([name, a]) => el('li', { 'data-state': a.state }, [`${name}: ${a.state}${a.detail ? ` (${a.detail})` : ''}`])));
     fileList.replaceChildren(
       ...files.map((f) => {
-        const label = f.ref ? `${f.path} (open in editor)` : `${f.path} (not a Studio script)`;
+        const label = f.ref ? `${f.path} (open in editor)` : `${f.path} (${f.note ?? 'not a Studio script'})`;
         return el('li', {}, [f.ref ? button(label, () => openScript(f.ref!), { variant: 'borderless' }) : label]);
       }),
     );
@@ -159,6 +159,17 @@ function createView({ url, project, openScript, WebSocketImpl }: DeepAgentOption
         agents.set(msg.name, { state: msg.state, detail: msg.detail ?? '' });
         break;
       case 'file_written': {
+        if (msg.path === 'scene.json') {
+          let problem: string | undefined;
+          try {
+            problem = project.setScene(JSON.parse(msg.content));
+          } catch (e) {
+            problem = e instanceof Error ? e.message : String(e);
+          }
+          if (problem) errors.push(`scene.json not applied: ${problem}`);
+          files.push({ path: msg.path, ref: null, note: problem ? 'not applied' : 'applied to the scene' });
+          break;
+        }
         const ref = scriptRef(msg.path);
         if (ref) {
           if (!Object.hasOwn(project.scripts(ref.kind), ref.name)) project.addScript(ref.kind, ref.name);

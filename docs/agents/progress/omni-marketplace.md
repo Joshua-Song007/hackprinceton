@@ -96,3 +96,11 @@ DEMO-TIMED: pending - human step. No browser automation on this machine and no m
 - 2026-11-14 P3-demo test: Run local with the real sandbox pulses the Blank Cube and sends remote 'tag' {entity:'Cube',tag:'looked'}; review APPROVE, Jev 0.94, merged 8e4e923.
 - 2026-11-14 dod.sh on e0e1825: ok backend, web, typecheck, tauri, plugin, health, demo-path, tests; FAIL demo-timed only (human step).
 - 2026-11-14 Merged origin/main c44e6ce (Swift only, no overlap) -> 6ba3063. hygiene.sh OK. Issue #160, integration PR #161 -> main opened for human review. Teardown deferred: dod.sh stays red on DEMO-TIMED until the human demo; after merge a worker adds the WISHLIST to .claude/plan.md (user-authorized, in that order).
+
+## Phase 10 (2026-11-14, manual session on main)
+- 10.1-10.7 and 10.9 built; see .claude/plan.md Phase 10 status lines. Local check: Postgres 17 + SeaweedFS (S3, SigV4 checked: wrong secret rejected) + runtime container in hosted mode.
+- 10.8 live models: BLOCKED for all three providers, no API key in this environment (Anthropic, OpenAI, Google untested; OpenAI key reported earlier as out of credits). Google default `google_genai:gemini-2.5-pro` unverified. The hosted path reached Anthropic and got 401 for a fake key, so routing works; one real prompt per provider is still owed.
+- Fake mode (OMNI_AGENT_FAKE) is gone; demo rehearsal needs a real key.
+- 2026-11-14 10.8 Anthropic: PASSED on the hosted Vultr runtime with an account key (real reply). OpenAI, Google still to run.
+- 2026-11-14 Plugin 0.7.39: the agent may edit /scene.json (entities, shapes); the panel validates with parseScene and applies it as one undo step.
+- 2026-11-14 Scene editing verified live on Vultr: the Deep Agent added a sphere to the scene (plugin 0.7.39).

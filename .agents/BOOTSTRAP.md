@@ -1,5 +1,7 @@
 # Bootstrap: start the agent loop on this laptop
 
+> Archived V1 bootstrap. For V2, follow `docs/agents/autonomy-setup.md` instead. Do not launch an orchestrator on every laptop. `start.sh` now defaults to worker mode; legacy bootstrap requires explicit `OMNI_LEGACY=1`.
+
 For a manual Claude Code session that a human opened on one of the four laptops and told "follow `.agents/BOOTSTRAP.md`". Autonomous agents launched by `run.sh` ignore this file.
 
 The human's prompt to follow this file is the explicit request for the git commands below (`clone`, `fetch`, `pull --ff-only`, `switch main`). Nothing else: never commit, push, stash or discard the human's own work. Run every step in order, one command per Bash call, and stop at the first failure. Report what failed and what only the human can do. Steps marked **HUMAN** cannot be automated: tell the human the exact command and wait for "done".

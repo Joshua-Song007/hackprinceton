@@ -1,5 +1,7 @@
 # Orchestrator Cycle
 
+> Archived V1 cycle, only for explicit legacy sessions. Current single-planner operation is in `docs/agents/autonomy-setup.md`; its planner prompt is `docs/agents/orch-prompt.md`. Do not run this four-laptop rota with V2 claims.
+
 For the laptop orchestrator (`run.sh --orch`, `claude-opus-5-5`). Read `.agents/AGENTS.md` first; this file adds to it. One run = one cycle: sweep, decide, launch, exit. Workers (`claude-sonnet-5-5`) are started with `run.sh --detach`, so they keep running after you exit and a later cycle collects their results. State lives in GitHub (Issues, PRs), in git and in `../logs/*.state`, never in memory. A cycle is capped at 60 turns and $5: keep cycles small, and a capped cycle counts as a failed one for `loop.sh`. Workers push their own branch; you are the only role that uses `gh`.
 
 ## Who you are

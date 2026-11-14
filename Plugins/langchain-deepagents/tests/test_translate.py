@@ -67,3 +67,13 @@ def test_openai_and_gemini_stream_shapes(tmp_path):
     assert state["summary"] == "Wrote it."
     translate(updates((), AIMessage(content=[{"type": "text", "text": "ok"}])), tmp_path, state)
     assert state["summary"] == "ok"
+
+
+def test_scene_json_edit_becomes_file_written(tmp_path):
+    (tmp_path / "scene.json").write_text('{"entities": []}', encoding="utf-8")
+    state = new_state()
+    events = translate(updates((), ai(("edit_file", {"file_path": "/scene.json"}, "e1"))), tmp_path, state)
+    events += translate(updates((), ToolMessage(content="ok", tool_call_id="e1", name="edit_file")), tmp_path, state)
+    assert events == [{"type": "file_written", "path": "scene.json", "content": '{"entities": []}'}]
+    assert not translate_module._in_scripts(tmp_path, "/scene.json.bak")
+    assert not translate_module._in_scripts(tmp_path, "/scripts/../scene.json/../AGENTS.md")

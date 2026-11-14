@@ -1,5 +1,7 @@
 # Autonomous Loop
 
+> Archived V1 design. The active entrypoint is the plain `loop.sh` launcher; current topology, limits, local workers, quota handling and deployment are documented in `docs/agents/autonomy-setup.md`. Historical instructions below require explicit `OMNI_LEGACY=1` and must not run concurrently with V2.
+
 How the four laptops run Omni's agents unattended, bottom to top. Rules come from `.agents/agent-playbook.md` (the Anthropic agent playbook; rule IDs such as `DOD-08` refer to it and its Source Table lists the 45 original sources); only rules that fit this repo are adopted. Read with `.agents/AGENTS.md` (every agent) and `.agents/ORCHESTRATOR.md` (the per-laptop cycle). `overview.md` stays the source of truth.
 
 ## Start it

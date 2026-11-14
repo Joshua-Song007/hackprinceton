@@ -1,0 +1,4 @@
+# Build context for runtime.Dockerfile is the repo root; only the plugin is copied, never a host venv.
+**/.venv
+**/__pycache__
+**/.pytest_cache

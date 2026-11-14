@@ -1,5 +1,7 @@
 # Autonomous Agent Rules
 
+> V2: use `docs/agents/autonomy-setup.md`, the generated context pack, and the small role prompts. `loop.sh` defaults to a deterministic worker; only the designated laptop opts into orchestration. Models never load the legacy read-first rules below. No direct main pushes or worker merges are permitted. The remaining rules apply only to explicit legacy `run.sh` / `OMNI_LEGACY=1` sessions; do not mix them with V2.
+
 Applies to agents launched via `.agents/scripts/run.sh` (the laptop orchestrator and its workers) and their subagents. Where these rules conflict with `.claude/instructions.md`, these win (see its `## Autonomous Mode`). Manual sessions never read this file.
 
 ## Roles and models

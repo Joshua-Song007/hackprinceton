@@ -1,14 +1,17 @@
 //! Marketplace plugin commands: write a plugin bundle to disk and run its runtime process.
 //! Layout: <app data>/omni/projects/<projectId>/plugins/<id>/ ; OMNI_PROJECT_DIR is the project dir.
+//! A bundle arrives as the registry's gzip tarball; its SHA-256 and Ed25519 signature are checked
+//! before anything is read out of it or written to disk.
 use std::collections::HashMap;
+use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::Mutex;
 use tauri::{AppHandle, Manager, State};
 
-/// One running runtime child per project.
+/// One running runtime child per (project, plugin).
 #[derive(Default)]
-pub struct Runtimes(Mutex<HashMap<String, Child>>);
+pub struct Runtimes(Mutex<HashMap<(String, String), Child>>);
 
 /// Plugin ids are [a-z0-9-]; project ids are what the Studio's projectId() produces, [A-Za-z0-9_-].
 fn validate_id(kind: &str, value: &str) -> Result<(), String> {
@@ -55,12 +58,18 @@ fn bundle_plugin_id(files: &HashMap<String, String>) -> Result<String, String> {
     Ok(id.to_string())
 }
 
-fn write_bundle(base: &Path, project_id: &str, files: &HashMap<String, String>) -> Result<PathBuf, String> {
+fn write_bundle(base: &Path, project_id: &str, files: &HashMap<String, Vec<u8>>) -> Result<PathBuf, String> {
     validate_id("projectId", project_id)?;
-    let id = bundle_plugin_id(files)?;
+    let manifest = files.get("omni-plugin.json").map(|m| String::from_utf8_lossy(m).into_owned());
+    let id = bundle_plugin_id(&manifest.into_iter().map(|m| ("omni-plugin.json".to_string(), m)).collect())?;
     // Validate everything before writing anything.
     files.keys().try_for_each(|p| validate_relative_path(p))?;
     let dir = plugin_dir(base, project_id, &id);
+    // A reinstall replaces the whole dir, so files dropped from the new version do not linger.
+    match std::fs::remove_dir_all(&dir) {
+        Err(e) if e.kind() != std::io::ErrorKind::NotFound => return Err(e.to_string()),
+        _ => {}
+    }
     for (rel, content) in files {
         let target = dir.join(rel);
         std::fs::create_dir_all(target.parent().unwrap_or(&dir)).map_err(|e| e.to_string())?;
@@ -69,8 +78,78 @@ fn write_bundle(base: &Path, project_id: &str, files: &HashMap<String, String>) 
     Ok(dir)
 }
 
+const MAX_FILE_BYTES: u64 = 1024 * 1024;
+const MAX_TOTAL_BYTES: u64 = 32 * 1024 * 1024;
+
+/// The registry's release metadata for the tarball being installed.
+#[derive(serde::Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct Release {
+    pub id: String,
+    pub version: String,
+    pub sha256: String,
+    pub signature: String,
+    /// The registry's Ed25519 public key (hex), from GET /api/plugin-signing-key.
+    pub public_key: String,
+}
+
+/// The same text the backend signs (Backend/src/crypto.rs signed_message).
+fn signed_message(id: &str, version: &str, sha256: &str) -> String {
+    format!("omni-plugin-v1\n{id}\n{version}\n{sha256}")
+}
+
+/// Checks hash and signature, then reads the tarball's regular files into memory (paths validated,
+/// sizes capped) and checks its manifest names the signed id and version.
+fn verify_and_read(tarball: &[u8], r: &Release) -> Result<HashMap<String, Vec<u8>>, String> {
+    use ed25519_dalek::{Signature, Verifier, VerifyingKey};
+    use sha2::{Digest, Sha256};
+    let sha = hex::encode(Sha256::digest(tarball));
+    if sha != r.sha256 {
+        return Err(format!("bundle hash mismatch: got {sha}, registry says {}", r.sha256));
+    }
+    let key: [u8; 32] = hex::decode(&r.public_key).ok().and_then(|k| k.try_into().ok()).ok_or("bad registry public key")?;
+    let sig: [u8; 64] = hex::decode(&r.signature).ok().and_then(|s| s.try_into().ok()).ok_or("bad bundle signature")?;
+    VerifyingKey::from_bytes(&key)
+        .map_err(|e| e.to_string())?
+        .verify(signed_message(&r.id, &r.version, &r.sha256).as_bytes(), &Signature::from_bytes(&sig))
+        .map_err(|_| "bundle signature does not verify".to_string())?;
+
+    let mut files = HashMap::new();
+    let mut total = 0u64;
+    let mut archive = tar::Archive::new(flate2::read::GzDecoder::new(tarball));
+    for entry in archive.entries().map_err(|e| format!("bad tarball: {e}"))? {
+        let mut entry = entry.map_err(|e| format!("bad tarball: {e}"))?;
+        let kind = entry.header().entry_type();
+        let path = entry.path().map_err(|e| e.to_string())?.to_string_lossy().trim_start_matches("./").to_string();
+        if kind.is_dir() {
+            continue;
+        }
+        if !kind.is_file() {
+            return Err(format!("{path}: only regular files are allowed"));
+        }
+        validate_relative_path(&path)?;
+        let mut buf = Vec::new();
+        entry.by_ref().take(MAX_FILE_BYTES + 1).read_to_end(&mut buf).map_err(|e| e.to_string())?;
+        total += buf.len() as u64;
+        if buf.len() as u64 > MAX_FILE_BYTES || total > MAX_TOTAL_BYTES {
+            return Err(format!("{path}: bundle over the size limit"));
+        }
+        files.insert(path, buf);
+    }
+    let manifest: serde_json::Value = serde_json::from_slice(files.get("omni-plugin.json").ok_or("bundle has no omni-plugin.json")?)
+        .map_err(|e| format!("bad omni-plugin.json: {e}"))?;
+    if manifest["id"] != r.id.as_str() || manifest["version"] != r.version.as_str() {
+        return Err("bundle manifest does not match the signed id and version".into());
+    }
+    Ok(files)
+}
+
+/// Installs a registry tarball (base64) into the project after `verify_and_read` passes.
 #[tauri::command]
-pub fn install_plugin(app: AppHandle, project_id: String, files: HashMap<String, String>) -> Result<(), String> {
+pub fn install_plugin(app: AppHandle, project_id: String, tarball: String, release: Release) -> Result<(), String> {
+    use base64::Engine;
+    let bytes = base64::engine::general_purpose::STANDARD.decode(tarball).map_err(|e| format!("bad tarball encoding: {e}"))?;
+    let files = verify_and_read(&bytes, &release)?;
     write_bundle(&app_data(&app)?, &project_id, &files).map(|_| ())
 }
 
@@ -123,8 +202,9 @@ pub fn start_runtime(
     let on_disk = std::fs::read_to_string(dir.join("omni-plugin.json")).map_err(|e| format!("plugin {id} is not installed: {e}"))?;
     let (command, args, port) = runtime_spec(&on_disk)?;
 
+    let key = (project_id.clone(), id.to_string());
     let mut running = runtimes.0.lock().map_err(|e| e.to_string())?;
-    if let Some(child) = running.get_mut(&project_id) {
+    if let Some(child) = running.get_mut(&key) {
         if matches!(child.try_wait(), Ok(None)) {
             return Ok(());
         }
@@ -139,23 +219,29 @@ pub fn start_runtime(
         .stderr(Stdio::null());
     #[cfg(windows)]
     std::os::windows::process::CommandExt::creation_flags(&mut cmd, 0x0800_0000); // CREATE_NO_WINDOW
+    // Own process group (pgid = child pid), so stopping kills uv and the python it started.
+    #[cfg(unix)]
+    std::os::unix::process::CommandExt::process_group(&mut cmd, 0);
     let child = cmd.spawn().map_err(|e| format!("cannot start {command}: {e}"))?;
-    running.insert(project_id, child);
+    running.insert(key, child);
     Ok(())
 }
 
 fn kill_tree(mut child: Child) {
-    // shortcut: Windows kills the whole tree (uv -> python); elsewhere only the direct child, upgrade with process groups if uv leaves orphans.
+    // Windows kills the whole tree (uv -> python); elsewhere the child's process group (see start_runtime).
     #[cfg(windows)]
     let _ = Command::new("taskkill").args(["/F", "/T", "/PID", &child.id().to_string()]).output();
+    #[cfg(unix)]
+    let _ = Command::new("kill").args(["-KILL", "--", &format!("-{}", child.id())]).output();
     let _ = child.kill();
     let _ = child.wait();
 }
 
 #[tauri::command]
-pub fn stop_runtime(runtimes: State<Runtimes>, project_id: String) -> Result<(), String> {
+pub fn stop_runtime(runtimes: State<Runtimes>, project_id: String, id: String) -> Result<(), String> {
     validate_id("projectId", &project_id)?;
-    if let Some(child) = runtimes.0.lock().map_err(|e| e.to_string())?.remove(&project_id) {
+    validate_id("plugin id", &id)?;
+    if let Some(child) = runtimes.0.lock().map_err(|e| e.to_string())?.remove(&(project_id, id)) {
         kill_tree(child);
     }
     Ok(())
@@ -172,8 +258,8 @@ pub fn stop_all(runtimes: &Runtimes) {
 mod tests {
     use super::*;
 
-    fn bundle(entries: &[(&str, &str)]) -> HashMap<String, String> {
-        entries.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect()
+    fn bundle(entries: &[(&str, &str)]) -> HashMap<String, Vec<u8>> {
+        entries.iter().map(|(k, v)| (k.to_string(), v.as_bytes().to_vec())).collect()
     }
 
     #[test]
@@ -225,6 +311,9 @@ mod tests {
         assert_eq!(dir, base.join("omni").join("projects").join("proj-1").join("plugins").join("demo-plugin"));
         assert_eq!(std::fs::read_to_string(dir.join("runtime").join("server.py")).unwrap(), "print(1)");
         assert_eq!(project_dir(&base, "proj-1"), base.join("omni").join("projects").join("proj-1"));
+        // Reinstall without runtime/server.py: the stale file is gone.
+        write_bundle(&base, "proj-1", &bundle(&[("omni-plugin.json", r#"{"id":"demo-plugin"}"#)])).unwrap();
+        assert!(!dir.join("runtime").join("server.py").exists());
         std::fs::remove_dir_all(&base).unwrap();
     }
 
@@ -237,5 +326,69 @@ mod tests {
         assert!(write_bundle(&base, "proj-1", &bundle(&[("omni-plugin.json", r#"{"id":"../x"}"#)])).is_err());
         assert!(write_bundle(&base, "../p", &bundle(&[("omni-plugin.json", manifest)])).is_err());
         assert!(!base.exists());
+    }
+
+    /// A tarball + release signed with a fixed test key, like the registry would serve.
+    fn signed(files: &[(&str, &[u8])], id: &str, version: &str) -> (Vec<u8>, Release) {
+        use ed25519_dalek::{Signer, SigningKey};
+        use sha2::{Digest, Sha256};
+        let mut tar = tar::Builder::new(flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::fast()));
+        for (path, data) in files {
+            let mut h = tar::Header::new_ustar();
+            h.set_size(data.len() as u64);
+            h.set_mode(0o644);
+            tar.append_data(&mut h, path, *data).unwrap();
+        }
+        let bytes = tar.into_inner().unwrap().finish().unwrap();
+        let sha = hex::encode(Sha256::digest(&bytes));
+        let key = SigningKey::from_bytes(&[9; 32]);
+        let signature = hex::encode(key.sign(signed_message(id, version, &sha).as_bytes()).to_bytes());
+        let release = Release { id: id.into(), version: version.into(), sha256: sha, signature, public_key: hex::encode(key.verifying_key().to_bytes()) };
+        (bytes, release)
+    }
+
+    #[test]
+    fn verified_tarball_reads_and_any_tamper_is_refused() {
+        let manifest = br#"{"id":"demo-plugin","version":"1.0.0"}"#;
+        let (bytes, release) = signed(&[("omni-plugin.json", manifest), ("uv.lock", b"lock"), (".python-version", b"3.12")], "demo-plugin", "1.0.0");
+        let files = verify_and_read(&bytes, &release).unwrap();
+        assert_eq!(files["uv.lock"], b"lock");
+        assert!(files.contains_key(".python-version"));
+
+        // One flipped byte anywhere in the tarball.
+        for i in [0, bytes.len() / 2, bytes.len() - 1] {
+            let mut bad = bytes.clone();
+            bad[i] ^= 1;
+            assert!(verify_and_read(&bad, &release).unwrap_err().contains("hash mismatch"), "byte {i}");
+        }
+        // Hash updated to match the tampered bytes, but the signature does not cover it.
+        let mut bad = bytes.clone();
+        bad[10] ^= 1;
+        let sha = { use sha2::{Digest, Sha256}; hex::encode(Sha256::digest(&bad)) };
+        assert!(verify_and_read(&bad, &Release { sha256: sha, ..release.clone() }).unwrap_err().contains("signature"));
+        // Signed for another version, or checked against another key.
+        assert!(verify_and_read(&bytes, &Release { version: "2.0.0".into(), ..release.clone() }).is_err());
+        let other_key = hex::encode(ed25519_dalek::SigningKey::from_bytes(&[8; 32]).verifying_key().to_bytes());
+        assert!(verify_and_read(&bytes, &Release { public_key: other_key, ..release.clone() }).is_err());
+    }
+
+    #[test]
+    fn signed_tarball_with_traversal_or_wrong_manifest_is_refused() {
+        let (bytes, release) = signed(&[("omni-plugin.json", br#"{"id":"other","version":"1.0.0"}"#)], "demo-plugin", "1.0.0");
+        assert!(verify_and_read(&bytes, &release).unwrap_err().contains("does not match"));
+        let mut tar = tar::Builder::new(flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::fast()));
+        let mut h = tar::Header::new_gnu();
+        h.set_size(1);
+        h.set_entry_type(tar::EntryType::Regular);
+        h.as_gnu_mut().unwrap().name[..7].copy_from_slice(b"../evil");
+        h.set_cksum();
+        tar.append(&h, &b"x"[..]).unwrap();
+        let bytes = tar.into_inner().unwrap().finish().unwrap();
+        let sha = { use sha2::{Digest, Sha256}; hex::encode(Sha256::digest(&bytes)) };
+        let (_, base) = signed(&[], "demo-plugin", "1.0.0");
+        let key = ed25519_dalek::SigningKey::from_bytes(&[9; 32]);
+        let sig = { use ed25519_dalek::Signer; hex::encode(key.sign(signed_message("demo-plugin", "1.0.0", &sha).as_bytes()).to_bytes()) };
+        let release = Release { sha256: sha, signature: sig, ..base };
+        assert!(verify_and_read(&bytes, &release).unwrap_err().contains("unsafe"));
     }
 }

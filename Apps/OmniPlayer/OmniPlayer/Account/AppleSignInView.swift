@@ -3,33 +3,34 @@ import SwiftUI
 
 struct AppleSignInView: View {
     let model: PlayerModel
+    @Environment(\.colorScheme) private var colorScheme
     #if DEBUG
     @State private var devName = ""
     #endif
 
     var body: some View {
         VStack(spacing: 20) {
-            Image(systemName: "gamecontroller.fill")
-                .font(.system(size: 56))
-                .accessibilityHidden(true)
-            Text("Omni").font(.largeTitle.bold())
+            OmniGizmoMark(size: 56)
+            Text("Omni").font(.title.weight(.semibold))
             Text("Sign in to browse and play games.")
-                .foregroundStyle(.secondary)
+                .foregroundStyle(OmniTheme.textSecondary)
                 .multilineTextAlignment(.center)
 
             // Only the name is requested, and Apple sends it once, at the first authorization.
             SignInWithAppleButton(.signIn, onRequest: { $0.requestedScopes = [.fullName] }, onCompletion: handle)
+                .signInWithAppleButtonStyle(colorScheme == .dark ? .white : .black)
                 .frame(maxWidth: 320, minHeight: 48, maxHeight: 48)
                 .disabled(model.isWorking)
 
             if model.hasSavedSession {
                 Button("Try again") { Task { await model.start() } }
+                    .buttonStyle(OmniSecondaryButtonStyle())
                     .disabled(model.isWorking)
             }
             if let message = model.message {
                 Text(message)
                     .font(.callout)
-                    .foregroundStyle(.red)
+                    .foregroundStyle(OmniTheme.error)
                     .multilineTextAlignment(.center)
             }
             #if DEBUG
@@ -68,12 +69,13 @@ struct AppleSignInView: View {
     private var devSection: some View {
         VStack(spacing: 8) {
             Divider()
-            Text("Debug builds only").font(.caption).foregroundStyle(.secondary)
+            Text("Debug builds only").font(.caption).foregroundStyle(OmniTheme.textSecondary)
             TextField("Dev name", text: $devName)
                 .textFieldStyle(.roundedBorder)
                 .autocorrectionDisabled()
                 .frame(maxWidth: 320)
             Button("Dev sign-in") { Task { await model.signInDev(name: devName) } }
+                .buttonStyle(OmniSecondaryButtonStyle())
                 .disabled(model.isWorking)
         }
     }

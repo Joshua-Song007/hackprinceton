@@ -1,0 +1,45 @@
+name: Issue Definition of Done
+on:
+  pull_request:
+permissions:
+  contents: read
+  issues: read
+  pull-requests: read
+jobs:
+  agent-dod:
+    runs-on: macos-15
+    timeout-minutes: 50
+    steps:
+      - name: Identify managed branches independently of editable PR text
+        id: kind
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json, os
+          pr = json.load(open(os.environ['GITHUB_EVENT_PATH']))['pull_request']
+          ref = pr['head']['ref']
+          managed = (ref.startswith('agent/') and '/issue-' in ref) or 'AUTONOMY-V2' in (pr.get('body') or '')
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write('managed=' + str(managed).lower() + '\n')
+          PY
+      - uses: actions/checkout@v4
+        if: steps.kind.outputs.managed == 'true'
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        if: steps.kind.outputs.managed == 'true'
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        if: steps.kind.outputs.managed == 'true'
+        with:
+          node-version: '22'
+      - name: Trusted base-branch DoD against exact PR head
+        if: steps.kind.outputs.managed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OMNI_ORCHESTRATOR_LOGIN: ${{ vars.OMNI_ORCHESTRATOR_LOGIN }}
+          CHECK_TIMEOUT: '900'
+        run: python .agents/scripts/ci-dod.py

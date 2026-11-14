@@ -7,7 +7,7 @@ import { DebugStore, createConsolePanel } from './debug-panel';
 import { EditorBus, createEditorPanel, openApiSheet } from './editor';
 import { Selection, createExplorerPanel } from './explorer';
 import { LayoutManager, type PanelSpec } from './layout';
-import { MarketplaceController, openScriptAndReveal, runtimePort } from './marketplace/controller';
+import { MarketplaceController, hostedRuntimeUrls, localRuntimeUrls, openScriptAndReveal } from './marketplace/controller';
 import { BrowserInstaller, TauriInstaller } from './marketplace/installer';
 import { MARKETPLACE_PANEL_ID, marketplacePanel } from './marketplace/panel';
 import { RegistryClient } from './marketplace/registry';
@@ -51,12 +51,19 @@ const joinVersion = async (version: number | 'latest') => {
 };
 const run = new RunController({ project, debug, account, viewport, editor, reveal: (id) => layout.show(id), onReload: testPlayer ? joinVersion : undefined });
 
+const marketplaceProjectId = () => (project.gameId ?? 'local').replace(/[^A-Za-z0-9_-]/g, '_');
+// Desktop runs plugin runtimes on this machine; a signed-in browser uses the backend's hosted runtime.
+const runtimeUrls = (manifest: Parameters<typeof localRuntimeUrls>[0]) => {
+  const token = account.account ? account.client.token : null;
+  return !inDesktopApp() && token ? hostedRuntimeUrls(prefs.get().serverUrl, token, marketplaceProjectId()) : localRuntimeUrls(manifest);
+};
 const marketplace = new MarketplaceController({
-  registry: new RegistryClient(() => prefs.get().serverUrl),
+  registry: new RegistryClient(() => prefs.get().serverUrl, undefined, () => (account.account ? account.client.token : null)),
   installer: inDesktopApp() ? new TauriInstaller() : new BrowserInstaller(),
+  runtimeUrls,
   host: { register: (spec) => layout.register(spec), unregister: (id) => layout.unregister(id), openRight: (id) => layout.openRight(id) },
-  panels: { 'langchain-deepagents': (manifest) => deepAgentPanel({ url: `ws://localhost:${runtimePort(manifest)}/ws`, project, openScript: openScriptAndReveal(editor, (id) => layout.show(id)) }) },
-  projectId: () => (project.gameId ?? 'local').replace(/[^A-Za-z0-9_-]/g, '_'),
+  panels: { 'langchain-deepagents': (manifest) => deepAgentPanel({ url: runtimeUrls(manifest).ws, project, openScript: openScriptAndReveal(editor, (id) => layout.show(id)) }) },
+  projectId: marketplaceProjectId,
   storage: localStorage,
 });
 
@@ -262,6 +269,22 @@ const renderChrome = () => {
 run.onChange(renderState);
 project.onChange(renderChrome);
 account.onChange(renderChrome);
+// Signing in (or switching accounts) applies that account's plugin installs from other devices.
+// The marketplace boots once the editor has an account (login is required), so the auto-install sees the account's records.
+let marketplaceAccount = account.account?.id ?? null;
+let marketplaceBooted = false;
+const bootMarketplace = () => {
+  marketplaceBooted = true;
+  void marketplace.boot();
+};
+account.onChange(() => {
+  const id = account.account?.id ?? null;
+  if (id === marketplaceAccount) return;
+  marketplaceAccount = id;
+  if (testPlayer) return;
+  if (id && !marketplaceBooted) bootMarketplace();
+  else void marketplace.refresh().then(() => marketplace.loadModelKey());
+});
 renderState();
 renderChrome();
 
@@ -410,5 +433,5 @@ if (testPlayer) {
   attachAutosave(project, (message) => debug.addOutput('warn', message));
   if (account.account) void account.refreshGames().catch(() => {});
   showScreen(nextScreen(!!account.account, false));
-  void marketplace.boot();
+  if (account.account) bootMarketplace();
 }

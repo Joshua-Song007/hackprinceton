@@ -8,6 +8,10 @@
 # server's IP), DATABASE_URL (empty = Postgres in Docker, the `localdb` profile),
 # OMNI_DEV_SIGNIN (1 lets anyone create an account; needed for demo.sh, keep 0 otherwise).
 # OMNI_APPLE_AUDIENCES (comma-separated app bundle ids for Sign in with Apple; empty = that route answers 503).
+# Marketplace: OMNI_PLUGIN_SIGNING_KEY, OMNI_SECRET_KEY and OMNI_RUNTIME_SECRET are generated once and
+# appended to .env when missing (keep them: changing them breaks bundle signatures / stored model keys).
+# OMNI_S3_* (Vultr Object Storage) are added to .env by hand; with them set, each run ends with the
+# plugin seed job (publishes Plugins/*, a no-op when nothing changed).
 set -euo pipefail
 
 REPO_URL="${1:-${OMNI_REPO_URL:-https://github.com/Joshua-Song007/hackprinceton}}"
@@ -44,6 +48,10 @@ fi
 
 if [ -d "$DIR/.git" ]; then
   git -C "$DIR" pull --ff-only
+  # The pull may have updated this script: run the new copy for the rest (once; the guard stops a loop).
+  if [ -z "${OMNI_BOOTSTRAP_REEXEC:-}" ]; then
+    OMNI_BOOTSTRAP_REEXEC=1 exec bash "$DIR/Deploy/vultr-bootstrap.sh" "$@"
+  fi
 else
   command -v git >/dev/null 2>&1 || { apt-get update -qq && apt-get install -y -qq git; }
   git clone "$REPO_URL" "$DIR"
@@ -88,7 +96,19 @@ else
   chmod 600 .env
 fi
 
+# Server keys for the marketplace, generated on this box once.
+for key in OMNI_PLUGIN_SIGNING_KEY OMNI_SECRET_KEY OMNI_RUNTIME_SECRET; do
+  if ! grep -q "^$key=" .env; then
+    echo "$key=$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')" >> .env
+  fi
+done
+
 docker compose up -d --build
 docker compose ps
+if grep -q '^OMNI_S3_BUCKET=.' .env; then
+  docker compose run --rm backend /app/omni-backend seed /app/Plugins
+else
+  echo "OMNI_S3_* not in .env: plugin bundles are not seeded (see the marketplace notes at the top)"
+fi
 domain="$(grep '^OMNI_DOMAIN=' .env | cut -d= -f2-)"
 echo "Omni is up: https://$domain  (Studio at /, downloads at /download, health at /health)"

@@ -1,5 +1,8 @@
 // Library half of the crate so integration tests in tests/ can build the router; main.rs only starts the server.
 pub mod api;
+pub mod blobs;
+pub mod bundle;
+pub mod crypto;
 pub mod db;
 pub mod game_server;
 pub mod memstore;
@@ -37,7 +40,7 @@ fn cors_layer() -> CorsLayer {
         .collect();
     CorsLayer::new()
         .allow_origin(AllowOrigin::list(origins))
-        .allow_methods([Method::GET, Method::POST, Method::OPTIONS])
+        .allow_methods([Method::GET, Method::POST, Method::PUT, Method::DELETE, Method::OPTIONS])
         .allow_headers([header::AUTHORIZATION, header::CONTENT_TYPE])
 }
 
@@ -59,6 +62,7 @@ pub fn app_with_studio(db: Option<Db>, studio_dir: Option<PathBuf>) -> Router {
         .merge(api::games::routes())
         .merge(api::library::routes())
         .merge(api::marketplace::routes())
+        .merge(api::agent::routes())
         .merge(api::apple::routes())
         .merge(game_server::session::routes())
         .merge(game_server::debug::routes());
