@@ -177,7 +177,9 @@ export function createLivePreviewPanel(account: AccountController): PanelView {
   }
 
   function deviceEl(spec: DeviceSpec, session: DeviceSession): Device {
-    const screen = el('div', { class: 'lp-screen' });
+    // The UI lays out at the device's logical size (iPhone 393x852, iPad landscape 1180x820) and is scaled down into the bezel by CSS.
+    const screen = el('div', { class: 'lp-canvas' });
+    const clip = el('div', { class: 'lp-screen' }, [screen]);
     const status = el('span', { class: 'lp-dev-status' });
     const sliderValue = el('output', { class: 'lp-pitch-value' }, ['0°']);
     const slider = el('input', { type: 'range', min: -90, max: 90, step: 1, value: 0, class: 'lp-pitch', 'aria-label': `${spec.label} pitch`, disabled: true }) as HTMLInputElement;
@@ -186,7 +188,7 @@ export function createLivePreviewPanel(account: AccountController): PanelView {
       d.pitch = Number(slider.value);
       sliderValue.textContent = `${d.pitch}°`;
     });
-    const bezel = el('div', { class: `lp-bezel lp-${spec.kind}` }, [spec.kind === 'phone' ? el('i', { class: 'lp-island', 'aria-hidden': 'true' }) : el('i', { class: 'lp-camera', 'aria-hidden': 'true' }), screen]);
+    const bezel = el('div', { class: `lp-bezel lp-${spec.kind}` }, [spec.kind === 'phone' ? el('i', { class: 'lp-island', 'aria-hidden': 'true' }) : el('i', { class: 'lp-camera', 'aria-hidden': 'true' }), clip]);
     devicesEl.append(el('figure', { class: 'lp-device' }, [
       el('figcaption', {}, [el('strong', {}, [spec.label]), status]),
       bezel,
