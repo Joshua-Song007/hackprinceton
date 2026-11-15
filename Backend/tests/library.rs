@@ -52,7 +52,7 @@ async fn publish(addr: std::net::SocketAddr, token: &str, game: &str, scene: Val
         "client_scripts": {},
         "server_scripts": {},
         "assets": {},
-        "metadata": {},
+        "metadata": {"manifest": {"format": "pear-game/1", "name": "T"}, "check": {"ok": true}},
         "run_mode": run_mode,
         "listed": true
     });
@@ -128,7 +128,7 @@ async fn publish_without_listing_stays_hidden_and_one_call_with_listing_shows_it
     let ann = sign_in(addr, "ann-listing", "Ann").await;
     let bob = sign_in(addr, "bob-listing", "Bob").await;
     let g = create_game(addr, &ann, "Fixture").await;
-    let mut v = json!({"scene": {}, "client_scripts": {}, "server_scripts": {}, "assets": {}, "metadata": {}, "run_mode": "device"});
+    let mut v = json!({"scene": {}, "client_scripts": {}, "server_scripts": {}, "assets": {}, "metadata": {"manifest": {"format": "pear-game/1", "name": "T"}, "check": {"ok": true}}, "run_mode": "device"});
     let path = format!("/api/games/{g}/versions");
     assert_eq!(call(addr, "POST", &path, Some(&ann), Some(&v)).await.0, 201);
     assert!(library(addr, &bob).await.is_empty(), "a published but unlisted game never shows");
