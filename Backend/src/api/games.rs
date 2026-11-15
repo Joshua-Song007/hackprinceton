@@ -251,12 +251,12 @@ fn gate(v: &NewGameVersion, listing: &Listing, bypass: bool) -> Result<(), &'sta
         return Ok(());
     }
     if v.metadata.get("manifest").is_none() {
-        return Err("metadata.manifest is required to publish");
+        return Err("publish refused: metadata.manifest is missing. Attach the game's pear-game.json (format \"pear-game/1\") as metadata.manifest; the MCP publish tool and Deploy/publish-quickdraw.mjs do this for you");
     }
     match check_status(&v.metadata) {
         "passed" => Ok(()),
-        "failed" => Err("metadata.check reports failures"),
-        _ => Err("metadata.check (pear-check report) is required to publish"),
+        "failed" => Err("publish refused: metadata.check reports failures. Run pear-check (Tools/pear-check), fix every error it lists, then attach the passing report as metadata.check"),
+        _ => Err("publish refused: metadata.check is missing. Run pear-check (Tools/pear-check) and attach its report as metadata.check (the MCP publish tool and PEAR_LIST=1 Deploy/publish-quickdraw.mjs do this for you)"),
     }
 }
 
@@ -268,23 +268,44 @@ fn check_status(metadata: &serde_json::Value) -> &'static str {
     }
 }
 
+/// publish_version errors: a bare status, or the gate's 422 with a JSON `{error}` body saying what to fix.
+enum PublishError {
+    Status(StatusCode),
+    Gate(&'static str),
+}
+
+impl From<StatusCode> for PublishError {
+    fn from(s: StatusCode) -> Self {
+        Self::Status(s)
+    }
+}
+
+impl IntoResponse for PublishError {
+    fn into_response(self) -> Response {
+        match self {
+            Self::Status(s) => s.into_response(),
+            Self::Gate(msg) => (StatusCode::UNPROCESSABLE_ENTITY, Json(serde_json::json!({ "error": msg }))).into_response(),
+        }
+    }
+}
+
 async fn publish_version(
     State(state): State<AppState>,
     headers: HeaderMap,
     Path(game_id): Path<String>,
     Json(req): Json<PublishRequest>,
-) -> Result<(StatusCode, Json<serde_json::Value>), StatusCode> {
+) -> Result<(StatusCode, Json<serde_json::Value>), PublishError> {
     let account = require_account(&headers).await?;
     let PublishRequest { version: body, listing } = req;
     if !valid_uuid(&game_id) || !valid_version(&body) || !valid_listing(&listing) {
-        return Err(StatusCode::BAD_REQUEST);
+        return Err(StatusCode::BAD_REQUEST.into());
     }
     let pool = state.db.as_ref().ok_or(StatusCode::SERVICE_UNAVAILABLE)?;
     require_editor(pool, &account, &game_id).await?;
     let bypass = std::env::var("PEAR_PUBLISH_GATE").is_ok_and(|v| v == "off");
     gate(&body, &listing, bypass).map_err(|e| {
         eprintln!("games: publish gate: {e}");
-        StatusCode::UNPROCESSABLE_ENTITY
+        PublishError::Gate(e)
     })?;
     crate::api::assets::check_refs(&body.assets).await?;
     let v = db::insert_game_version(pool, &game_id, &body)
@@ -508,7 +529,8 @@ mod tests {
         v.metadata = json!({ "manifest": m });
         assert!(gate(&v, &l, false).is_err(), "no check");
         v.metadata = json!({ "manifest": m, "check": { "ok": false } });
-        assert_eq!(gate(&v, &l, false), Err("metadata.check reports failures"));
+        assert!(gate(&v, &l, false).unwrap_err().contains("metadata.check reports failures"));
+        assert!(gate(&nv("screen"), &l, false).unwrap_err().contains("metadata.manifest is missing"));
         v.metadata = json!({ "check": { "ok": true } });
         assert!(gate(&v, &l, false).is_err(), "no manifest");
         v.metadata = json!({ "manifest": m, "check": { "ok": true } });
@@ -526,6 +548,7 @@ mod tests {
         body["metadata"] = json!({ "manifest": { "format": "pear-game/1", "name": "T" } });
         let r = request_with(Some(mem.clone()), &post_json(&path, Some(&t), &body.to_string())).await;
         assert!(r.starts_with("HTTP/1.1 422"), "{r}");
+        assert!(r.contains("metadata.check is missing") && r.contains("pear-check"), "422 body names the fix: {r}");
         assert!(db::list_catalog(&mem).await.unwrap().is_empty());
         // A non-owner is refused (403) before the gate looks at the body.
         let other = crate::api::accounts::test_token("games-test-other");
