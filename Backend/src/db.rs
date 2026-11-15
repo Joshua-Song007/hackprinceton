@@ -270,8 +270,9 @@ pub async fn create_game(db: &Db, owner_id: &str, title: &str) -> DbResult<Game>
         Db::Mem(m) => return Ok(m.create_game(owner_id, title)),
     };
     let row = sqlx::query(&format!(
+        // Select from the CTE, not `games`: a data-modifying CTE's new row is invisible to the rest of the statement.
         "WITH g AS (INSERT INTO games (owner_id, title) VALUES ($1::uuid, $2) RETURNING *) \
-         SELECT {GAME_COLS} FROM {GAME_FROM}"
+         SELECT {GAME_COLS} FROM g LEFT JOIN accounts a ON a.id = g.owner_id"
     ))
     .bind(owner_id)
     .bind(title)
