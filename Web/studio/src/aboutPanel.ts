@@ -1,6 +1,7 @@
 // Game About editor: title, description and cover of the cloud game the open project is linked to. Owner or developer only; the server enforces the same.
 import { ApiError, type Game } from '@pear/cloud';
 import { describeError, type AccountController } from './account';
+import { mountMediaEditor } from './mediaEditor';
 import { announce, button, el, openSheet } from './ui';
 
 export const DESCRIPTION_MAX = 4000;
@@ -80,5 +81,6 @@ export function openAboutPanel(account: AccountController, gameId: string | null
       status, error,
       el('div', { class: 'sheet-actions' }, [button('Close', close), button('Save', () => void save(), { variant: 'default' })]),
     );
+    void mountMediaEditor(body, account.client, game.id, fail, (s) => { status.textContent = s; });
   });
 }

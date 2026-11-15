@@ -3,7 +3,9 @@ import { ApiError, type CloudClient } from '@pear/cloud';
 import { validate } from '@pear/ui';
 import qrcode from 'qrcode-generator';
 import { PUBLISH_STEPS, VULTR_SERVER_URL, describeError, type AccountController, type PublishConfirmation, type PublishExtra, type PublishStepId, type PublishStepState } from './account';
+import { openAboutPanel } from './aboutPanel';
 import { checkGame } from './gamePanel';
+import { clearDraft, loadDraft, mediaAssets, mediaMetadata, missingMedia } from './mediaDraft';
 import { defaultServerUrl, type PreferenceStore } from './preferences';
 import type { Project } from './project';
 import { announce, button, el, openSheet } from './ui';
@@ -139,7 +141,9 @@ export function openPublishSheet(account: AccountController, prefs: PreferenceSt
           fillMode(); // a retry after this publishes to the game just created, not a second one
           syncMode();
         } else extra = await carriedOver(account.client, account.gameId!);
-        if (asset) extra = { ...extra, assets: asset };
+        if (asset) extra = { ...extra, assets: { ...extra.assets, ...asset } };
+        const draft = await loadDraft(account.client, account.gameId!);
+        if (draft.thumbnail || draft.carousel.length) extra = { assets: { ...extra.assets, ...mediaAssets(draft) }, metadata: { ...extra.metadata, media: mediaMetadata(draft) } };
       } catch (e) {
         return fail(describeError(e, account.serverUrl));
       }
@@ -147,11 +151,24 @@ export function openPublishSheet(account: AccountController, prefs: PreferenceSt
         states.set(id, state);
         drawSteps();
       }, extra);
+      if (outcome.ok && account.gameId) clearDraft(account.gameId);
       if (outcome.ok) result.replaceChildren(card({ ...outcome.confirmation, created, ui: !!extra.assets }));
       else failure.textContent = `${PUBLISH_STEPS.find((s) => s.id === outcome.step)?.label} failed. ${outcome.reason}`;
       publish.textContent = outcome.ok ? 'Publish again' : 'Retry';
       publish.disabled = false;
     };
+
+    // Missing or new media: say so before publishing; never blocks.
+    const mediaNote = el('p', { class: 'sheet-note', role: 'status' });
+    const aboutLink = button('Add media...', () => openAboutPanel(account, account.gameId), { variant: 'small' });
+    aboutLink.hidden = true;
+    if (account.gameId) {
+      loadDraft(account.client, account.gameId).then((d) => {
+        const missing = missingMedia(d);
+        mediaNote.textContent = missing.length ? `Game page media: ${missing.join(' ')}` : d.dirty ? 'New media will be included in this version.' : '';
+        aboutLink.hidden = !missing.length && !d.dirty;
+      }).catch(() => { /* advisory only; publishing reports real failures */ });
+    }
 
     drawSteps();
     body.append(
@@ -159,7 +176,7 @@ export function openPublishSheet(account: AccountController, prefs: PreferenceSt
       el('div', { class: 'om-prop' }, [el('label', {}, ['Publish as']), el('div', { class: 'om-field' }, [mode])]),
       titleRow,
       el('div', { class: 'om-prop' }, [el('label', {}, ['ui.json (optional)']), el('div', { class: 'om-field' }, [uiFile])]),
-      blockers, steps, failure, result,
+      mediaNote, aboutLink, blockers, steps, failure, result,
       el('div', { class: 'sheet-actions' }, [button('Close', close), publish]),
     );
   });

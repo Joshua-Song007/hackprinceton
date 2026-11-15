@@ -38,7 +38,7 @@ export type PublishStepState = 'running' | 'done' | 'error';
 /** What the server confirmed after the verify step. */
 export interface PublishConfirmation { gameId: string; version: number; runMode: string; serverUrl: string; publishedAt: number }
 /** What the publish sheet adds to the project's version: the ui.json asset and `metadata.manifest`, which `Project.toVersion` does not carry. */
-export interface PublishExtra { assets?: Record<string, unknown>; metadata?: { manifest?: GameManifest } }
+export interface PublishExtra { assets?: Record<string, unknown>; metadata?: { manifest?: GameManifest; media?: unknown } }
 export type PublishOutcome = { ok: true; confirmation: PublishConfirmation } | { ok: false; step: PublishStepId; reason: string };
 
 /** JSON with object keys sorted, so a server that reorders keys (Postgres jsonb) still compares equal. */
