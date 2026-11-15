@@ -98,3 +98,16 @@ def test_a_rejected_submit_and_lookalike_instruction_paths_emit_nothing(tmp_path
     assert not translate_module._in_scripts(tmp_path, "/instructions.json.bak")
     assert not translate_module._in_scripts(tmp_path, "/scripts/../instructions.json/x")
     assert translate_module._in_scripts(tmp_path, "/instructions.json")
+
+
+def test_ui_controller_cues_and_text_assets_are_forwarded_and_binary_assets_skipped(tmp_path):
+    (tmp_path / "assets").mkdir()
+    (tmp_path / "ui.json").write_text("{}", encoding="utf-8")
+    (tmp_path / "pear-game.json").write_text('{"controller":{}}', encoding="utf-8")
+    (tmp_path / "assets" / "cue.svg").write_text("<svg/>", encoding="utf-8")
+    (tmp_path / "assets" / "beep.wav").write_bytes(b"\xff\xfe\x00")
+    state, events = new_state(), []
+    for n, path in enumerate(["/ui.json", "/pear-game.json", "/assets/cue.svg", "/assets/beep.wav", "/notes.md"]):
+        events += translate(updates((), ai(("write_file", {"file_path": path}, f"w{n}"))), tmp_path, state)
+        events += translate(updates((), ToolMessage(content="ok", tool_call_id=f"w{n}", name="write_file")), tmp_path, state)
+    assert [e["path"] for e in events] == ["ui.json", "pear-game.json", "assets/cue.svg"]
