@@ -19,6 +19,16 @@
 //   `on_player_join` for everyone already connected (its `ctx.state` starts empty). A player joining
 //   an already-live session joins that session whatever version they asked for.
 //   Every join, leave, inbound and outbound frame is also published to the debug bus (debug.rs).
+// - 14.x upgrade policy: `reload` (a newer version was published) restarts a lobby at once unless its script
+//   marked a match in progress by firing the reserved event `ctx.remote.fireAll("_match", {state:"start"})`
+//   (`"end"` clears it; the event is consumed here, never sent to players). A lobby in a match keeps its
+//   old host and stores the release; the next tick after `"end"` restarts it, or after PEAR_UPGRADE_GRACE_SECS
+//   (default 900) whichever is first. Latest release wins; an emptied session is dropped with it.
+// - Connection quality: the socket loop times each server ping's pong; when the rtt bucket changes
+//   (good < 150 ms, fair < 400 ms, poor) the host gets `on_remote(player, "_quality", {rttMs, quality})`.
+//   A client-sent `_quality` is dropped so scripts can trust it.
+// - Ghosts: a player with no inbound frame for PEAR_GHOST_SECS (default 15; pongs count) is a ghost; the game
+//   owner or a developer may kick one (`kick_ghost`, api/instances.rs); a live player is refused.
 // - Ops: `instances` / `close_lobby` / `kick` / `counts` serve api/instances.rs and api/status.rs; `admit`
 //   refuses a /play upgrade over PEAR_MAX_INSTANCES (503) or PEAR_MAX_PLAYERS_PER_INSTANCE (409).
 
@@ -61,6 +71,32 @@ const MAX_TIMER_MS: u64 = 3_600_000;
 const MAX_TIMERS: usize = 64;
 /// How often a connected socket asks its session to run due timers.
 const TICK: Duration = Duration::from_millis(50);
+/// Reserved script event that marks a match start/end for the upgrade policy.
+const MATCH_EVENT: &str = "_match";
+/// Reserved host event carrying a player's connection quality.
+const QUALITY_EVENT: &str = "_quality";
+
+fn env_secs(key: &str, default: u64) -> Duration {
+    Duration::from_secs(std::env::var(key).ok().and_then(|v| v.trim().parse().ok()).unwrap_or(default))
+}
+
+/// How long a pending upgrade waits for the match to end.
+fn upgrade_grace() -> Duration {
+    env_secs("PEAR_UPGRADE_GRACE_SECS", 900)
+}
+
+/// Silence after which a connected player counts as a ghost.
+pub fn ghost_after() -> Duration {
+    env_secs("PEAR_GHOST_SECS", 15)
+}
+
+fn quality_of(rtt_ms: u64) -> &'static str {
+    match rtt_ms {
+        0..=149 => "good",
+        150..=399 => "fair",
+        _ => "poor",
+    }
+}
 
 /// An event a server script sends out.
 #[derive(Debug, Clone, PartialEq)]
@@ -135,6 +171,15 @@ struct Player {
     conn: u64,
     name: String,
     tx: UnboundedSender<String>,
+    last_seen: Instant,
+    quality: Option<&'static str>,
+}
+
+/// Why `kick_ghost` did nothing.
+#[derive(Debug, PartialEq)]
+pub enum GhostKick {
+    NotFound,
+    Alive,
 }
 
 struct Timer {
@@ -153,6 +198,9 @@ struct Session {
     host: Box<dyn ScriptHost>,
     players: HashMap<String, Player>,
     timers: Vec<Timer>,
+    in_match: bool,
+    /// A release waiting for the match to end, and since when.
+    pending: Option<(Release, Instant)>,
 }
 
 impl Session {
@@ -168,12 +216,20 @@ impl Session {
                 Outgoing::Cancel { id } => self.timers.retain(|t| t.id != id),
                 Outgoing::Fire { player, name, data } => {
                     bus().publish(game_id, "out", json!({ "player": player, "name": name, "data": data }));
+                    if name == MATCH_EVENT {
+                        self.in_match = data["state"] == "start";
+                        continue;
+                    }
                     if let (Some(p), Some(text)) = (self.players.get(&player), encode(name, data)) {
                         let _ = p.tx.send(text);
                     }
                 }
                 Outgoing::FireAll { name, data } => {
                     bus().publish(game_id, "out", json!({ "player": null, "name": name, "data": data }));
+                    if name == MATCH_EVENT {
+                        self.in_match = data["state"] == "start";
+                        continue;
+                    }
                     if let Some(text) = encode(name, data) {
                         for p in self.players.values() {
                             let _ = p.tx.send(text.clone());
@@ -271,6 +327,8 @@ impl Registry {
             host: (self.factory)(game_id, release.as_ref().map_or(&[][..], |r| r.sources.as_slice())),
             players: HashMap::new(),
             timers: Vec::new(),
+            in_match: false,
+            pending: None,
         });
         if let Some(name) = name {
             session.host.set_player_name(player, name);
@@ -280,7 +338,7 @@ impl Registry {
         }
         let replaced = session
             .players
-            .insert(player.to_string(), Player { conn, name: name.unwrap_or_default().to_string(), tx })
+            .insert(player.to_string(), Player { conn, name: name.unwrap_or_default().to_string(), tx, last_seen: Instant::now(), quality: None })
             .is_some();
         if !replaced {
             bus().publish(game_id, "join", json!({ "player": player }));
@@ -295,17 +353,26 @@ impl Registry {
 
     /// Restarts every live lobby of a game onto a newly published version. Players get a `_reload` frame,
     /// then the new host sees every connected player join. No live session: nothing to do.
+    /// A lobby whose script marked a match in progress (`_match` start) keeps its host until the match
+    /// ends (see `tick`) instead of restarting mid-match.
     pub fn reload(&self, game_id: &str, release: Release) {
         let mut map = self.lock();
         let keys: Vec<String> = map.iter().filter(|(_, s)| s.game == game_id).map(|(k, _)| k.clone()).collect();
         for key in keys {
-            Self::reload_one(&mut map, &self.factory, &key, &release);
+            let Some(s) = map.get_mut(&key) else { continue };
+            if s.in_match {
+                s.pending = Some((Release { version: release.version, sources: release.sources.clone() }, Instant::now()));
+            } else {
+                Self::reload_one(&mut map, &self.factory, &key, &release);
+            }
         }
     }
 
     fn reload_one(map: &mut HashMap<String, Session>, factory: &HostFactory, game_id: &str, release: &Release) {
         let Some(session) = map.get_mut(game_id) else { return };
         session.version = Some(release.version);
+        session.pending = None;
+        session.in_match = false;
         bus().publish(game_id, "reload", json!({ "version": release.version }));
         session.host = factory(game_id, &release.sources);
         session.timers.clear(); // the old host's timers belong to the old scripts
@@ -442,6 +509,12 @@ impl Registry {
             return;
         }
         session.last_activity_at = crate::memstore::now_rfc3339();
+        if let Some(p) = session.players.get_mut(player) {
+            p.last_seen = Instant::now();
+        }
+        if frame.name == QUALITY_EVENT {
+            return; // host-only event: a client cannot spoof it
+        }
         bus().publish(game_id, "in", json!({ "player": player, "name": frame.name, "data": frame.data }));
         let out = session.host.on_remote(player, &frame.name, &frame.data);
         session.deliver(game_id, out);
@@ -451,6 +524,13 @@ impl Registry {
     /// running wait for a later tick, so a script cannot spin the loop with `ctx.after(0)`.
     pub fn tick(&self, game_id: &str, now: Instant) {
         let mut map = self.lock();
+        let Some(session) = map.get_mut(game_id) else { return };
+        let overdue = session.pending.as_ref().is_some_and(|(_, since)| now.saturating_duration_since(*since) >= upgrade_grace());
+        if overdue || !session.in_match {
+            if let Some((release, _)) = session.pending.take() {
+                Self::reload_one(&mut map, &self.factory, game_id, &release);
+            }
+        }
         let Some(session) = map.get_mut(game_id) else { return };
         let mut due: Vec<Timer> = Vec::new();
         let mut i = 0;
@@ -468,6 +548,41 @@ impl Registry {
         }
         let out = session.host.poll();
         session.deliver(game_id, out);
+    }
+
+    /// A frame other than text (ping, binary) arrived on `conn`: the player is alive.
+    pub fn seen(&self, game_id: &str, player: &str, conn: u64) {
+        if let Some(p) = self.lock().get_mut(game_id).and_then(|s| s.players.get_mut(player)).filter(|p| p.conn == conn) {
+            p.last_seen = Instant::now();
+        }
+    }
+
+    /// A pong came back `rtt` after its ping: refreshes liveness and tells the host when the quality bucket changes.
+    pub fn pong(&self, game_id: &str, player: &str, conn: u64, rtt: Duration) {
+        let mut map = self.lock();
+        let Some(session) = map.get_mut(game_id) else { return };
+        let Some(p) = session.players.get_mut(player).filter(|p| p.conn == conn) else { return };
+        p.last_seen = Instant::now();
+        let ms = rtt.as_millis() as u64;
+        let q = quality_of(ms);
+        if p.quality == Some(q) {
+            return;
+        }
+        p.quality = Some(q);
+        let out = session.host.on_remote(player, QUALITY_EVENT, &json!({ "rttMs": ms, "quality": q }));
+        session.deliver(game_id, out);
+    }
+
+    /// Owner kick of a player silent for `stale_after` as of `now`; a live player is refused.
+    pub fn kick_ghost(&self, game_id: &str, lobby: &str, player: &str, stale_after: Duration, now: Instant) -> Result<(), GhostKick> {
+        let key = session_key(game_id, lobby);
+        let mut map = self.lock();
+        let p = map.get(&key).and_then(|s| s.players.get(player)).ok_or(GhostKick::NotFound)?;
+        if now.saturating_duration_since(p.last_seen) < stale_after {
+            return Err(GhostKick::Alive);
+        }
+        Self::remove_player(&mut map, &key, player);
+        Ok(())
     }
 
     /// The `(game id, lobby)` this player is connected to right now, if any (live sockets only; nothing is stored).
@@ -519,6 +634,11 @@ pub fn close_lobby(game_id: &str, lobby: &str) -> bool {
 /// Operator kick of one player (called by instances.rs).
 pub fn kick(game_id: &str, lobby: &str, player: &str) -> bool {
     registry().kick(game_id, lobby, player)
+}
+
+/// Owner kick of a ghost player (called by instances.rs).
+pub fn kick_ghost(game_id: &str, lobby: &str, player: &str) -> Result<(), GhostKick> {
+    registry().kick_ghost(game_id, lobby, player, ghost_after(), Instant::now())
 }
 
 /// Ends every live lobby of a game that was just deleted (called by games.rs).
@@ -586,6 +706,7 @@ async fn run_socket(mut socket: WebSocket, game_id: String, player: String, name
     let mut ticker = tokio::time::interval(TICK);
     let mut pinger = tokio::time::interval(hb.ping);
     let mut last_seen = Instant::now();
+    let mut pinged: Option<Instant> = None;
     loop {
         tokio::select! {
             _ = ticker.tick() => reg.tick(&game_id, Instant::now()),
@@ -593,6 +714,7 @@ async fn run_socket(mut socket: WebSocket, game_id: String, player: String, name
                 if last_seen.elapsed() >= hb.idle || socket.send(Message::Ping(Vec::new().into())).await.is_err() {
                     break; // silent socket (locked / backgrounded phone): free the slot
                 }
+                pinged = Some(Instant::now());
             }
             out = rx.recv() => match out {
                 Some(text) => {
@@ -607,7 +729,11 @@ async fn run_socket(mut socket: WebSocket, game_id: String, player: String, name
                 match inc {
                     Some(Ok(Message::Text(t))) => reg.remote(&game_id, &player, conn, t.as_str()),
                     Some(Ok(Message::Close(_))) | Some(Err(_)) | None => break,
-                    Some(Ok(_)) => {} // binary / ping / pong only refresh last_seen
+                    Some(Ok(Message::Pong(_))) => match pinged.take() {
+                        Some(at) => reg.pong(&game_id, &player, conn, at.elapsed()),
+                        None => reg.seen(&game_id, &player, conn),
+                    },
+                    Some(Ok(_)) => reg.seen(&game_id, &player, conn), // binary / ping only refresh last_seen
                 }
             },
         }
@@ -654,6 +780,8 @@ mod tests {
             self.log.lock().unwrap().push(format!("remote:{player}:{name}"));
             if name == "all" {
                 vec![Outgoing::FireAll { name: "hit".into(), data: data.clone() }]
+            } else if name == "mstart" || name == "mend" {
+                vec![Outgoing::FireAll { name: "_match".into(), data: json!({ "state": if name == "mstart" { "start" } else { "end" } }) }]
             } else if name == "arm" {
                 vec![Outgoing::After { id: 7, ms: 100, tag: "t".into(), data: data.clone() }]
             } else if name == "disarm" {
@@ -865,6 +993,75 @@ mod tests {
         drain(&mut a);
         r.tick("g", Instant::now() + Duration::from_secs(5));
         assert!(drain(&mut a).is_empty());
+    }
+
+    fn names(v: Vec<Value>) -> Vec<String> {
+        v.iter().map(|f| f["name"].as_str().unwrap().to_string()).collect()
+    }
+
+    #[test]
+    fn upgrade_waits_for_the_match_to_end() {
+        let (r, _) = reg();
+        let (ca, mut a) = player(&r, "g", "a");
+        r.remote("g", "a", ca, r#"{"name":"mstart"}"#);
+        assert!(!names(drain(&mut a)).contains(&"_match".to_string()), "reserved event is not forwarded");
+        r.reload("g", Release { version: 2, sources: vec![] });
+        r.tick("g", Instant::now());
+        assert!(!names(drain(&mut a)).contains(&"_reload".to_string()), "no restart mid-match");
+        assert_eq!(r.instances()[0].version, None);
+        r.remote("g", "a", ca, r#"{"name":"mend"}"#);
+        r.tick("g", Instant::now());
+        assert!(names(drain(&mut a)).contains(&"_reload".to_string()));
+        assert_eq!(r.instances()[0].version, Some(2));
+        r.tick("g", Instant::now());
+        assert!(drain(&mut a).is_empty(), "applied once");
+    }
+
+    #[test]
+    fn upgrade_latest_release_wins_and_grace_forces_it() {
+        let (r, _) = reg();
+        let (ca, mut a) = player(&r, "g", "a");
+        r.remote("g", "a", ca, r#"{"name":"mstart"}"#);
+        r.reload("g", Release { version: 2, sources: vec![] });
+        r.reload("g", Release { version: 3, sources: vec![] });
+        r.tick("g", Instant::now() + upgrade_grace() + Duration::from_secs(1));
+        assert_eq!(r.instances()[0].version, Some(3));
+        let reloads: Vec<_> = drain(&mut a).into_iter().filter(|f| f["name"] == "_reload").collect();
+        assert_eq!(reloads.len(), 1);
+    }
+
+    #[test]
+    fn quality_reaches_the_host_on_bucket_change_and_clients_cannot_spoof_it() {
+        let (r, log) = reg();
+        let (ca, _a) = player(&r, "g", "a");
+        let count = || log.lock().unwrap().iter().filter(|l| *l == "remote:a:_quality").count();
+        r.pong("g", "a", ca, Duration::from_millis(40));
+        r.pong("g", "a", ca, Duration::from_millis(90));
+        assert_eq!(count(), 1);
+        r.pong("g", "a", ca, Duration::from_millis(500));
+        assert_eq!(count(), 2);
+        r.remote("g", "a", ca, r#"{"name":"_quality","data":{"quality":"good"}}"#);
+        assert_eq!(count(), 2);
+        assert_eq!((quality_of(149), quality_of(150), quality_of(399), quality_of(400)), ("good", "fair", "fair", "poor"));
+    }
+
+    #[test]
+    fn ghost_kick_refuses_a_live_player_and_removes_a_silent_one() {
+        let (r, log) = reg();
+        let (_ca, mut a) = player(&r, &session_key("g", "OPEN"), "a");
+        let (_cb, _b) = player(&r, &session_key("g", "OPEN"), "b");
+        let stale = Duration::from_secs(15);
+        let now = Instant::now();
+        assert_eq!(r.kick_ghost("g", "OPEN", "a", stale, now), Err(GhostKick::Alive));
+        assert_eq!(r.kick_ghost("g", "OPEN", "x", stale, now), Err(GhostKick::NotFound));
+        assert_eq!(r.kick_ghost("g", "NOPE", "a", stale, now), Err(GhostKick::NotFound));
+        // b keeps talking, a goes quiet
+        r.seen("g/OPEN", "b", _cb);
+        let later = Instant::now() + Duration::from_secs(16);
+        assert_eq!(r.kick_ghost("g", "OPEN", "a", stale, later), Ok(()));
+        assert!(log.lock().unwrap().contains(&"leave:a".to_string()));
+        assert_eq!(r.player_count("g/OPEN"), 1);
+        assert!(matches!(a.try_recv(), Ok(_) | Err(tokio::sync::mpsc::error::TryRecvError::Disconnected)));
     }
 
     #[test]
