@@ -16,6 +16,10 @@ sys.dont_write_bytecode = True
 spec = importlib.util.spec_from_file_location('autonomy', Path(__file__).with_name('autonomy.py'))
 a = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(a)
+ci_spec = importlib.util.spec_from_file_location('ci_scope', Path(__file__).with_name('ci-scope.py'))
+ci = importlib.util.module_from_spec(ci_spec)
+ci_spec.loader.exec_module(ci)
+PASSING_CI = json.dumps([{'bucket': 'pass', 'name': name} for name in ('agent-dod', 'hygiene', 'verify')])
 
 
 def state():
@@ -142,8 +146,28 @@ class Rules(unittest.TestCase):
         for code, checks in [(8, '[{"bucket":"pending","name":"agent-dod"}]'), (1, '[{"bucket":"fail","name":"agent-dod"}]'), (0, '[]'), (0, '[{"bucket":"pass","name":"unrelated"}]')]:
             with patch.object(a, 'run', return_value=subprocess.CompletedProcess([], code, checks, '')):
                 self.assertFalse(a.passing_ci('1'))
-        with patch.object(a, 'run', return_value=subprocess.CompletedProcess([], 0, '[{"bucket":"pass","name":"agent-dod"}]', '')):
+        with patch.object(a, 'run', return_value=subprocess.CompletedProcess([], 0, PASSING_CI, '')):
             self.assertTrue(a.passing_ci('1'))
+
+    def test_only_selected_component_skips_are_allowed(self):
+        checks = json.loads(PASSING_CI) + [{'bucket': 'skipping', 'name': 'swift'}]
+        with patch.object(a, 'run', return_value=subprocess.CompletedProcess([], 0, json.dumps(checks), '')):
+            self.assertTrue(a.passing_ci('1'))
+        checks[-1]['name'] = 'security'
+        with patch.object(a, 'run', return_value=subprocess.CompletedProcess([], 0, json.dumps(checks), '')):
+            self.assertFalse(a.passing_ci('1'))
+        with patch.object(a, 'run', return_value=subprocess.CompletedProcess([], 0, '[{"bucket":"pass","name":"agent-dod"}]', '')):
+            self.assertFalse(a.passing_ci('1'))
+
+    def test_ci_scope_docs_and_component_dependencies(self):
+        self.assertFalse(any(ci.scope(['docs/agents/worker-prompt.md']).values()))
+        self.assertEqual(ci.scope(['Backend/src/main.rs']), {'swift': False, 'backend': True, 'nonswift': False})
+        self.assertTrue(ci.scope(['Packages/OmniCore/Sources/Core.swift'])['swift'])
+        for path in ('Packages/OmniScript/Sources/OmniScript/Resources/prelude.js', 'Games/Flagship/scripts/game.js'):
+            selected = ci.scope([path])
+            self.assertTrue(selected['backend'])
+            self.assertTrue(selected['nonswift'])
+        self.assertFalse(any(ci.scope(['Backend/src/main.rs', 'Packages/OmniCore/Sources/Core.swift'], managed=True).values()))
 
     def test_one_broken_pr_does_not_starve_other_reviews_or_planner(self):
         store = MemoryStore()
@@ -371,7 +395,7 @@ class GitIntegration(unittest.TestCase):
         original_run = a.run
         def local_run(args, **kwargs):
             if args[:3] == ['gh', 'pr', 'checks']:
-                return subprocess.CompletedProcess(args, 0, '[{"bucket":"pass","name":"agent-dod"}]', '')
+                return subprocess.CompletedProcess(args, 0, PASSING_CI, '')
             if args[:4] == ['git', 'fetch', 'origin', 'pull/2/head']:
                 sha = store.read()[1]['claims']['1']['sha']
                 subprocess.run(['git', '--git-dir', str(self.remote), 'update-ref', 'refs/pull/2/head', sha], check=True)

@@ -2,6 +2,17 @@
 
 > V2: use `docs/agents/autonomy-setup.md`, the generated context pack, and the small role prompts. `loop.sh` defaults to a deterministic worker; only the designated laptop opts into orchestration. Models never load the legacy read-first rules below. No direct main pushes or worker merges are permitted. The remaining rules apply only to explicit legacy `run.sh` / `OMNI_LEGACY=1` sessions; do not mix them with V2.
 
+## V2 parallel lanes
+
+While the loop is active, the sole orchestrator owns repository health and autonomous resolution of ordinary product decisions, dependencies, CI and scoped repairs within the human overview and permissions actually granted. It may configure Actions, labels, variables and protection to enforce existing gates, never create privileges, weaken gates or print/expose/relax secrets. Missing admin access/credentials is an external blocker recorded once, not a recurring permission-issue loop.
+
+1. The orchestrator decomposes work into nonoverlapping, dependency-ready issue briefs with exact files, caller/test/fixture paths, acceptance criteria and meaningful checks; shared files serialize dependent work.
+2. Deterministic worker loops claim isolated lanes/worktrees. Workers read only their brief and named files; no full plans, `gh`, pushes to main, permission management, scope expansion, human chatter or orchestration of each other. Blockers/checkpoints go in structured reports to the orchestrator.
+3. Automated CI and a fresh reviewer validate the current SHA. Manual PRs run relevant component checks; autonomy PRs run independent brief DoD once on a platform-appropriate runner plus cheap hygiene, not duplicate product builds. Runtime PR tests use quick Linux; broad OS matrices are manual/nightly.
+4. Only the runtime merges after required gates pass. The orchestrator diagnoses failures and uses bounded retries; exhausted issues remain blocked while genuinely smaller linked repairs are decomposed/reassigned without resetting failed budgets. Never spin, bypass gates or force an unsafe merge. No routine human approval; human-only overview/`.claude/` rules remain intact.
+
+## Legacy rules (explicit opt-in only)
+
 Applies to agents launched via `.agents/scripts/run.sh` (the laptop orchestrator and its workers) and their subagents. Where these rules conflict with `.claude/instructions.md`, these win (see its `## Autonomous Mode`). Manual sessions never read this file.
 
 ## Roles and models
