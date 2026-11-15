@@ -9,11 +9,12 @@ import { renderSignupForm } from './signupScreen';
 
 export function renderLoginScreen(root: HTMLElement, account: AccountController, prefs: PreferenceStore, onDone: () => void): void {
   const server = button('', () => openSettingsSheet(prefs), { variant: 'borderless' });
-  const showServer = () => { server.textContent = `Server: ${account.serverUrl || 'this page'} · Change`; server.title = 'Change the server in Settings'; };
+  server.title = 'Change the server in Settings';
+  const showServer = () => { server.textContent = `Server: ${account.serverUrl || 'this page'} · Change`; };
   showServer();
   prefs.onChange(showServer);
-  const user = el('input', { type: 'text', 'aria-label': 'Username', placeholder: 'Username', spellcheck: 'false', autocomplete: 'username' });
-  const pass = el('input', { type: 'password', 'aria-label': 'Password', placeholder: 'Password', autocomplete: 'current-password' });
+  const user = el('input', { type: 'text', 'aria-label': 'Username', spellcheck: 'false', autocomplete: 'username' });
+  const pass = el('input', { type: 'password', 'aria-label': 'Password', autocomplete: 'current-password' });
   const error = el('p', { class: 'sheet-error', role: 'alert' });
   const go = async () => {
     error.textContent = '';
@@ -46,6 +47,7 @@ export function renderLoginScreen(root: HTMLElement, account: AccountController,
   root.replaceChildren(el('div', { class: 'scr-card scr-login' }, [
     el('img', { src: '/pear-lockup.svg', alt: 'Pear', width: '160', class: 'scr-logo scr-logo-dark' }),
     el('img', { src: '/pear-lockup-emerald.svg', alt: 'Pear', width: '160', class: 'scr-logo scr-logo-light' }),
+    el('p', { class: 'scr-product', 'aria-hidden': 'true' }, ['Studio']),
     el('h1', { class: 'sr-only' }, ['Pear Studio']),
     el('div', { class: 'sheet-actions' }, tabs),
     ...panes,

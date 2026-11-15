@@ -298,3 +298,17 @@ Paths: `Web/studio/src/projectsScreen.ts`, `Web/studio/src/recent.ts`, `Web/stud
 - [x] `Web/studio/src/projectsScreen.ts`, `Web/studio/src/recent.ts`
 - [x] `Web/studio/src/theme.css`
 - [x] `Web/studio/test/screens.test.ts`
+
+### 2026-11-15 — Sign-in screen polish
+Paths: `Web/studio/src/loginScreen.ts`, `Web/studio/src/theme.css`, `Web/studio/index.html`, `Web/studio/public/favicon-32.png`, `Web/studio/public/favicon.ico`
+
+Staged against the old two-form login (name-only "Sign in" plus "Developer sign-in"); the login screen was replaced from outside this session (username and password sign-in with a "Create account" tab, the name-only form gone from the UI) before apply, so the "which path" copy was dropped and the rest was applied to the new screen. The form is one column with labels above the fields, equal-width buttons, an inner left padding in the fields, and a gap between rows. Error lines on the login and Projects screens are now red (`.sheet-error` was only styled inside dialogs). A small "STUDIO" label sits under the lockup, the server line reads "Server: <url> · Change" with an underline and a tooltip, and the sign-in fields no longer repeat their labels as placeholders. For Safari, which does not use SVG favicons and caches icons per host, the page also links a 32 px PNG (heavy-outline Studio icon) and `/favicon.ico` is served (copied from the Tauri icon). Not checked in a browser; the tab icon may need Safari's icon cache cleared. The signup form's own placeholders and the "Sign in" tab / "Sign in" button sharing a label were left alone.
+- [x] `Web/studio/src/loginScreen.ts`, `Web/studio/src/theme.css`
+- [x] `Web/studio/index.html`, `Web/studio/public/favicon-32.png`, `Web/studio/public/favicon.ico`
+
+### 2026-11-15 — Explorer clarity
+Paths: `Web/studio/src/explorer.ts`, `Web/studio/src/explorerText.ts`, `Web/studio/src/theme.css`, `Web/studio/test/explorerText.test.ts`
+
+The scene objects named after a device ("iPhone", "iPhone 2") are the script holders `addHandlerScript` creates, and their rows only said "script". Entity rows now show the script files they hold ("tap.js"), and client script rows show "used by iPhone" (up to two names, then "+N"); the words are pure functions in `explorerText.ts`. Script rows lost the always-visible Rename and Delete buttons: every object and script row has one "⋯" button that opens the row's menu (Open / Rename / Delete for scripts, the existing object menu for objects); the click does not reach the row handler, so the menu stays anchored, and Shift+F10 / the menu key now also opens the script menu. The delete-script confirmation uses the danger button. Empty Scene, Client scripts and Server scripts lists show a one-line hint, and the Add buttons read "Add object", "Add peripheral" and "Add script" (screen-reader names contain the visible text). Not changed: existing entity names, the peripheral blurb (it would overflow a 240 px panel), row height. Not checked in a browser.
+- [x] `Web/studio/src/explorerText.ts`, `Web/studio/test/explorerText.test.ts`
+- [x] `Web/studio/src/explorer.ts`, `Web/studio/src/theme.css`
