@@ -9,9 +9,13 @@ FILES (save_version {id, files}; paths are keys, values are strings)
   ui.json (or any other .json/.html/.css/.js name)   stored as a version ASSET (PearUI screens, scenario.json)
 Scripts: \`export default (function () { return { onRemote(ctx, player, name, data) {...} }; })();\` or
 \`export default serverScript({...})\` / \`script({...})\`. The first statement must be the \`export default\`.
-Server handlers: onPlayerJoin(ctx, player) onPlayerLeave(ctx, player) onRemote(ctx, player, name, data) onTimer(ctx, tag, data)
+Server handlers: onPlayerJoin(ctx, player) onPlayerLeave(ctx, player) onRemote(ctx, player, name, data) onTimer(ctx, tag, data, playerId?)
 Server ctx: ctx.state (plain object, lives in the session) ctx.remote.fire(playerId, name, data) ctx.remote.fireAll(name, data)
-  ctx.now() ctx.after(ms, tag, data)->id (50ms..1h, max 64 pending) ctx.cancel(id) console.log
+  ctx.now() ctx.after(ms, tag, data, playerId?)->id (50ms..1h, max 64 pending) ctx.cancel(id)->true if it was still pending, false if fired/cancelled/unknown (never throws) console.log
+  Private send: ctx.remote.fire(playerId, name, data) reaches ONE player only (use it for secrets like hunter positions or roles); fireAll reaches everyone.
+  ctx.lobby (lobby code string, "OPEN" by default) ctx.players() -> [{id, name, lastSeen}] (connected players in join order; lastSeen = ms epoch of last join/remote event, compare with ctx.now())
+  Per-player timer: ctx.after(ms, tag, data, playerId) calls onTimer(ctx, tag, data, playerId) and is cancelled automatically when that player leaves (no player = lobby-wide timer, 3 args).
+  Phases: ctx.enterPhase(name)->ms epoch (record it each time the game changes phase) ctx.phaseEnteredAt(name?)->ms epoch the current (or named) phase was last entered, null if never; use it to show countdowns after a reconnect.
 Client handlers: onLookAt onGesture(self,ctx,g) onHeartRate onRaycastHit onTriggerEnter onTriggerExit onRemote(self,ctx,name,data) onTick(self,ctx,dt)
 Client ctx: ctx.remote.fire(name,data) ctx.haptic(pattern,intensity) ctx.player.id/role ctx.position ctx.intensity self.audio.play/speak
 Scripts see only these APIs. No fs, network or source access.
