@@ -28,7 +28,8 @@ import { RunController, ViewportHost, createViewportPanel } from './run';
 import { announce, button, el, openMenu, openSheet, promptSheet, rovingToolbar, type MenuItem } from './ui';
 import { installShortcuts, mod, mountMenuBar } from './menubar';
 import { renderLoginScreen } from './loginScreen';
-import { livePreviewPanel } from './livePreview/panel';
+import { livePreviewPanel, logToLivePreview } from './livePreview/panel';
+import { openPromptGameSheet } from './promptGame';
 import { lobbiesPanel } from './lobbiesPanel';
 import { checkPanel } from './checkPanel';
 import { renderProjectsScreen } from './projectsScreen';
@@ -196,6 +197,13 @@ const startNewGame = (template?: TemplateId) => openNewGameSheet((snapshot) => v
   showScreen('editor');
   layout.show('instructions');
 }), template);
+
+// The game the prompt agent created: shown in Live Preview (the panel connects when the selected game changes).
+const openPromptedGame = async (gameId: string) => {
+  layout.show('livePreview');
+  await account.refreshGames().catch(() => undefined);
+  account.select(gameId);
+};
 
 // Screens: login and projects are full-window overlays; the editor stays mounted underneath.
 const screenEl = document.getElementById('screen')!;
@@ -390,6 +398,7 @@ mountMenuBar(document.getElementById('menubar')!, [
     items: () => [
       { label: 'Projects...', run: () => showScreen('projects') },
       { label: 'New game...', run: () => startNewGame() },
+      { label: 'New game from prompt...', run: () => { layout.show('livePreview'); openPromptGameSheet({ url: () => marketplace.runtimeUrlOf('langchain-deepagents')?.ws ?? null, log: logToLivePreview, openGame: openPromptedGame, openModelKey: () => layout.show(MARKETPLACE_PANEL_ID) }); } },
       ...TEMPLATES.map((t) => ({ label: `New game from template: ${t.label}`, run: () => startNewGame(t.id) })),
       { label: 'Open from cloud...', run: () => openAccountSheet(account, prefs, { project, openSnapshot }) },
       { label: 'Open file...', shortcut: mod('Ctrl+O'), run: () => void openFile() },

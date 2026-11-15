@@ -105,3 +105,18 @@ def test_ui_controller_cues_and_assets_are_forwarded(tmp_path):
         assert translate_module._in_scripts(tmp_path, path)
     assert not translate_module._in_scripts(tmp_path, "/assets/../AGENTS.md")
     assert not translate_module._in_scripts(tmp_path, "/ui.json.bak")
+
+
+def test_game_mode_streams_tool_calls_and_results(tmp_path):
+    state = new_state(True)
+    events = translate(updates((), ai(("run_scenario", {"id": "g1"}, "t1"), ("write_todos", {"todos": []}, "t2"))), tmp_path, state)
+    assert [e["type"] for e in events] == ["tool_call", "todos"]
+    assert events[0] == {"type": "tool_call", "name": "run_scenario", "args": {"id": "g1"}}
+    events = translate(updates((), ToolMessage(content='{"report":{"ok":false}}', tool_call_id="t1", name="run_scenario")), tmp_path, state)
+    assert events == [{"type": "tool_result", "name": "run_scenario", "ok": True, "text": '{"report":{"ok":false}}'}]
+    err = translate(updates((), ai(("validate_game", {}, "t3"))), tmp_path, state) and translate(updates((), ToolMessage(content="Error: bad", tool_call_id="t3", name="validate_game")), tmp_path, state)
+    assert err[0]["ok"] is False
+
+
+def test_other_modes_do_not_stream_tool_calls(tmp_path):
+    assert [e["type"] for e in translate(updates((), ai(("kit_reference", {}, "t1"))), tmp_path, new_state())] == []

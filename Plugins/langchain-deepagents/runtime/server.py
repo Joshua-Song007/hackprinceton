@@ -203,7 +203,7 @@ async def run_prompt(message: dict, project_dir: Path, model=None, env_model=Tru
                 prepare_project(project_dir, message.get("project") or {}, mode)
                 tools = safety.guard_publish(await pear_tools.load_tools(), message.get("approvePublish")) if mode == "game" else None
                 agent = build_agent(project_dir, model, mode, tools)
-                state = new_state()
+                state = new_state(mode == "game")
                 async for chunk in agent.astream(
                     {"messages": [{"role": "user", "content": message["text"]}]},
                     stream_mode=["updates", "messages"],
