@@ -34,6 +34,7 @@ from websockets.exceptions import ConnectionClosed
 import instructions as game_instructions
 import pear_tools
 import players
+import tools as game_tools
 from translate import new_state, translate
 
 PLUGIN_DIR = Path(__file__).resolve().parent.parent
@@ -144,7 +145,7 @@ def build_agent(project_dir: Path, model=None, mode: str = "scripts", tools=None
     model = resolve_model(model)
     if mode == "instructions":
         return game_instructions.build_agent(project_dir, model)
-    extra = {"tools": tools or [], "system_prompt": GAME_PROMPT} if mode == "game" else {}
+    extra = {"tools": tools or [], "system_prompt": GAME_PROMPT} if mode == "game" else {"tools": game_tools.make_tools(project_dir)}
     # The subagents specs carry no model, so they inherit this one.
     return create_deep_agent(
         **extra,

@@ -98,3 +98,10 @@ def test_a_rejected_submit_and_lookalike_instruction_paths_emit_nothing(tmp_path
     assert not translate_module._in_scripts(tmp_path, "/instructions.json.bak")
     assert not translate_module._in_scripts(tmp_path, "/scripts/../instructions.json/x")
     assert translate_module._in_scripts(tmp_path, "/instructions.json")
+
+
+def test_ui_controller_cues_and_assets_are_forwarded(tmp_path):
+    for path in ("/ui.json", "/controller.json", "/cues.json", "/assets/hit.png"):
+        assert translate_module._in_scripts(tmp_path, path)
+    assert not translate_module._in_scripts(tmp_path, "/assets/../AGENTS.md")
+    assert not translate_module._in_scripts(tmp_path, "/ui.json.bak")
