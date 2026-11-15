@@ -8,8 +8,8 @@ on:
     tags: ['studio-v*']
   workflow_dispatch:
     inputs:
-      skip_updater:
-        description: Build installers without signed updater artifacts (use while TAURI_SIGNING_PRIVATE_KEY is broken)
+      unsigned:
+        description: Unsigned build: no updater artifacts and no code-signing secrets (use while those secrets are broken)
         type: boolean
         default: false
 permissions:
@@ -28,16 +28,16 @@ jobs:
             args: --target universal-apple-darwin
     runs-on: ${{ matrix.os }}
     env:
-      TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-      WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
-      WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
-      APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-      APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-      APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
-      APPLE_ID: ${{ secrets.APPLE_ID }}
-      APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
-      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      TAURI_SIGNING_PRIVATE_KEY: ${{ !inputs.unsigned && secrets.TAURI_SIGNING_PRIVATE_KEY || '' }}
+      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ !inputs.unsigned && secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD || '' }}
+      WINDOWS_CERTIFICATE: ${{ !inputs.unsigned && secrets.WINDOWS_CERTIFICATE || '' }}
+      WINDOWS_CERTIFICATE_PASSWORD: ${{ !inputs.unsigned && secrets.WINDOWS_CERTIFICATE_PASSWORD || '' }}
+      APPLE_CERTIFICATE: ${{ !inputs.unsigned && secrets.APPLE_CERTIFICATE || '' }}
+      APPLE_CERTIFICATE_PASSWORD: ${{ !inputs.unsigned && secrets.APPLE_CERTIFICATE_PASSWORD || '' }}
+      APPLE_SIGNING_IDENTITY: ${{ !inputs.unsigned && secrets.APPLE_SIGNING_IDENTITY || '' }}
+      APPLE_ID: ${{ !inputs.unsigned && secrets.APPLE_ID || '' }}
+      APPLE_PASSWORD: ${{ !inputs.unsigned && secrets.APPLE_PASSWORD || '' }}
+      APPLE_TEAM_ID: ${{ !inputs.unsigned && secrets.APPLE_TEAM_ID || '' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -76,8 +76,8 @@ jobs:
           tagName: ${{ github.ref_name }}
           releaseName: Pear Studio __VERSION__
           releaseDraft: false
-          includeUpdaterJson: ${{ !inputs.skip_updater }}
-          args: ${{ matrix.args }} ${{ inputs.skip_updater && '--config src-tauri/tauri.no-updater.conf.json' || '' }}
+          includeUpdaterJson: ${{ !inputs.unsigned }}
+          args: ${{ matrix.args }} ${{ inputs.unsigned && '--config src-tauri/tauri.no-updater.conf.json' || '' }}
   # Pear Player for Mac, attached to the same release. iOS needs a signed App Store/TestFlight build, so it is not here.
   player-mac:
     needs: release
