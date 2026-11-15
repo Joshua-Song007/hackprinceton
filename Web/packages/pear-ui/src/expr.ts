@@ -13,6 +13,7 @@ function literal(s: string): unknown {
 export function lookup(scope: unknown, path: string): unknown {
   let cur: unknown = scope;
   for (const key of path.split('.')) {
+    if (key === 'length' && (Array.isArray(cur) || typeof cur === 'string')) return cur.length;
     if (cur === null || cur === undefined || typeof cur !== 'object') return undefined;
     cur = (cur as Record<string, unknown>)[key];
   }

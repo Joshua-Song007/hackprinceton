@@ -12,6 +12,8 @@ export default (function () {
   const GIVE_UP_MS = 10000; // fire phase with no valid raise from either phone ends as a tie
   const REPORT_WINDOW_MS = 400; // after the first valid raise, wait this long for the other phone's (lower) time
   const IDLE_KICK_MS = 45000; // lobby/matchOver: a phone that has not readied this long after the other did loses its slot to the queue
+  const AIM_RAISE_DEG = 60; // PearUI clients stream `aim {pitch}` instead of detecting raises: same 60 up / 45 down hysteresis as the native detector, applied here
+  const AIM_LOWER_DEG = 45;
   const ROUND_OVER_MIN_MS = 2500; // roundOver lasts at least this long; then the next countdown starts once both phones are lowered
 
   function init(ctx) {
@@ -68,6 +70,19 @@ export default (function () {
         return { id: id, name: p.name, ready: p.ready, role: p.role, raised: !!p.raised, idleKickAt: idle };
       }),
       needs: needs(ctx),
+    });
+    // Additive "view" event for PearUI screens (they cannot index maps or format): the same facts as "state", pre-shaped for display.
+    const st = ctx.state, nm = function (id) { return st.players[id] ? st.players[id].name : id; };
+    ctx.remote.fireAll("view", {
+      players: Object.keys(st.players).map(function (id) {
+        const p = st.players[id];
+        const idle = st.idle && st.idle.id === id ? st.idle.at : null;
+        return { id: id, name: p.name, ready: p.ready, role: p.role, raised: !!p.raised, idleKickAt: idle, score: st.scores[id] || 0, queuePos: st.queue.indexOf(id) + 1, lastWin: p.lastWin || 0 };
+      }),
+      queueNames: st.queue.map(nm).join(", "),
+      countdownEndsAt: st.countdownEnd || null,
+      last: st.last || null,
+      match: st.matchInfo || null,
     });
   }
 
@@ -172,6 +187,7 @@ export default (function () {
     ctx.state.phase = "countdown";
     ctx.state.reactions = [];
     ctx.state.nextOk = false;
+    ctx.state.countdownEnd = ctx.now() + COUNTDOWN_MS;
     ctx.state.timer = ctx.after(COUNTDOWN_MS, "countdown", { round: ctx.state.round });
     ctx.remote.fireAll("countdown", { round: ctx.state.round, matchRound: ctx.state.matchRound, ms: COUNTDOWN_MS });
   }
@@ -192,9 +208,25 @@ export default (function () {
     // winner is null on a tie: nobody scores and the round is simply played again.
     if (winner === null) reason = "tie";
     else ctx.state.scores[winner] = (ctx.state.scores[winner] || 0) + 1;
+    const names = function (id) { const q = ctx.state.players[id]; return q ? q.name : id; };
+    const maxMs = Math.max.apply(null, [1].concat(phones.map(function (id) { return reactionMs[id] || 0; })));
+    ctx.state.last = {
+      round: ctx.state.round,
+      matchRound: ctx.state.matchRound,
+      reason: reason,
+      winnerId: winner,
+      winnerName: winner === null ? "" : names(winner),
+      loserName: winner === null ? "" : phones.filter(function (id) { return id !== winner; }).map(names).join(""),
+      results: phones.map(function (id) {
+        const ms = reactionMs[id];
+        return { id: id, name: names(id), msText: ms === null ? "no time" : ms + " ms", won: id === winner, tag: reason === "tie" ? "TIE" : (reason === "foul" && id !== winner ? "FOUL" : ""), bar: ms === null ? 0 : ms / maxMs };
+      }),
+    };
+    if (winner !== null) ctx.state.players[winner].lastWin = ctx.state.round; // PearUI success haptic token
     ctx.remote.fireAll("roundResult", { round: ctx.state.round, matchRound: ctx.state.matchRound, winnerId: winner, reason: reason, reactionMs: reactionMs, scores: ctx.state.scores });
     if (winner !== null && ctx.state.scores[winner] >= WINS_NEEDED) {
       ctx.state.phase = "matchOver";
+      ctx.state.matchInfo = { winnerName: names(winner), scoreText: phones.map(function (id) { return ctx.state.scores[id] || 0; }).join(" - ") };
       ctx.remote.fireAll("matchOver", { winnerId: winner, scores: ctx.state.scores });
     } else {
       ctx.state.phase = "roundOver";
@@ -241,6 +273,20 @@ export default (function () {
       if (!me) return;
       const phase = ctx.state.phase;
 
+      if (name === "aim") {
+        // Additive path for PearUI clients: turn pitch crossings into the same raised/lowered events the native phones send.
+        if (me.role !== "phone" || typeof data.pitch !== "number" || !isFinite(data.pitch)) return;
+        if (!me.aimUp && data.pitch >= AIM_RAISE_DEG) {
+          me.aimUp = true;
+          data = { round: ctx.state.round, sinceFireMs: phase === "fire" && ctx.state.fireAt !== null && ctx.state.fireAt !== undefined ? Math.max(0, ctx.now() - ctx.state.fireAt) : null };
+          name = "raised";
+        } else if (me.aimUp && data.pitch <= AIM_LOWER_DEG) {
+          me.aimUp = false;
+          data = {};
+          name = "lowered";
+        } else return;
+      }
+
       if (name === "role") {
         // A repeat of the same role is a reload/reconnect (the server never sees it as leave + join): that phone's
         // calibration is gone, and a round in progress is void. Anyone not a phone keeps spectating.
@@ -250,6 +296,7 @@ export default (function () {
           if (me.role === "phone") {
             me.ready = false;
             me.raised = false;
+            me.aimUp = false;
             if (phase === "countdown" || phase === "arming" || phase === "fire") backToLobby(ctx);
           }
         } else if (data.role === "phone") {
@@ -302,6 +349,7 @@ export default (function () {
         startArming(ctx);
       } else if (tag === "arm" && ctx.state.phase === "arming") {
         ctx.state.phase = "fire";
+        ctx.state.fireAt = ctx.now(); // aim-driven phones: reaction time is measured here
         ctx.state.timer = ctx.after(GIVE_UP_MS, "giveup", { round: ctx.state.round });
         ctx.remote.fireAll("fire", { round: ctx.state.round });
       } else if (tag === "next" && ctx.state.phase === "roundOver") {
