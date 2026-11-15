@@ -16,4 +16,5 @@ if (/sslip\.io|localhost|127\.0\.0\.1/.test(cloud) || process.env.PEAR_INSECURE 
 const report = await runScenario(JSON.parse(readFileSync(file, 'utf8')), { cloudUrl: cloud, token });
 if (!full && report.frames.length > 200) report.frames = report.frames.slice(-200);
 console.log(JSON.stringify(report, null, 2));
-process.exit(report.ok ? 0 : 1);
+// exitCode, not exit(): exit() can cut off a large report when stdout is a pipe.
+process.exitCode = report.ok ? 0 : 1;
