@@ -27,9 +27,16 @@ export const inDesktopApp = (): boolean =>
 
 /** Vite dev (port 5173) talks to the backend on 8080; the built Studio served by the backend uses its own origin; the desktop app's origin is not the backend. */
 export function defaultServerUrl(): string {
+  // Packaged desktop app (a distributable): the hosted server. Dev builds (`npm run dev`, `tauri dev`): local backend.
+  if (import.meta.env.DEV) return LOCAL_SERVER_URL;
+  if (inDesktopApp()) return VULTR_SERVER_URL;
   const web = typeof location !== 'undefined' && /^https?:$/.test(location.protocol);
-  return web && !import.meta.env.DEV && !inDesktopApp() ? '' : 'http://localhost:8080';
+  return web ? '' : LOCAL_SERVER_URL;
 }
+
+/** The hosted Pear server; a build can point elsewhere with `VITE_PEAR_SERVER_URL`. */
+export const VULTR_SERVER_URL: string = import.meta.env.VITE_PEAR_SERVER_URL || 'https://155-138-208-146.sslip.io';
+const LOCAL_SERVER_URL = 'http://localhost:8080';
 
 export const defaultPreferences = (): Preferences => ({
   uiScale: 100, editorFontSize: 13, theme: 'dark', reducedMotion: 'system', focusRingAlways: false, serverUrl: defaultServerUrl(),
@@ -37,6 +44,9 @@ export const defaultPreferences = (): Preferences => ({
 
 const clamp = (n: unknown, [lo, hi]: readonly [number, number], fallback: number): number =>
   typeof n === 'number' && Number.isFinite(n) ? Math.min(hi, Math.max(lo, Math.round(n))) : fallback;
+
+/** A packaged desktop app that saved the old localhost default (before it pointed at the hosted server) moves to the new default. */
+const staleLocal = (url: string): boolean => !import.meta.env.DEV && inDesktopApp() && url.trim().replace(/\/+$/, '') === LOCAL_SERVER_URL;
 
 /** Validates stored JSON; anything unusable falls back to the default for that field. */
 export function parsePreferences(raw: unknown): Preferences {
@@ -48,7 +58,7 @@ export function parsePreferences(raw: unknown): Preferences {
     theme: o.theme === 'light' || o.theme === 'high-contrast' || o.theme === 'dark' ? o.theme : d.theme,
     reducedMotion: o.reducedMotion === 'on' || o.reducedMotion === 'off' || o.reducedMotion === 'system' ? o.reducedMotion : d.reducedMotion,
     focusRingAlways: typeof o.focusRingAlways === 'boolean' ? o.focusRingAlways : d.focusRingAlways,
-    serverUrl: typeof o.serverUrl === 'string' ? o.serverUrl.trim().replace(/\/+$/, '') : d.serverUrl,
+    serverUrl: typeof o.serverUrl === 'string' && !(staleLocal(o.serverUrl)) ? o.serverUrl.trim().replace(/\/+$/, '') : d.serverUrl,
   };
 }
 

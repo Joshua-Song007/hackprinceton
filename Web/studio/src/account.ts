@@ -13,7 +13,7 @@ type KeyValueStore = Pick<Storage, 'getItem' | 'setItem'>;
 const browserStorage = (): KeyValueStore | null => (typeof localStorage === 'undefined' ? null : localStorage);
 
 /** The Vultr box set up by Deploy/vultr-bootstrap.sh. The publish sheet offers it when the server URL setting is still the default. */
-export const VULTR_SERVER_URL = 'https://155-138-208-146.sslip.io';
+export { VULTR_SERVER_URL } from './preferences';
 
 /** Epoch ms of the last verified publish of this game, persisted per game in localStorage; null when never. */
 export function readLastPublished(gameId: string | null | undefined, storage: KeyValueStore | null = browserStorage()): number | null {
