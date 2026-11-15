@@ -23,6 +23,7 @@ pub enum Db {
 const MIGRATION_0001: &str = include_str!("../migrations/0001_init.sql");
 const MIGRATION_0002: &str = include_str!("../migrations/0002_plugins.sql");
 const MIGRATION_0003: &str = include_str!("../migrations/0003_marketplace_cloud.sql");
+const MIGRATION_0004: &str = include_str!("../migrations/0004_friends.sql");
 
 /// Lazy pool: no connection is made until a query runs.
 pub fn connect_lazy(url: &str) -> DbResult<PgPool> {
@@ -32,7 +33,7 @@ pub fn connect_lazy(url: &str) -> DbResult<PgPool> {
 /// Applies 0001_init.sql, 0002_plugins.sql and 0003_marketplace_cloud.sql, each once: a step is
 /// skipped when its table (`accounts`, `plugins`, `plugin_versions`) already exists.
 pub async fn migrate(pool: &PgPool) -> DbResult<()> {
-    for (table, sql) in [("accounts", MIGRATION_0001), ("plugins", MIGRATION_0002), ("plugin_versions", MIGRATION_0003)] {
+    for (table, sql) in [("accounts", MIGRATION_0001), ("plugins", MIGRATION_0002), ("plugin_versions", MIGRATION_0003), ("friendships", MIGRATION_0004)] {
         let exists: bool = sqlx::query("SELECT to_regclass($1) IS NOT NULL")
             .bind(format!("public.{table}"))
             .fetch_one(pool)
@@ -209,6 +210,23 @@ pub async fn upsert_account(
     .fetch_one(pool)
     .await?;
     account_from_row(&row)
+}
+
+/// Sets the display name; None when the account does not exist.
+pub async fn update_display_name(db: &Db, id: &str, display_name: &str) -> DbResult<Option<Account>> {
+    let pool = match db {
+        Db::Pg(pool) => pool,
+        Db::Mem(m) => return Ok(m.update_display_name(id, display_name)),
+    };
+    let row = sqlx::query(
+        "UPDATE accounts SET display_name = $2 WHERE id = $1::uuid \
+         RETURNING id::text AS id, provider, subject, display_name, created_at::text AS created_at",
+    )
+    .bind(id)
+    .bind(display_name)
+    .fetch_optional(pool)
+    .await?;
+    row.as_ref().map(account_from_row).transpose()
 }
 
 pub async fn create_game(db: &Db, owner_id: &str, title: &str) -> DbResult<Game> {
@@ -582,6 +600,171 @@ pub async fn delete_model_key(db: &Db, account_id: &str) -> DbResult<()> {
     };
     sqlx::query("DELETE FROM account_model_keys WHERE account_id = $1::uuid").bind(account_id).execute(pool).await?;
     Ok(())
+}
+
+/// A friend (or a requester / addressee) as the app lists them.
+#[derive(Debug, Clone, Serialize, PartialEq)]
+pub struct FriendRef {
+    pub id: String,
+    pub name: String,
+}
+
+/// What sending a request by friend code did.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RequestOutcome {
+    NoSuchCode,
+    OwnCode,
+    Pending,
+    Accepted,
+}
+
+/// The code a friend types to find this account: the first 6 hex characters of its id, uppercase.
+// ponytail: derived from the id so nothing is stored; a 6-char prefix can collide (first match wins), widen it or add a column if accounts reach the thousands.
+pub fn friend_code(account_id: &str) -> String {
+    account_id.chars().filter(|c| *c != '-').take(6).collect::<String>().to_uppercase()
+}
+
+/// Friend codes are 6 hex characters; anything else cannot match an account.
+pub fn normalize_code(code: &str) -> Option<String> {
+    let c = code.trim().to_uppercase();
+    (c.len() == 6 && c.chars().all(|ch| ch.is_ascii_hexdigit())).then_some(c)
+}
+
+fn friend_from_row(r: &sqlx::postgres::PgRow) -> DbResult<FriendRef> {
+    Ok(FriendRef { id: r.try_get("id")?, name: r.try_get("display_name")? })
+}
+
+/// Sends a request to the account with this friend code. If that account already asked `me`, the
+/// two become friends; if already friends or already asked, nothing changes.
+pub async fn send_friend_request(db: &Db, me: &str, code: &str) -> DbResult<RequestOutcome> {
+    let pool = match db {
+        Db::Pg(pool) => pool,
+        Db::Mem(m) => return Ok(m.send_friend_request(me, code)),
+    };
+    let Some(code) = normalize_code(code) else { return Ok(RequestOutcome::NoSuchCode) };
+    let target = sqlx::query(
+        "SELECT id::text AS id FROM accounts WHERE upper(left(replace(id::text, '-', ''), 6)) = $1 \
+         ORDER BY created_at, id LIMIT 1",
+    )
+    .bind(&code)
+    .fetch_optional(pool)
+    .await?;
+    let Some(target) = target else { return Ok(RequestOutcome::NoSuchCode) };
+    let other: String = target.try_get("id")?;
+    if other == me {
+        return Ok(RequestOutcome::OwnCode);
+    }
+    let existing = sqlx::query(
+        "SELECT requester_id::text AS requester, status FROM friendships \
+         WHERE (requester_id = $1::uuid AND addressee_id = $2::uuid) OR (requester_id = $2::uuid AND addressee_id = $1::uuid)",
+    )
+    .bind(me)
+    .bind(&other)
+    .fetch_optional(pool)
+    .await?;
+    match existing {
+        None => {
+            sqlx::query("INSERT INTO friendships (requester_id, addressee_id) VALUES ($1::uuid, $2::uuid) ON CONFLICT DO NOTHING")
+                .bind(me)
+                .bind(&other)
+                .execute(pool)
+                .await?;
+            Ok(RequestOutcome::Pending)
+        }
+        Some(r) => {
+            let (requester, status): (String, String) = (r.try_get("requester")?, r.try_get("status")?);
+            if status == "accepted" {
+                Ok(RequestOutcome::Accepted)
+            } else if requester == me {
+                Ok(RequestOutcome::Pending)
+            } else {
+                sqlx::query("UPDATE friendships SET status = 'accepted' WHERE requester_id = $1::uuid AND addressee_id = $2::uuid")
+                    .bind(&other)
+                    .bind(me)
+                    .execute(pool)
+                    .await?;
+                Ok(RequestOutcome::Accepted)
+            }
+        }
+    }
+}
+
+/// Accepts the pending request `requester` sent to `me`; false when there is none.
+pub async fn accept_friend(db: &Db, me: &str, requester: &str) -> DbResult<bool> {
+    let pool = match db {
+        Db::Pg(pool) => pool,
+        Db::Mem(m) => return Ok(m.accept_friend(me, requester)),
+    };
+    let done = sqlx::query(
+        "UPDATE friendships SET status = 'accepted' \
+         WHERE requester_id = $1::uuid AND addressee_id = $2::uuid AND status = 'pending'",
+    )
+    .bind(requester)
+    .bind(me)
+    .execute(pool)
+    .await?;
+    Ok(done.rows_affected() > 0)
+}
+
+/// Declines, cancels or removes: deletes the row between the two accounts, whoever asked. False when none.
+pub async fn remove_friend(db: &Db, me: &str, other: &str) -> DbResult<bool> {
+    let pool = match db {
+        Db::Pg(pool) => pool,
+        Db::Mem(m) => return Ok(m.remove_friend(me, other)),
+    };
+    let done = sqlx::query(
+        "DELETE FROM friendships WHERE (requester_id = $1::uuid AND addressee_id = $2::uuid) \
+         OR (requester_id = $2::uuid AND addressee_id = $1::uuid)",
+    )
+    .bind(me)
+    .bind(other)
+    .execute(pool)
+    .await?;
+    Ok(done.rows_affected() > 0)
+}
+
+/// Accepted friends of `me`, by name.
+pub async fn list_friends(db: &Db, me: &str) -> DbResult<Vec<FriendRef>> {
+    let pool = match db {
+        Db::Pg(pool) => pool,
+        Db::Mem(m) => return Ok(m.list_friends(me)),
+    };
+    let rows = sqlx::query(
+        "SELECT a.id::text AS id, a.display_name FROM friendships f \
+         JOIN accounts a ON a.id = CASE WHEN f.requester_id = $1::uuid THEN f.addressee_id ELSE f.requester_id END \
+         WHERE f.status = 'accepted' AND (f.requester_id = $1::uuid OR f.addressee_id = $1::uuid) \
+         ORDER BY a.display_name, a.id",
+    )
+    .bind(me)
+    .fetch_all(pool)
+    .await?;
+    rows.iter().map(friend_from_row).collect()
+}
+
+/// Pending requests as (incoming to `me`, outgoing from `me`).
+pub async fn list_friend_requests(db: &Db, me: &str) -> DbResult<(Vec<FriendRef>, Vec<FriendRef>)> {
+    let pool = match db {
+        Db::Pg(pool) => pool,
+        Db::Mem(m) => return Ok(m.list_friend_requests(me)),
+    };
+    let incoming = sqlx::query(
+        "SELECT a.id::text AS id, a.display_name FROM friendships f JOIN accounts a ON a.id = f.requester_id \
+         WHERE f.addressee_id = $1::uuid AND f.status = 'pending' ORDER BY f.created_at, a.id",
+    )
+    .bind(me)
+    .fetch_all(pool)
+    .await?;
+    let outgoing = sqlx::query(
+        "SELECT a.id::text AS id, a.display_name FROM friendships f JOIN accounts a ON a.id = f.addressee_id \
+         WHERE f.requester_id = $1::uuid AND f.status = 'pending' ORDER BY f.created_at, a.id",
+    )
+    .bind(me)
+    .fetch_all(pool)
+    .await?;
+    Ok((
+        incoming.iter().map(friend_from_row).collect::<DbResult<_>>()?,
+        outgoing.iter().map(friend_from_row).collect::<DbResult<_>>()?,
+    ))
 }
 
 #[cfg(test)]

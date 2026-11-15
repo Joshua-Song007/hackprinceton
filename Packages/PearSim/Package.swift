@@ -3,7 +3,7 @@ import PackageDescription
 
 let package = Package(
     name: "PearSim",
-    platforms: [.macOS(.v15)],
+    platforms: [.macOS(.v15), .iOS(.v18)],
     products: [
         .library(name: "PearSim", targets: ["PearSim"]),
     ],

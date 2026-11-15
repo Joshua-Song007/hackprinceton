@@ -150,7 +150,7 @@ struct LibraryAPITests {
     }
 
     @Test func listCatalogDecodesEntries() async throws {
-        let client = try await signedInClient { _ in (200, Self.catalogBody) }
+        let client = try try await signedInClient { _ in (200, Self.catalogBody) }
         let entries = try await client.listCatalog()
         #expect(entries == [
             CatalogEntry(id: "g1", title: "Haunt", author: "Ada", latestVersion: 3, runMode: "device", requiredTier: 1),
@@ -164,12 +164,12 @@ struct LibraryAPITests {
     }
 
     @Test func listCatalogEmptyArray() async throws {
-        let client = try await signedInClient { _ in (200, Data("[]".utf8)) }
+        let client = try try await signedInClient { _ in (200, Data("[]".utf8)) }
         #expect(try await client.listCatalog().isEmpty)
     }
 
     @Test func listCatalogUnauthorizedClearsSession() async throws {
-        let client = try await signedInClient { _ in (401, Data()) }
+        let client = try try await signedInClient { _ in (401, Data()) }
         await #expect(throws: CloudError.unauthorized) { try await client.listCatalog() }
         #expect(await !client.isSignedIn)
         #expect(await client.account == nil)
@@ -178,7 +178,7 @@ struct LibraryAPITests {
     @Test func listCatalogBadShapes() async throws {
         let missingTier = Data(#"[{"id":"g1","title":"T","author":"A","latestVersion":1,"runMode":"screen"}]"#.utf8)
         for body in [Data(#"{"games":[]}"#.utf8), missingTier] {
-            let client = try await signedInClient { _ in (200, body) }
+            let client = try try await signedInClient { _ in (200, body) }
             do {
                 _ = try await client.listCatalog()
                 Issue.record("expected decoding error")
@@ -191,7 +191,78 @@ struct LibraryAPITests {
     }
 
     @Test func listCatalogServerError() async throws {
-        let client = try await signedInClient { _ in (503, Data("down".utf8)) }
+        let client = try try await signedInClient { _ in (503, Data("down".utf8)) }
         await #expect(throws: CloudError.server(status: 503, message: "down")) { try await client.listCatalog() }
+    }
+}
+
+// An extension of LibraryAPITests, not its own suite: both share LibraryStub's statics, and only tests inside one suite run serially.
+extension LibraryAPITests {
+    @Test func friendsDecodeWithAndWithoutPlaying() async throws {
+        let body = Data(
+            #"[{"id":"a","name":"Ann","playing":{"gameId":"g1","title":"Neon"}},{"id":"b","name":"Bo","playing":null}]"#.utf8)
+        let client = try await signedInClient { req in
+            req.url!.path == "/api/accounts/me"
+                ? (200, Data(#"{"id":"me","display_name":"Me","friend_code":"AB12CD"}"#.utf8)) : (200, body)
+        }
+        let friends = try await client.listFriends()
+        #expect(friends[0].playing == PlayingGame(gameId: "g1", title: "Neon"))
+        #expect(friends[1].playing == nil)
+        #expect(LibraryStub.seen[1].url?.path == "/api/friends")
+    }
+
+    @Test func requestsDecodeAndMeCarriesTheCode() async throws {
+        let client = try await signedInClient { req in
+            switch req.url!.path {
+            case "/api/accounts/me": return (200, Data(#"{"id":"me","display_name":"Me","friend_code":"AB12CD"}"#.utf8))
+            default: return (200, Data(#"{"incoming":[{"id":"a","name":"Ann"}],"outgoing":[]}"#.utf8))
+            }
+        }
+        let r = try await client.listFriendRequests()
+        #expect(r.incoming == [FriendRef(id: "a", name: "Ann")] && r.outgoing.isEmpty)
+        #expect(try await client.refreshAccount().friendCode == "AB12CD")
+    }
+
+    @Test func sendAcceptRemoveUseTheRightRoutes() async throws {
+        let client = try await signedInClient { req in
+            switch (req.httpMethod!, req.url!.path) {
+            case ("GET", "/api/accounts/me"): return (200, Data(#"{"id":"me","display_name":"Me"}"#.utf8))
+            case ("POST", "/api/friends"): return (200, Data(#"{"status":"accepted"}"#.utf8))
+            default: return (204, Data())
+            }
+        }
+        #expect(try await client.sendFriendRequest(code: "AB12CD") == .accepted)
+        try await client.acceptFriend(id: "a")
+        try await client.removeFriend(id: "a")
+        let seen = LibraryStub.seen.dropFirst().map { "\($0.httpMethod!) \($0.url!.path)" }
+        #expect(seen == ["POST /api/friends", "POST /api/friends/a/accept", "DELETE /api/friends/a"])
+        #expect(String(decoding: LibraryStub.seen[1].httpBody ?? Data(), as: UTF8.self).contains("AB12CD"))
+    }
+
+    @Test func unknownCodeIsNotFound() async throws {
+        let client = try await signedInClient { req in
+            req.url!.path == "/api/accounts/me" ? (200, Data(#"{"id":"me","display_name":"Me"}"#.utf8)) : (404, Data())
+        }
+        await #expect(throws: CloudError.notFound) { try await client.sendFriendRequest(code: "000000") }
+    }
+
+    @Test func renameAndAvatarRoutes() async throws {
+        let client = try await signedInClient { req in
+            req.httpMethod == "PUT" && req.url!.path == "/api/accounts/me"
+                ? (200, Data(#"{"id":"a1","display_name":"New","friend_code":"AB12CD"}"#.utf8)) : (204, Data())
+        }
+        let renamed = try await client.updateDisplayName("New")
+        #expect(renamed == Account(id: "a1", displayName: "New", friendCode: "AB12CD"))
+        try await client.uploadAvatar(Data([0xFF, 0xD8, 0xFF, 1]), contentType: "image/jpeg")
+        try await client.removeAvatar()
+        let seen = LibraryStub.seen.dropFirst()
+        #expect(seen.map { "\($0.httpMethod!) \($0.url!.path)" } == [
+            "PUT /api/accounts/me", "PUT /api/accounts/me/avatar", "DELETE /api/accounts/me/avatar",
+        ])
+        #expect(try JSONDecoder().decode([String: String].self, from: seen.first!.httpBody!) == ["display_name": "New"])
+        let upload = Array(seen)[1]
+        #expect(upload.httpBody == Data([0xFF, 0xD8, 0xFF, 1]))
+        #expect(upload.value(forHTTPHeaderField: "Content-Type") == "image/jpeg")
+        #expect(client.avatarURL(for: "a1").absoluteString == "https://pear.test/api/avatars/a1")
     }
 }

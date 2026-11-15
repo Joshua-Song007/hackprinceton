@@ -9,6 +9,12 @@
 /* Begin PBXBuildFile section */
 		B2000000000000000000000A /* PearLibrary in Frameworks */ = {isa = PBXBuildFile; productRef = B200000000000000000000D0 /* PearLibrary */; };
 		B2000000000000000000000B /* PearCloud in Frameworks */ = {isa = PBXBuildFile; productRef = B200000000000000000000D1 /* PearCloud */; };
+		B2000000000000000000F100 /* PearCore in Frameworks */ = {isa = PBXBuildFile; productRef = B2000000000000000000F300 /* PearCore */; };
+		B2000000000000000000F101 /* PearInput in Frameworks */ = {isa = PBXBuildFile; productRef = B2000000000000000000F301 /* PearInput */; };
+		B2000000000000000000F102 /* PearOutput in Frameworks */ = {isa = PBXBuildFile; productRef = B2000000000000000000F302 /* PearOutput */; };
+		B2000000000000000000F103 /* PearRuntime in Frameworks */ = {isa = PBXBuildFile; productRef = B2000000000000000000F303 /* PearRuntime */; };
+		B2000000000000000000F104 /* PearScript in Frameworks */ = {isa = PBXBuildFile; productRef = B2000000000000000000F304 /* PearScript */; };
+		B2000000000000000000F105 /* PearSim in Frameworks */ = {isa = PBXBuildFile; productRef = B2000000000000000000F305 /* PearSim */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -30,6 +36,12 @@
 			files = (
 				B2000000000000000000000A /* PearLibrary in Frameworks */,
 				B2000000000000000000000B /* PearCloud in Frameworks */,
+				B2000000000000000000F100 /* PearCore in Frameworks */,
+				B2000000000000000000F101 /* PearInput in Frameworks */,
+				B2000000000000000000F102 /* PearOutput in Frameworks */,
+				B2000000000000000000F103 /* PearRuntime in Frameworks */,
+				B2000000000000000000F104 /* PearScript in Frameworks */,
+				B2000000000000000000F105 /* PearSim in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -74,6 +86,12 @@
 			packageProductDependencies = (
 				B200000000000000000000D0 /* PearLibrary */,
 				B200000000000000000000D1 /* PearCloud */,
+				B2000000000000000000F300 /* PearCore */,
+				B2000000000000000000F301 /* PearInput */,
+				B2000000000000000000F302 /* PearOutput */,
+				B2000000000000000000F303 /* PearRuntime */,
+				B2000000000000000000F304 /* PearScript */,
+				B2000000000000000000F305 /* PearSim */,
 			);
 			productName = PearPlayer;
 			productReference = B20000000000000000000001 /* PearPlayer.app */;
@@ -106,6 +124,12 @@
 			packageReferences = (
 				B200000000000000000000C0 /* XCLocalSwiftPackageReference "../../Packages/PearLibrary" */,
 				B200000000000000000000C1 /* XCLocalSwiftPackageReference "../../Packages/PearCloud" */,
+				B2000000000000000000F200 /* XCLocalSwiftPackageReference "../../Packages/PearCore" */,
+				B2000000000000000000F201 /* XCLocalSwiftPackageReference "../../Packages/PearInput" */,
+				B2000000000000000000F202 /* XCLocalSwiftPackageReference "../../Packages/PearOutput" */,
+				B2000000000000000000F203 /* XCLocalSwiftPackageReference "../../Packages/PearRuntime" */,
+				B2000000000000000000F204 /* XCLocalSwiftPackageReference "../../Packages/PearScript" */,
+				B2000000000000000000F205 /* XCLocalSwiftPackageReference "../../Packages/PearSim" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = B20000000000000000000005 /* Products */;
@@ -264,6 +288,30 @@
 			isa = XCLocalSwiftPackageReference;
 			relativePath = ../../Packages/PearCloud;
 		};
+		B2000000000000000000F200 /* XCLocalSwiftPackageReference "../../Packages/PearCore" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ../../Packages/PearCore;
+		};
+		B2000000000000000000F201 /* XCLocalSwiftPackageReference "../../Packages/PearInput" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ../../Packages/PearInput;
+		};
+		B2000000000000000000F202 /* XCLocalSwiftPackageReference "../../Packages/PearOutput" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ../../Packages/PearOutput;
+		};
+		B2000000000000000000F203 /* XCLocalSwiftPackageReference "../../Packages/PearRuntime" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ../../Packages/PearRuntime;
+		};
+		B2000000000000000000F204 /* XCLocalSwiftPackageReference "../../Packages/PearScript" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ../../Packages/PearScript;
+		};
+		B2000000000000000000F205 /* XCLocalSwiftPackageReference "../../Packages/PearSim" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ../../Packages/PearSim;
+		};
 /* End XCLocalSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -274,6 +322,30 @@
 		B200000000000000000000D1 /* PearCloud */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = PearCloud;
+		};
+		B2000000000000000000F300 /* PearCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = PearCore;
+		};
+		B2000000000000000000F301 /* PearInput */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = PearInput;
+		};
+		B2000000000000000000F302 /* PearOutput */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = PearOutput;
+		};
+		B2000000000000000000F303 /* PearRuntime */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = PearRuntime;
+		};
+		B2000000000000000000F304 /* PearScript */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = PearScript;
+		};
+		B2000000000000000000F305 /* PearSim */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = PearSim;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

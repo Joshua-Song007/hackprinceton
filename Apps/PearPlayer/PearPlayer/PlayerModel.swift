@@ -2,6 +2,7 @@ import Foundation
 import Observation
 import PearCloud
 import PearLibrary
+import PearScript
 
 /// The player's composition root: builds the cloud client, the session store, the device profile, the library
 /// model and the launcher, and owns the signed-in / signed-out state. No SwiftUI in here.
@@ -20,6 +21,17 @@ final class PlayerModel {
     private(set) var isWorking = false
     /// A session is stored on this device but could not be confirmed (offline, server down): offer "Try again".
     private(set) var hasSavedSession = false
+
+    /// Accepted friends and the game each is in now; refreshed on appear and on pull to refresh, never polled.
+    private(set) var friends: [FriendEntry] = []
+    private(set) var requests = FriendRequests()
+    /// What a friend types to send this account a request.
+    private(set) var friendCode = ""
+    private(set) var friendsError: String?
+    /// Bumped when this player uploads or removes their picture, so every avatar reloads.
+    private(set) var avatarVersion = 0
+    /// The game being played, if any; the library screen shows it full screen.
+    private(set) var activeSession: GameSession?
 
     let library: LibraryModel
     private let client: CloudClient
@@ -42,7 +54,7 @@ final class PlayerModel {
         let client = CloudClient(baseURL: baseURL)
         self.init(
             client: client, store: KeychainSessionStore(), profile: .current(),
-            launcher: StubGameLauncher(source: client))
+            launcher: RuntimeGameLauncher(source: client))
     }
 
     /// First usable of: env `PEAR_CLOUD_URL`, the Info.plist `PearCloudURL`, then localhost. Usable = http or https
@@ -136,6 +148,131 @@ final class PlayerModel {
         try await launcher.launch(entry)
     }
 
+    /// Fetches the game, connects to its server session (`/play/{id}`, the same session a friend is in) and runs it.
+    func play(_ entry: CatalogEntry) async throws {
+        guard activeSession == nil else { return }
+        guard case .signedIn(let account) = phase, let token = await client.sessionToken else {
+            throw CloudError.notSignedIn
+        }
+        let result = try await launch(entry)
+        guard let url = NetworkRemoteChannel.playURL(
+            base: client.baseURL, gameId: result.game.gameId, token: token, version: result.game.version)
+        else { throw CloudError.invalidResponse }
+        let channel = NetworkRemoteChannel(transport: URLSessionWebSocketTransport(url: url), playerId: account.id)
+        let session = try GameSession(game: result.game, playerId: account.id, channel: channel)
+        session.start()
+        activeSession = session
+    }
+
+    func leaveGame() {
+        activeSession?.stop()
+        activeSession = nil
+    }
+
+    // MARK: Friends
+
+    func refreshFriends() async {
+        do {
+            async let list = client.listFriends()
+            async let pending = client.listFriendRequests()
+            async let me = client.refreshAccount()
+            (friends, requests, friendCode) = try await (list, pending, me.friendCode)
+            friendsError = nil
+        } catch let error as CloudError where error == .unauthorized || error == .notSignedIn {
+            await sessionExpired()
+        } catch {
+            friendsError = Self.describe(error)
+        }
+    }
+
+    /// Sends a request by code; the returned text is what the add-friend sheet shows.
+    func sendFriendRequest(code: String) async -> String {
+        do {
+            let status = try await client.sendFriendRequest(code: code)
+            await refreshFriends()
+            return status == .accepted ? "You are now friends." : "Request sent."
+        } catch let error as CloudError {
+            if error == .notFound { return "No one has that code." }
+            if case .server(400, _) = error { return "That is your own code." }
+            if error == .unauthorized { await sessionExpired() }
+            return Self.describe(error)
+        } catch {
+            return Self.describe(error)
+        }
+    }
+
+    func acceptFriend(_ id: String) async {
+        await change { try await self.client.acceptFriend(id: id) }
+    }
+
+    /// Declines, cancels or removes, depending on where the link stands.
+    func removeFriend(_ id: String) async {
+        await change { try await self.client.removeFriend(id: id) }
+    }
+
+    private func change(_ action: () async throws -> Void) async {
+        do {
+            try await action()
+        } catch let error as CloudError where error == .unauthorized || error == .notSignedIn {
+            await sessionExpired()
+            return
+        } catch {
+            friendsError = Self.describe(error)
+        }
+        await refreshFriends()
+    }
+
+    // MARK: Profile
+
+    var avatarSource: AvatarSource {
+        let client = client
+        return AvatarSource(version: avatarVersion) { client.avatarURL(for: $0) }
+    }
+
+    /// Renames the account; returns text to show when it failed, nil on success.
+    func updateDisplayName(_ name: String) async -> String? {
+        do {
+            let account = try await client.updateDisplayName(name)
+            if let token = await client.sessionToken { _ = remember(token: token, account: account) }
+            phase = .signedIn(account)
+            return nil
+        } catch {
+            return await profileFailure(error, badInput: "That name is not allowed.")
+        }
+    }
+
+    /// `data` is a JPEG already sized for upload; returns text to show when it failed, nil on success.
+    func setAvatar(_ data: Data) async -> String? {
+        do {
+            try await client.uploadAvatar(data, contentType: "image/jpeg")
+            avatarVersion += 1
+            return nil
+        } catch {
+            return await profileFailure(error, badInput: "That photo could not be used.")
+        }
+    }
+
+    func removeAvatar() async -> String? {
+        do {
+            try await client.removeAvatar()
+            avatarVersion += 1
+            return nil
+        } catch {
+            return await profileFailure(error, badInput: "Could not remove the photo.")
+        }
+    }
+
+    private func profileFailure(_ error: Error, badInput: String) async -> String {
+        if let cloud = error as? CloudError {
+            if cloud == .unauthorized { await sessionExpired() }
+            if case .server(let status, _) = cloud {
+                if status == 413 { return "That photo is too large." }
+                if status == 400 || status == 415 { return badInput }
+            }
+        }
+        return Self.describe(error)
+    }
+
     // MARK: Helpers
 
     private func signIn(notFoundMessage: String?, _ perform: () async throws -> Account) async {
@@ -175,9 +312,14 @@ final class PlayerModel {
     }
 
     private func forgetSession() async {
+        leaveGame()
         try? store.clear()
         hasSavedSession = false
         library.reset()
+        friends = []
+        requests = FriendRequests()
+        friendCode = ""
+        friendsError = nil
     }
 
     /// Plain wording for the player; never shows a server response body.
@@ -194,6 +336,7 @@ final class PlayerModel {
             }
         }
         if error is LaunchError { return "The server returned a different game than the one requested." }
+        if error is GameSession.LoadError || error is ScriptEngineError { return "This game could not be started." }
         return "Something went wrong."
     }
 }

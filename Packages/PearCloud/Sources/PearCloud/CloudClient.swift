@@ -86,10 +86,58 @@ public struct GameBundle: Codable, Sendable, Equatable {
 public struct Account: Codable, Sendable, Equatable {
     public var id: String
     public var displayName: String
-    public init(id: String, displayName: String) {
+    /// What a friend types to send this account a request; empty until `/me` has been read (sign-in responses carry none).
+    public var friendCode: String
+    public init(id: String, displayName: String, friendCode: String = "") {
         self.id = id
         self.displayName = displayName
+        self.friendCode = friendCode
     }
+}
+
+/// An accepted friend. `playing` is the game they are connected to right now, nil when they are not in one.
+public struct FriendEntry: Codable, Sendable, Equatable, Identifiable {
+    public var id: String
+    public var name: String
+    public var playing: PlayingGame?
+    public init(id: String, name: String, playing: PlayingGame? = nil) {
+        self.id = id
+        self.name = name
+        self.playing = playing
+    }
+}
+
+public struct PlayingGame: Codable, Sendable, Equatable {
+    public var gameId: String
+    public var title: String
+    public init(gameId: String, title: String) {
+        self.gameId = gameId
+        self.title = title
+    }
+}
+
+/// Someone on the other end of a pending request.
+public struct FriendRef: Codable, Sendable, Equatable, Identifiable {
+    public var id: String
+    public var name: String
+    public init(id: String, name: String) {
+        self.id = id
+        self.name = name
+    }
+}
+
+public struct FriendRequests: Codable, Sendable, Equatable {
+    public var incoming: [FriendRef]
+    public var outgoing: [FriendRef]
+    public init(incoming: [FriendRef] = [], outgoing: [FriendRef] = []) {
+        self.incoming = incoming
+        self.outgoing = outgoing
+    }
+}
+
+/// What sending a request did: `accepted` when the other side had already asked, else `pending`.
+public enum FriendRequestStatus: String, Codable, Sendable, Equatable {
+    case pending, accepted
 }
 
 public struct PublishedVersion: Codable, Sendable, Equatable {
@@ -147,11 +195,12 @@ public struct CatalogEntry: Codable, Sendable, Equatable, Hashable, Identifiable
 
 // Backend wire shapes (Backend/src/db.rs, snake_case). The public types above stay as Studio and the player use them.
 
-/// `db::Account`; only id and display name are kept.
+/// `db::Account`; only id and display name are kept, plus `friend_code` when `/me` sends it.
 struct AccountWire: Decodable {
     let id: String
     let display_name: String
-    var account: Account { Account(id: id, displayName: display_name) }
+    var friend_code: String?
+    var account: Account { Account(id: id, displayName: display_name, friendCode: friend_code ?? "") }
 }
 
 /// Dev and Apple sign-in response: `{token, account}`.
@@ -203,6 +252,9 @@ struct VersionWire: Codable {
     }
 }
 
+/// A 204 reply: no body to read.
+struct Empty: Decodable {}
+
 public enum CloudError: Error, Sendable, Equatable {
     case notSignedIn
     /// HTTP 401: token missing, expired or rejected. The stored session is cleared.
@@ -218,7 +270,7 @@ public enum CloudError: Error, Sendable, Equatable {
 
 /// Studio's client for the Pear backend. Injectable session and base URL so tests use a stub.
 public actor CloudClient {
-    private let baseURL: URL
+    public nonisolated let baseURL: URL
     private let session: URLSession
     /// Readable so an app can persist the session (the player keeps it in the Keychain); restore it with `signIn(token:)`.
     public private(set) var sessionToken: String?
@@ -288,6 +340,66 @@ public actor CloudClient {
         try await send("GET", ["api", "library"], body: Optional<GameBundle>.none)
     }
 
+    /// The signed-in account with its friend code (`GET /api/accounts/me`).
+    @discardableResult
+    public func refreshAccount() async throws -> Account {
+        let wire: AccountWire = try await send("GET", ["api", "accounts", "me"], body: Optional<GameBundle>.none)
+        account = wire.account
+        return wire.account
+    }
+
+    /// Renames the signed-in account (`PUT /api/accounts/me`); the friend code is kept.
+    @discardableResult
+    public func updateDisplayName(_ name: String) async throws -> Account {
+        struct Request: Encodable { let display_name: String }
+        let wire: AccountWire = try await send("PUT", ["api", "accounts", "me"], body: Request(display_name: name))
+        account = wire.account
+        return wire.account
+    }
+
+    /// Uploads the profile picture: a JPEG or PNG of at most 512 KB, sent as the raw body.
+    public func uploadAvatar(_ data: Data, contentType: String = "image/jpeg") async throws {
+        let _: Empty = try await send(
+            "PUT", ["api", "accounts", "me", "avatar"], body: Optional<GameBundle>.none, raw: (data, contentType))
+    }
+
+    public func removeAvatar() async throws {
+        let _: Empty = try await send("DELETE", ["api", "accounts", "me", "avatar"], body: Optional<GameBundle>.none)
+    }
+
+    /// Where an account's picture is served (404 when it has none). Public, so an image view can load it directly.
+    public nonisolated func avatarURL(for accountId: String) -> URL {
+        baseURL.appending(path: "api/avatars/\(accountId)")
+    }
+
+    /// Accepted friends and the game each is in right now (`GET /api/friends`).
+    public func listFriends() async throws -> [FriendEntry] {
+        try await send("GET", ["api", "friends"], body: Optional<GameBundle>.none)
+    }
+
+    /// Pending requests in both directions (`GET /api/friends/requests`).
+    public func listFriendRequests() async throws -> FriendRequests {
+        try await send("GET", ["api", "friends", "requests"], body: Optional<GameBundle>.none)
+    }
+
+    /// Sends a request by friend code. `CloudError.notFound` for an unknown code; a server error with status 400 for your own.
+    @discardableResult
+    public func sendFriendRequest(code: String) async throws -> FriendRequestStatus {
+        struct Request: Encodable { let code: String }
+        struct Response: Decodable { let status: FriendRequestStatus }
+        let r: Response = try await send("POST", ["api", "friends"], body: Request(code: code))
+        return r.status
+    }
+
+    public func acceptFriend(id: String) async throws {
+        let _: Empty = try await send("POST", ["api", "friends", id, "accept"], body: Optional<GameBundle>.none)
+    }
+
+    /// Declines, cancels or removes, depending on where the link stands.
+    public func removeFriend(id: String) async throws {
+        let _: Empty = try await send("DELETE", ["api", "friends", id], body: Optional<GameBundle>.none)
+    }
+
     /// Publishes a new version. With `gameId == nil` a new game is created first.
     public func publish(_ bundle: GameBundle, gameId: String? = nil) async throws -> PublishedVersion {
         var id = gameId
@@ -317,7 +429,7 @@ public actor CloudClient {
     }
 
     private func send<Body: Encodable, Response: Decodable>(
-        _ method: String, _ path: [String], body: Body?, authorized: Bool = true
+        _ method: String, _ path: [String], body: Body?, authorized: Bool = true, raw: (data: Data, contentType: String)? = nil
     ) async throws -> Response {
         var url = baseURL
         for part in path { url.append(path: part) }
@@ -327,6 +439,10 @@ public actor CloudClient {
         if authorized {
             guard let sessionToken else { throw CloudError.notSignedIn }
             request.setValue("Bearer \(sessionToken)", forHTTPHeaderField: "Authorization")
+        }
+        if let raw {
+            request.httpBody = raw.data
+            request.setValue(raw.contentType, forHTTPHeaderField: "Content-Type")
         }
         if let body {
             do { request.httpBody = try JSONEncoder().encode(body) }
@@ -342,7 +458,7 @@ public actor CloudClient {
 
         switch http.statusCode {
         case 200..<300:
-            do { return try JSONDecoder().decode(Response.self, from: data) }
+            do { return try JSONDecoder().decode(Response.self, from: data.isEmpty ? Data("{}".utf8) : data) }
             catch { throw CloudError.decoding("\(error)") }
         case 401:
             if authorized {
