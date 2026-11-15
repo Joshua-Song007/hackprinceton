@@ -506,18 +506,44 @@ pub async fn upsert_developer(db: &Db, username: &str, display_name: &str, passw
     account_from_row(&row)
 }
 
+/// Creates the self-service player account (provider "password", subject = username); None when the
+/// username is taken. Never touches an existing row.
+pub async fn create_password_account(db: &Db, username: &str, display_name: &str, password_hash: &str) -> DbResult<Option<Account>> {
+    let pool = match db {
+        Db::Pg(pool) => pool,
+        Db::Mem(m) => return Ok(m.create_password_account(username, display_name, password_hash)),
+    };
+    let row = sqlx::query(&format!(
+        "INSERT INTO accounts (provider, subject, display_name, role, password_hash)          VALUES ('password', $1, $2, 'player', $3) ON CONFLICT (provider, subject) DO NOTHING          RETURNING {ACCOUNT_COLS}"
+    ))
+    .bind(username)
+    .bind(display_name)
+    .bind(password_hash)
+    .fetch_optional(pool)
+    .await?;
+    row.as_ref().map(account_from_row).transpose()
+}
+
 /// The developer account for this username and its password hash; None for an unknown user (or an
 /// account without a hash).
 pub async fn developer_credentials(db: &Db, username: &str) -> DbResult<Option<(Account, String)>> {
+    password_credentials(db, "developer", username).await
+}
+
+/// The account for this (password provider, username) and its password hash; provider is "developer"
+/// or "password" (self-service signup). None for an unknown user or an account without a hash.
+pub async fn password_credentials(db: &Db, provider: &str, username: &str) -> DbResult<Option<(Account, String)>> {
     let pool = match db {
         Db::Pg(pool) => pool,
-        Db::Mem(m) => return Ok(m.developer_credentials(username)),
+        Db::Mem(m) => return Ok(m.password_credentials(provider, username)),
     };
     let row = sqlx::query(&format!(
         "SELECT {ACCOUNT_COLS}, password_hash FROM accounts \
-         WHERE provider = 'developer' AND subject = $1 AND role = 'developer' AND password_hash IS NOT NULL"
+         WHERE provider = $1 AND subject = $2 AND role = $3 AND password_hash IS NOT NULL"
     ))
+    .bind(provider)
     .bind(username)
+    .bind(if provider == "developer" { "developer" } else { "player" })
     .fetch_optional(pool)
     .await?;
     match row {

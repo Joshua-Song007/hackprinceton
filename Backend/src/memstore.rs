@@ -152,9 +152,33 @@ impl MemStore {
         a
     }
 
+    /// Same rule as `db::create_password_account`: None when (provider "password", username) exists.
+    pub fn create_password_account(&self, username: &str, display_name: &str, password_hash: &str) -> Option<Account> {
+        let mut s = self.lock();
+        if s.accounts.iter().any(|a| a.provider == "password" && a.subject == username) {
+            return None;
+        }
+        let a = Account {
+            id: new_id(),
+            provider: "password".into(),
+            subject: username.into(),
+            display_name: display_name.into(),
+            role: "player".into(),
+            created_at: now_rfc3339(),
+        };
+        s.accounts.push(a.clone());
+        s.password_hashes.insert(a.id.clone(), password_hash.into());
+        Some(a)
+    }
+
     pub fn developer_credentials(&self, username: &str) -> Option<(Account, String)> {
+        self.password_credentials("developer", username)
+    }
+
+    pub fn password_credentials(&self, provider: &str, username: &str) -> Option<(Account, String)> {
         let s = self.lock();
-        let a = s.accounts.iter().find(|a| a.provider == "developer" && a.subject == username && a.role == "developer")?;
+        let role = if provider == "developer" { "developer" } else { "player" };
+        let a = s.accounts.iter().find(|a| a.provider == provider && a.subject == username && a.role == role)?;
         Some((a.clone(), s.password_hashes.get(&a.id)?.clone()))
     }
 

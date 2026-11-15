@@ -84,6 +84,7 @@ async fn developer_login_permissions_metadata_and_covers() {
 
     // The passwordless path: provider "dev" only.
     std::env::set_var("PEAR_DEV_SIGNIN", "1");
+    std::env::set_var("PEAR_DEV_SIGNIN_PREFIX", ""); // these tests use free-form subjects
     let ann = player(addr, "ann").await;
     for provider in ["developer-x", "apple", "test"] {
         let (st, _) = call(addr, "POST", "/api/accounts/signin", None, Some(json!({"provider": provider, "subject": "dev-ann"}))).await;

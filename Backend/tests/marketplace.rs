@@ -240,6 +240,7 @@ async fn scenario(db: Db) {
 #[tokio::test]
 async fn marketplace_against_memory_then_postgres() {
     std::env::set_var("PEAR_DEV_SIGNIN", "1");
+    std::env::set_var("PEAR_DEV_SIGNIN_PREFIX", ""); // these tests use free-form subjects
     scenario(Db::Mem(MemStore::default())).await;
     let Ok(url) = std::env::var("DATABASE_URL") else {
         eprintln!("DATABASE_URL unset: Postgres part skipped");
