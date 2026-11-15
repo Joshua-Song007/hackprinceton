@@ -39,6 +39,8 @@ final class PlayerModel {
     #if os(iOS)
     /// A phone-only game's native screen, shown in place of `activeSession` (see `isPhoneOnly`).
     private(set) var quickDraw: QuickDrawSession?
+    /// A version that ships a `ui.json`: its PearUI screen (Contract C1), shown in place of `activeSession`.
+    private(set) var pearUI: PearUISession?
     #endif
     /// Per game id and version: whether the game is phone-only. Learned from the fetched bundle, so asked once.
     private var phoneOnlyCache: [String: Bool] = [:]
@@ -174,7 +176,7 @@ final class PlayerModel {
     /// `lobby` picks the Quick Draw lobby (nil is the shared OPEN one); other games ignore it.
     func play(_ entry: CatalogEntry, lobby: String? = nil) async throws {
         #if os(iOS)
-        guard activeSession == nil, quickDraw == nil else { return }
+        guard activeSession == nil, quickDraw == nil, pearUI == nil else { return }
         #else
         guard activeSession == nil else { return }
         #endif
@@ -182,6 +184,16 @@ final class PlayerModel {
             throw CloudError.notSignedIn
         }
         let result = try await launch(entry)
+        #if os(iOS)
+        if let doc = PearUIDoc.find(in: result.game.bundle) {
+            guard let session = PearUISession(
+                base: client.baseURL, gameId: result.game.gameId, token: token, version: result.game.version,
+                lobby: lobby, title: entry.title, doc: doc, bundle: result.game.bundle)
+            else { throw CloudError.invalidResponse }
+            pearUI = session
+            return
+        }
+        #endif
         if let scene = try? SceneLoader.decode(JSONEncoder().encode(result.game.bundle.scene)), Self.isPhoneOnly(scene) {
             #if os(iOS)
             guard let session = QuickDrawSession(
@@ -218,6 +230,8 @@ final class PlayerModel {
         #if os(iOS)
         quickDraw?.stop()
         quickDraw = nil
+        pearUI?.stop()
+        pearUI = nil
         #endif
     }
 

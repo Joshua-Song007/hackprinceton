@@ -4,6 +4,8 @@
 <dict>
 	<key>NSMotionUsageDescription</key>
 	<string>Pear reads your phone's motion to tell when you raise it in Quick Draw.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Pear shares your location with games that use the map.</string>
 	<key>PearCloudURL</key>
 	<string>$(PEAR_CLOUD_URL)</string>
 </dict>
