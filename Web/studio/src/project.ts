@@ -1,7 +1,7 @@
 // Project model: scene JSON + client/server script sources + cloud link, dirty tracking and IndexedDB autosave.
 // The Flagship template is imported from Games/Flagship through Vite (never copied into the Studio).
 import type { GameVersion, NewGameVersion } from '@pear/cloud';
-import { parseGestures, parseInputs, parseOwnership, parsePeripherals, parseRaise, parseScene, type CustomGesture, type Ownership, type PeripheralKind, type SceneDescription, type SceneInputs } from '@pear/runtime';
+import { parseGestures, parseInputs, parseInstructions, parseOwnership, parsePeripherals, parseRaise, parseScene, type CustomGesture, type Instructions, type Ownership, type PeripheralKind, type SceneDescription, type SceneInputs } from '@pear/runtime';
 import flagshipScene from '../../../Games/Flagship/scene.json';
 import hotPotatoScene from '../../../Games/HotPotato/scene.json';
 import { blankClientScripts, blankScene, blankServerScripts } from './templates/blank';
@@ -21,9 +21,11 @@ export interface ProjectSnapshot {
   serverScripts: Record<string, string>;
   gameId: string | null;
   version: number | null;
+  /** What players read and do in the real world; absent for a project that has none. */
+  instructions?: Instructions | null;
 }
 
-export type ProjectChange = 'open' | 'scene' | 'script' | 'scripts' | 'saved' | 'cloud';
+export type ProjectChange = 'open' | 'scene' | 'script' | 'scripts' | 'saved' | 'cloud' | 'instructions' | 'proposal';
 
 export const TEMPLATES = [
   { id: 'blank', label: 'Blank', blurb: 'A floor, one cube, a client script and a server script that counts taps. The smallest working loop.' },
@@ -98,6 +100,9 @@ export class Project {
   serverScripts: Record<string, string> = {};
   gameId: string | null = null;
   version: number | null = null;
+  instructions: Instructions | null = null;
+  /** An agent's suggested instructions, waiting for the creator to accept or reject. Not part of the snapshot, undo or autosave. */
+  proposal: Instructions | null = null;
   dirty = false;
   private listeners = new Set<(change: ProjectChange) => void>();
 
@@ -172,11 +177,13 @@ export class Project {
     this.serverScripts = s.serverScripts;
     this.gameId = s.gameId;
     this.version = s.version;
+    this.instructions = s.instructions ?? null;
   }
 
   /** Replaces the whole project (open template, open from cloud, restore draft); clean afterwards. */
   load(s: ProjectSnapshot): void {
     this.apply(s);
+    this.proposal = null;
     this.undoStack = [];
     this.redoStack = [];
     this.baseline = this.snapshot();
@@ -185,7 +192,41 @@ export class Project {
   }
 
   snapshot(): ProjectSnapshot {
-    return structuredClone({ scene: this.scene, clientScripts: this.clientScripts, serverScripts: this.serverScripts, gameId: this.gameId, version: this.version });
+    return structuredClone({
+      scene: this.scene, clientScripts: this.clientScripts, serverScripts: this.serverScripts, gameId: this.gameId, version: this.version,
+      ...(this.instructions ? { instructions: this.instructions } : {}),
+    });
+  }
+
+  /** Replaces the instructions as one undoable step; the same value changes nothing. */
+  setInstructions(next: Instructions | null): void {
+    if (JSON.stringify(next) === JSON.stringify(this.instructions)) return;
+    this.instructions = next === null ? null : structuredClone(next);
+    this.touch('instructions');
+  }
+
+  /** Holds an agent's suggestion until it is accepted or rejected. Returns an error sentence, and keeps what it had, when the value is not an object. */
+  propose(raw: unknown): string | undefined {
+    try {
+      this.proposal = parseInstructions(raw);
+    } catch (e) {
+      return e instanceof Error ? e.message : String(e);
+    }
+    this.emit('proposal');
+  }
+
+  acceptProposal(): void {
+    const next = this.proposal;
+    if (!next) return;
+    this.proposal = null;
+    this.setInstructions(next);
+    this.emit('proposal');
+  }
+
+  rejectProposal(): void {
+    if (!this.proposal) return;
+    this.proposal = null;
+    this.emit('proposal');
   }
 
   /** Link to a cloud game (not an edit, so not dirty). */
@@ -519,13 +560,20 @@ export class Project {
       client_scripts: this.clientScripts,
       server_scripts: this.serverScripts,
       assets: {},
-      metadata: { name: this.name, source: 'pear-studio' },
+      metadata: { name: this.name, source: 'pear-studio', ...(this.instructions ? { instructions: this.instructions } : {}) },
       run_mode: this.description().runMode,
     };
   }
 
   static snapshotOfVersion(v: GameVersion): ProjectSnapshot {
-    return { scene: v.scene, clientScripts: v.client_scripts, serverScripts: v.server_scripts, gameId: v.game_id, version: v.version };
+    const snapshot: ProjectSnapshot = { scene: v.scene, clientScripts: v.client_scripts, serverScripts: v.server_scripts, gameId: v.game_id, version: v.version };
+    try {
+      const raw = v.metadata?.instructions;
+      if (raw !== undefined && raw !== null) snapshot.instructions = parseInstructions(raw);
+    } catch {
+      // metadata that is not an object is dropped: the game opens without instructions
+    }
+    return snapshot;
   }
 }
 

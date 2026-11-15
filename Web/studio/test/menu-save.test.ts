@@ -1,3 +1,4 @@
+import { parseInstructions } from '@pear/runtime';
 import { describe, expect, it } from 'vitest';
 import { matches } from '../src/menubar';
 import { Project, templateSnapshot } from '../src/project';
@@ -7,6 +8,19 @@ describe('project file', () => {
   it('round-trips a project', () => {
     const snap = templateSnapshot('flagship');
     expect(parseProjectFile(serializeProject(snap))).toEqual(snap);
+  });
+
+  it('keeps instructions through a file, and a file without them opens with none', () => {
+    const instructions = parseInstructions({ title: 'Quick Draw', players: { min: 3, max: 3 }, roles: [{ id: 'ref', kind: 'ref' }] });
+    const snap = { ...templateSnapshot('flagship'), instructions };
+    expect(parseProjectFile(serializeProject(snap))).toEqual(snap);
+    const plain = parseProjectFile(serializeProject(templateSnapshot('flagship')));
+    expect('instructions' in plain).toBe(false);
+  });
+
+  it('refuses instructions that are not an object, with a sentence', () => {
+    const text = JSON.stringify({ format: 'pear-project', v: 1, scene: {}, clientScripts: {}, serverScripts: {}, instructions: 5 });
+    expect(() => parseProjectFile(text)).toThrow("The project file's instructions are not valid: instructions: expected object");
   });
 
   it.each([

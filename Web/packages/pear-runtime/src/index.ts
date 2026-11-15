@@ -4,3 +4,4 @@ export * from './events';
 export * from './viewport';
 export * from './orbit';
 export * from './rig';
+export * from './instructions';

@@ -396,12 +396,13 @@ Not in overview.md; added at user request 2026-11-14 (overview.md stays unchange
 
 ### 12.1 Instructions data
 
-- [ ] `Web/packages/pear-runtime/src/instructions.ts` — `Instructions` type (title, summary, players {min,max}, space, setup[], roles[{id,name,brief,kind}], devices {kind: own/free/passed}, phases[{id,title,text,steps[{role,do}]}], win), lenient `parseInstructions`, and `lintInstructions(instructions, scene)` warnings: player count vs `inputs.players`, gestures vs `inputs.gestures`, devices vs `ownership`, step role undeclared, phase without steps; the scene is the side flagged out of sync. Role `kind` is `player` or `ref` and sets `ctx.player.role`.
-- [ ] `Web/packages/pear-runtime/src/index.ts` — export instructions.
-- [ ] `Web/packages/pear-runtime/test/instructions.test.ts` — parse, bad input dropped not thrown, each lint code.
-- [ ] `Web/studio/src/project.ts` — `ProjectSnapshot.instructions?` (optional); `snapshot`, `load` and `setInstructions` (one undo step); `toVersion` writes `metadata.instructions`, `snapshotOfVersion` reads it; a pending proposal with accept and reject.
-- [ ] `Web/studio/src/projectFile.ts` — serialize and parse the optional `instructions` (validated by `parseInstructions`); `FILE_VERSION` unchanged, files without it still open.
-- [ ] `Web/studio/test/menu-save.test.ts` — round trip with instructions; an old file without the field; bad instructions refused with a sentence.
+- [x] `Web/packages/pear-runtime/src/instructions.ts` — `Instructions` type (title, summary, players {min,max}, space, setup[], roles[{id,name,brief,kind}], devices {kind: own/free/passed}, phases[{id,title,text,steps[{role,do}]}], win), lenient `parseInstructions`, and `lintInstructions(instructions, scene)` warnings: player count vs `inputs.players`, gestures vs `inputs.gestures`, devices vs `ownership`, step role undeclared, phase without steps; the scene is the side flagged out of sync. Role `kind` is `player` or `ref` and sets `ctx.player.role`.
+- [x] `Web/packages/pear-runtime/src/index.ts` — export instructions.
+- [x] `Web/packages/pear-runtime/test/instructions.test.ts` — parse, bad input dropped not thrown, each lint code.
+- [x] `Web/studio/src/project.ts` — `ProjectSnapshot.instructions?` (optional); `snapshot`, `load` and `setInstructions` (one undo step); `toVersion` writes `metadata.instructions`, `snapshotOfVersion` reads it; a pending proposal with accept and reject.
+- [x] `Web/studio/src/projectFile.ts` — serialize and parse the optional `instructions` (validated by `parseInstructions`); `FILE_VERSION` unchanged, files without it still open.
+- [x] `Web/studio/test/menu-save.test.ts` — round trip with instructions; an old file without the field; bad instructions refused with a sentence.
+- [x] `Web/studio/test/instructions.test.ts` — project cases: `setInstructions` undo, snapshot and cloud metadata round trip, proposal accept, reject and load.
 
 ### 12.2 Plugin (Plugins/langchain-deepagents)
 
@@ -438,7 +439,7 @@ Not in overview.md; added at user request 2026-11-14 (overview.md stays unchange
 
 - [ ] `Web/studio/src/instructionsPanel.ts` — edit fields, lint list, proposal diff with Accept and Reject, playtest report; direct edits stay the creator's.
 - [ ] `Web/studio/src/main.ts` — register the panel and its menu entry.
-- [ ] `Web/studio/test/instructions.test.ts` — save and load, undo, lint shown, proposal accept and reject, report shown.
+- [ ] `Web/studio/test/instructions.test.ts` — panel cases added to the existing file: lint shown, proposal diff accept and reject, report shown.
 
 Not planned: server or join agent runners; a how-to-play screen in the Player app; published games carrying instructions beyond `metadata` (Phase 11 backend items).
 

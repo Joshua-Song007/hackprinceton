@@ -1,5 +1,6 @@
 // Project files on disk: `*.pear.json` = a ProjectSnapshot in a small versioned envelope.
 // File System Access API where the browser has it (Chromium, WebView2); download + <input type=file> elsewhere.
+import { InstructionsError, parseInstructions } from '@pear/runtime';
 import type { ProjectSnapshot } from './project';
 
 export const FILE_FORMAT = 'pear-project';
@@ -28,7 +29,15 @@ export function parseProjectFile(text: string): ProjectSnapshot {
   const gameId = raw.gameId ?? null;
   const version = raw.version ?? null;
   if ((gameId !== null && typeof gameId !== 'string') || (version !== null && typeof version !== 'number')) throw new Error('The project file has a bad cloud link.');
-  return { scene: raw.scene, clientScripts: raw.clientScripts, serverScripts: raw.serverScripts, gameId, version };
+  const snapshot: ProjectSnapshot = { scene: raw.scene, clientScripts: raw.clientScripts, serverScripts: raw.serverScripts, gameId, version };
+  if (raw.instructions !== undefined && raw.instructions !== null) {
+    try {
+      snapshot.instructions = parseInstructions(raw.instructions);
+    } catch (e) {
+      throw new Error(`The project file's instructions are not valid: ${e instanceof InstructionsError ? e.message : String(e)}`);
+    }
+  }
+  return snapshot;
 }
 
 /** The slice of FileSystemFileHandle used here (lib.dom does not type the picker APIs everywhere). */
