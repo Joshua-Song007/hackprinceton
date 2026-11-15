@@ -90,6 +90,7 @@ async fn pool_or_skip() -> Option<sqlx::postgres::PgPool> {
     db::migrate(&pool).await.expect("migrate");
     // Only this test binary touches the variable; the dev sign-in route is gated on it.
     std::env::set_var("PEAR_DEV_SIGNIN", "1");
+    std::env::set_var("PEAR_DEV_SIGNIN_PREFIX", ""); // these tests use free-form subjects
     Some(pool)
 }
 

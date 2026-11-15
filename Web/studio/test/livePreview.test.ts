@@ -157,7 +157,7 @@ describe('DeviceSession', () => {
     await settle();
     expect(s.calls[0]).toBe('POST /api/accounts/signin');
     const sock = s.sockets[0];
-    expect(sock.url).toBe('wss://srv.test/play/g1?lobby=ABCDE&token=tok-preview-ipad-r1');
+    expect(sock.url).toBe('wss://srv.test/play/g1?lobby=ABCDE&token=tok-sim-preview-ipad-r1');
     sock.open();
     expect(sock.sent).toEqual([{ name: 'role', data: { role: 'referee', kind: 'ipad' } }]);
     sock.close();

@@ -74,7 +74,7 @@ function connect(label, url) {
 
 async function main() {
   const run = Date.now().toString(36);
-  const signin = (who) => api("POST", "/api/accounts/signin", null, { provider: "dev", subject: `demo-${who}-${run}`, display_name: who });
+  const signin = (who) => api("POST", "/api/accounts/signin", null, { provider: "dev", subject: `sim-demo-${who}-${run}`, display_name: who });
   const owner = await signin("owner");
   const p1 = await signin("player1");
   const p2 = await signin("player2");

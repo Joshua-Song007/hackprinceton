@@ -13,6 +13,7 @@ type Addr = std::net::SocketAddr;
 
 async fn serve() -> Addr {
     std::env::set_var("PEAR_DEV_SIGNIN", "1");
+    std::env::set_var("PEAR_DEV_SIGNIN_PREFIX", ""); // these tests use free-form subjects
     let mem = MemStore::default();
     create_developer(&Db::Mem(mem.clone()), "infra-dev", "Infra Dev", "a long password").await.unwrap();
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();

@@ -69,6 +69,7 @@ async fn library(addr: std::net::SocketAddr, token: &str) -> Vec<Value> {
 #[tokio::test]
 async fn library_lists_published_games_for_any_signed_in_account() {
     std::env::set_var("PEAR_DEV_SIGNIN", "1");
+    std::env::set_var("PEAR_DEV_SIGNIN_PREFIX", ""); // these tests use free-form subjects
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
     let router = app_with_studio(Some(Db::Mem(MemStore::default())), None);
@@ -117,6 +118,7 @@ async fn library_lists_published_games_for_any_signed_in_account() {
 #[tokio::test]
 async fn publish_without_listing_stays_hidden_and_one_call_with_listing_shows_it() {
     std::env::set_var("PEAR_DEV_SIGNIN", "1");
+    std::env::set_var("PEAR_DEV_SIGNIN_PREFIX", ""); // these tests use free-form subjects
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
     let router = app_with_studio(Some(Db::Mem(MemStore::default())), None);

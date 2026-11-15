@@ -9,7 +9,7 @@ const lobby = (lobbyArg || "SMK" + Math.random().toString(36).slice(2, 6)).toUpp
 async function join(who, role) {
   const r = await fetch(`${base}/api/accounts/signin`, {
     method: "POST", headers: { "content-type": "application/json" },
-    body: JSON.stringify({ provider: "dev", subject: `qd-smoke-${who}-${run}`, display_name: who }),
+    body: JSON.stringify({ provider: "dev", subject: `sim-qd-${who}-${run}`, display_name: who }),
   });
   if (!r.ok) throw new Error(`signin ${r.status}`);
   const { token } = await r.json();

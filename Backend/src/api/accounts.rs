@@ -6,6 +6,11 @@
 // The passwordless path accepts only provider "dev". Provider "developer" is the team's password login
 // (argon2id hash in accounts.password_hash, role "developer"); those accounts exist only through the
 // `pear-backend create-developer` CLI and sign-in never creates one.
+// Provider "password" is self-service: `POST /api/accounts/signup` creates a role "player" account
+// (provider "password", subject = username, argon2id hash) and sign-in with {provider:"password",
+// subject: username, password} gives the same token body and the same delayed 401 as "developer".
+// The passwordless "dev" path additionally requires the subject to start with PEAR_DEV_SIGNIN_PREFIX
+// (default "sim-", so humans cannot take a name through it; an explicitly empty value disables the check).
 // Runtime sqlx via db.rs only. No new crates: token randomness comes from std's OS-seeded RandomState.
 
 use std::collections::HashMap;
@@ -210,6 +215,11 @@ fn dev_signin_enabled(flag: Option<&str>) -> bool {
     flag == Some("1")
 }
 
+/// A passwordless dev sign-in subject must start with the prefix (unset = "sim-", set but empty = no check).
+fn dev_subject_allowed(prefix: Option<&str>, subject: &str) -> bool {
+    subject.starts_with(prefix.unwrap_or("sim-"))
+}
+
 /// No `Debug`: `password` must never end up in a log line.
 #[derive(Deserialize)]
 pub struct SignInRequest {
@@ -217,7 +227,7 @@ pub struct SignInRequest {
     pub subject: String,
     #[serde(default)]
     pub display_name: String,
-    /// Only read for provider "developer".
+    /// Only read for providers "developer" and "password".
     #[serde(default)]
     pub password: String,
 }
@@ -253,11 +263,20 @@ pub fn verify_password(password: &str, phc: &str) -> bool {
 
 /// Username 3-32 chars of `[a-z0-9_-]`, password at least 12 chars.
 pub fn check_developer_input(username: &str, password: &str) -> Result<(), &'static str> {
+    check_credentials(username, password, 12)
+}
+
+const MIN_PLAYER_PASSWORD: usize = 10;
+
+fn check_credentials(username: &str, password: &str, min_password: usize) -> Result<(), &'static str> {
     if !(3..=32).contains(&username.len()) || !username.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_' || b == b'-') {
         return Err("username must be 3-32 characters of a-z 0-9 _ -");
     }
-    if password.chars().count() < 12 {
-        return Err("password must be at least 12 characters");
+    if password.len() > MAX_PASSWORD_LEN {
+        return Err("password is too long");
+    }
+    if password.chars().count() < min_password {
+        return Err(if min_password == 12 { "password must be at least 12 characters" } else { "password must be at least 10 characters" });
     }
     Ok(())
 }
@@ -272,7 +291,7 @@ pub async fn create_developer(db: &db::Db, username: &str, display_name: &str, p
     db::upsert_developer(db, username, display_name.trim(), &hash).await.map_err(|e| e.to_string())
 }
 
-async fn developer_signin(state: AppState, req: SignInRequest) -> Result<Json<SignInResponse>, StatusCode> {
+async fn password_signin(state: AppState, req: SignInRequest) -> Result<Json<SignInResponse>, StatusCode> {
     let started = Instant::now();
     if !valid_field(&req.subject) || req.password.len() > MAX_PASSWORD_LEN {
         return Err(StatusCode::BAD_REQUEST);
@@ -280,7 +299,7 @@ async fn developer_signin(state: AppState, req: SignInRequest) -> Result<Json<Si
     let Some(pool) = state.db.as_ref() else {
         return Err(StatusCode::SERVICE_UNAVAILABLE);
     };
-    let creds = db::developer_credentials(pool, &req.subject).await.map_err(|e| {
+    let creds = db::password_credentials(pool, &req.provider, &req.subject).await.map_err(|e| {
         eprintln!("signin: db error: {e}");
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
@@ -308,8 +327,8 @@ async fn signin(
     State(state): State<AppState>,
     Json(req): Json<SignInRequest>,
 ) -> Result<Json<SignInResponse>, StatusCode> {
-    if req.provider == "developer" {
-        return developer_signin(state, req).await;
+    if req.provider == "developer" || req.provider == "password" {
+        return password_signin(state, req).await;
     }
     if !dev_signin_enabled(std::env::var("PEAR_DEV_SIGNIN").ok().as_deref()) {
         return Err(StatusCode::FORBIDDEN);
@@ -323,6 +342,9 @@ async fn signin(
     {
         return Err(StatusCode::BAD_REQUEST);
     }
+    if !dev_subject_allowed(std::env::var("PEAR_DEV_SIGNIN_PREFIX").ok().as_deref(), &req.subject) {
+        return Err(StatusCode::FORBIDDEN);
+    }
     let Some(pool) = state.db.as_ref() else {
         return Err(StatusCode::SERVICE_UNAVAILABLE);
     };
@@ -334,6 +356,54 @@ async fn signin(
         })?;
     let token = store_session(account.clone()).await;
     Ok(Json(SignInResponse { token, account }))
+}
+
+#[derive(Deserialize)]
+pub struct SignUpRequest {
+    pub username: String,
+    pub password: String,
+    #[serde(default)]
+    pub display_name: String,
+}
+
+/// Self-service player account. 400 (with a message) for bad input, 409 for a taken username. A taken
+/// username waits the same delay as a failed sign-in so signup is not a free username probe.
+async fn signup(
+    State(state): State<AppState>,
+    Json(req): Json<SignUpRequest>,
+) -> Result<Json<SignInResponse>, (StatusCode, &'static str)> {
+    let started = Instant::now();
+    check_credentials(&req.username, &req.password, MIN_PLAYER_PASSWORD).map_err(|m| (StatusCode::BAD_REQUEST, m))?;
+    let name = req.display_name.trim();
+    let name = if name.is_empty() { req.username.as_str() } else { name };
+    if !valid_field(name) {
+        return Err((StatusCode::BAD_REQUEST, "display name must be 1-256 characters"));
+    }
+    let Some(pool) = state.db.as_ref() else {
+        return Err((StatusCode::SERVICE_UNAVAILABLE, "no database"));
+    };
+    let password = req.password.clone();
+    let hash = tokio::task::spawn_blocking(move || hash_password(&password))
+        .await
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "hashing failed"))?
+        .map_err(|e| {
+            eprintln!("signup: hash error: {e}");
+            (StatusCode::INTERNAL_SERVER_ERROR, "hashing failed")
+        })?;
+    let created = db::create_password_account(pool, &req.username, name, &hash).await.map_err(|e| {
+        eprintln!("signup: db error: {e}");
+        (StatusCode::INTERNAL_SERVER_ERROR, "database error")
+    })?;
+    match created {
+        Some(account) => {
+            let token = store_session(account.clone()).await;
+            Ok(Json(SignInResponse { token, account }))
+        }
+        None => {
+            tokio::time::sleep_until((started + DEVELOPER_FAIL_DELAY).into()).await;
+            Err((StatusCode::CONFLICT, "username taken"))
+        }
+    }
 }
 
 /// `me` adds the friend code to the account fields so the app can show it.
@@ -385,9 +455,10 @@ async fn signout(headers: HeaderMap) -> StatusCode {
     StatusCode::NO_CONTENT
 }
 
-/// Routes: POST /api/accounts/signin, GET /api/accounts/me, POST /api/accounts/signout.
+/// Routes: POST /api/accounts/signup, POST /api/accounts/signin, GET /api/accounts/me, POST /api/accounts/signout.
 pub fn routes() -> Router<AppState> {
     Router::new()
+        .route("/api/accounts/signup", post(signup))
         .route("/api/accounts/signin", post(signin))
         .route("/api/accounts/me", get(me).put(rename))
         .route("/api/accounts/signout", post(signout))
@@ -560,6 +631,15 @@ mod tests {
         assert!(!valid_field("  "));
         assert!(!valid_field(&"x".repeat(MAX_FIELD_LEN + 1)));
         assert!(valid_field("apple"));
+    }
+
+    #[test]
+    fn dev_subject_prefix_rule() {
+        assert!(dev_subject_allowed(None, "sim-a"));
+        assert!(!dev_subject_allowed(None, "alice"));
+        assert!(dev_subject_allowed(Some("x-"), "x-1"));
+        assert!(!dev_subject_allowed(Some("x-"), "sim-1"));
+        assert!(dev_subject_allowed(Some(""), "anything"));
     }
 
     #[test]

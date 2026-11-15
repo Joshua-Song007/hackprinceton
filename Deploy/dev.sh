@@ -7,6 +7,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 export PATH="$HOME/.cargo/bin:$PATH"
 export PEAR_DEV_SIGNIN="${PEAR_DEV_SIGNIN:-1}"
+export PEAR_DEV_SIGNIN_PREFIX="${PEAR_DEV_SIGNIN_PREFIX-}"  # local dev: Studio signs in by typed name, so no sim- prefix required
 export PORT="${PORT:-8080}"
 # Marketplace on the dev box: seed Plugins/ at startup (in memory), and point the hosted-agent proxy at a
 # local runtime (`cd Plugins/langchain-deepagents && uv run python runtime/server.py`) for signed-in browsers.

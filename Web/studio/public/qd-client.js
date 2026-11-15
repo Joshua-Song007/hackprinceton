@@ -14,7 +14,7 @@
   function subject() {
     let s = sessionStorage.getItem("qd-subject");
     if (!s) {
-      s = "qd-" + Math.random().toString(36).slice(2) + Date.now().toString(36);
+      s = "sim-qd-" + Math.random().toString(36).slice(2) + Date.now().toString(36);
       sessionStorage.setItem("qd-subject", s);
     }
     return s;

@@ -42,6 +42,7 @@ async fn sign_in(addr: std::net::SocketAddr, subject: &str) -> String {
 async fn memory_mode_publish_then_fetch_round_trip() {
     // Only this test binary touches the variable; the dev sign-in route is gated on it.
     std::env::set_var("PEAR_DEV_SIGNIN", "1");
+    std::env::set_var("PEAR_DEV_SIGNIN_PREFIX", ""); // these tests use free-form subjects
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
     let router = app_with_studio(Some(Db::Mem(MemStore::default())), None);
