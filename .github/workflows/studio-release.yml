@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
     inputs:
       unsigned:
-        description: Unsigned build: no updater artifacts and no code-signing secrets (use while those secrets are broken)
+        description: "Unsigned build - no updater artifacts and no code-signing secrets (use while those secrets are broken)"
         type: boolean
         default: false
 permissions:
