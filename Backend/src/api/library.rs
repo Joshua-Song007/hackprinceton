@@ -1,6 +1,6 @@
 // Public game library for the player app: every published game with its newest version's details.
 // [provisional: needs-tien-review] Every published game is listed to any signed-in account; permissions
-// and moderation are not decided (overview.md Module 11). No description: a published game carries none.
+// and moderation are not decided (overview.md Module 11). The description and cover come from the game row.
 // Auth is `accounts::authenticate`; queries go through db.rs only. Order per request: auth, db, query.
 //
 // Routes:
@@ -26,11 +26,16 @@ pub struct CatalogEntry {
     pub latest_version: i32,
     pub run_mode: String,
     pub required_tier: i32,
+    pub description: String,
+    /// "/api/games/{id}/cover?v=<version>" when the game has a cover, else null.
+    pub cover_url: Option<String>,
 }
 
 impl From<CatalogRow> for CatalogEntry {
     fn from(r: CatalogRow) -> Self {
         CatalogEntry {
+            cover_url: r.cover_version.map(|v| format!("/api/games/{}/cover?v={v}", r.id)),
+            description: r.description,
             id: r.id,
             title: r.title,
             author: r.author,
@@ -98,10 +103,13 @@ mod tests {
             latest_version: 3,
             run_mode: "device".into(),
             required_tier: 2,
+            description: "d".into(),
+            cover_version: Some(7),
         });
         assert_eq!(
             serde_json::to_value(&e).unwrap(),
-            json!({"id":"i","title":"t","author":"a","latestVersion":3,"runMode":"device","requiredTier":2})
+            json!({"id":"i","title":"t","author":"a","latestVersion":3,"runMode":"device","requiredTier":2,
+                   "description":"d","coverUrl":"/api/games/i/cover?v=7"})
         );
     }
 
@@ -143,7 +151,7 @@ mod tests {
         let rows: serde_json::Value = serde_json::from_str(body).unwrap();
         assert_eq!(
             rows,
-            json!([{"id": g.id, "title": "Mine", "author": "Ann", "latestVersion": 1, "runMode": "device", "requiredTier": 2}])
+            json!([{"id": g.id, "title": "Mine", "author": "Ann", "latestVersion": 1, "runMode": "device", "requiredTier": 2, "description": "", "coverUrl": null}])
         );
     }
 }

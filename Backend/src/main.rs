@@ -30,6 +30,28 @@ async fn main() {
     // `pear-backend seed <dir>`: the marketplace seed/publish job. Publishes every plugin dir under
     // <dir> as approved, then exits (non-zero if any plugin failed). Safe to re-run.
     let args: Vec<String> = std::env::args().collect();
+    // `pear-backend create-developer <username> "<display name>"`: creates the developer account (or resets
+    // its password) and prints its id. The password comes from PEAR_DEVELOPER_PASSWORD, never argv.
+    if args.get(1).map(String::as_str) == Some("create-developer") {
+        let (Some(username), Some(display_name)) = (args.get(2), args.get(3)) else {
+            eprintln!("usage: PEAR_DEVELOPER_PASSWORD=... pear-backend create-developer <username> \"<display name>\" (needs DATABASE_URL)");
+            std::process::exit(2);
+        };
+        let (Ok(password), Some(db @ Db::Pg(_))) = (std::env::var("PEAR_DEVELOPER_PASSWORD"), db.as_ref()) else {
+            eprintln!("create-developer: set PEAR_DEVELOPER_PASSWORD and DATABASE_URL (a valid one)");
+            std::process::exit(2);
+        };
+        match pear_backend::api::accounts::create_developer(db, username, display_name, &password).await {
+            Ok(a) => {
+                println!("{}", a.id);
+                std::process::exit(0);
+            }
+            Err(e) => {
+                eprintln!("create-developer: {e}");
+                std::process::exit(1);
+            }
+        }
+    }
     if args.get(1).map(String::as_str) == Some("seed") {
         let (Some(dir), Some(db)) = (args.get(2), db.as_ref()) else {
             eprintln!("usage: pear-backend seed <plugins dir> (needs a database)");

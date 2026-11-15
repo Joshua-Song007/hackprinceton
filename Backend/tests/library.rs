@@ -33,7 +33,7 @@ async fn sign_in(addr: std::net::SocketAddr, subject: &str, name: &str) -> Strin
         "POST",
         "/api/accounts/signin",
         None,
-        Some(&json!({"provider": "test", "subject": subject, "display_name": name})),
+        Some(&json!({"provider": "dev", "subject": subject, "display_name": name})),
     )
     .await;
     assert_eq!(st, 200, "signin: {body}");
@@ -93,7 +93,7 @@ async fn library_lists_published_games_for_any_signed_in_account() {
     assert_eq!(rows.len(), 1, "{rows:?}");
     assert_eq!(
         rows[0],
-        json!({"id": g1, "title": "Haunted house", "author": "Ann", "latestVersion": 2, "runMode": "device", "requiredTier": 2})
+        json!({"id": g1, "title": "Haunted house", "author": "Ann", "latestVersion": 2, "runMode": "device", "requiredTier": 2, "description": "", "coverUrl": null})
     );
     assert!(rows.iter().all(|r| r["id"] != draft), "an unpublished game must not be listed");
 

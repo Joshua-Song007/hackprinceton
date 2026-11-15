@@ -27,7 +27,7 @@ fn key(account_id: &str) -> String {
 }
 
 /// The image type from its first bytes, so nothing but the bytes is stored.
-fn sniff(bytes: &[u8]) -> Option<&'static str> {
+pub(crate) fn sniff(bytes: &[u8]) -> Option<&'static str> {
     if bytes.starts_with(&[0xFF, 0xD8, 0xFF]) {
         Some("image/jpeg")
     } else if bytes.starts_with(&[0x89, b'P', b'N', b'G']) {
