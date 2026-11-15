@@ -1,6 +1,6 @@
-# Omni Studio creator docs
+# Pear Studio creator docs
 
-Omni Studio is where you build games for Omni: a 3D scene, scripts that run on each player's device, and an optional server script that owns shared state. You can test everything on one computer with simulated devices.
+Pear Studio is where you build games for Pear: a 3D scene, scripts that run on each player's device, and an optional server script that owns shared state. You can test everything on one computer with simulated devices.
 
 Read in this order:
 

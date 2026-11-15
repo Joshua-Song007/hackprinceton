@@ -1,13 +1,13 @@
-// Local device relay: phones running the Omni companion find this machine over Bonjour (_omni._tcp), stream newline-delimited
-// JSON (the OmniBridge wire protocol: hello, ping/pong, output, raw USIS packets), and Studio reads them over a WebSocket.
+// Local device relay: phones running the Pear companion find this machine over Bonjour (_pear._tcp), stream newline-delimited
+// JSON (the PearBridge wire protocol: hello, ping/pong, output, raw USIS packets), and Studio reads them over a WebSocket.
 // Both servers stay on this machine's network (Network Rule): the WebSocket binds 127.0.0.1 and nothing is forwarded anywhere else.
-// Run: npm run relay (from Web/studio). Env: OMNI_RELAY_PORT (TCP, default 7777), OMNI_RELAY_WS_PORT (default 8787).
+// Run: npm run relay (from Web/studio). Env: PEAR_RELAY_PORT (TCP, default 7777), PEAR_RELAY_WS_PORT (default 8787).
 import net from 'node:net';
 import { WebSocketServer } from 'ws';
 import { Bonjour } from 'bonjour-service';
 
-const TCP_PORT = Number(process.env.OMNI_RELAY_PORT ?? 7777);
-const WS_PORT = Number(process.env.OMNI_RELAY_WS_PORT ?? 8787);
+const TCP_PORT = Number(process.env.PEAR_RELAY_PORT ?? 7777);
+const WS_PORT = Number(process.env.PEAR_RELAY_WS_PORT ?? 8787);
 const MAX_LINE = 1 << 20;
 
 /** deviceId -> { socket, name, kind } for every device that has said hello. */
@@ -68,7 +68,7 @@ const server = net.createServer((socket) => {
 
 server.listen(TCP_PORT, () => {
   const bonjour = new Bonjour();
-  bonjour.publish({ name: 'Omni relay', type: 'omni', port: TCP_PORT });
-  console.log(`relay: devices on tcp ${TCP_PORT} (Bonjour _omni._tcp), Studio on ws://127.0.0.1:${WS_PORT}`);
+  bonjour.publish({ name: 'Pear relay', type: 'pear', port: TCP_PORT });
+  console.log(`relay: devices on tcp ${TCP_PORT} (Bonjour _pear._tcp), Studio on ws://127.0.0.1:${WS_PORT}`);
   process.on('SIGINT', () => bonjour.unpublishAll(() => process.exit(0)));
 });

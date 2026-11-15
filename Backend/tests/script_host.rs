@@ -1,10 +1,10 @@
 // Same server-script fixture and expectations as
-// Packages/OmniScript/Tests/OmniScriptTests/ServerScriptEngineTests.swift, run against the
+// Packages/PearScript/Tests/PearScriptTests/ServerScriptEngineTests.swift, run against the
 // rquickjs host. Keeps the Swift and Rust server-script hosts aligned. No DATABASE_URL needed.
 // [provisional: needs-tien-review]
 
-use omni_backend::game_server::script_host::{factory, QuickJsHost};
-use omni_backend::game_server::session::{Outgoing, ScriptHost};
+use pear_backend::game_server::script_host::{factory, QuickJsHost};
+use pear_backend::game_server::session::{Outgoing, ScriptHost};
 use serde_json::{json, Value};
 
 /// Shared server-script fixture. Copied verbatim from `sharedFixture` in ServerScriptEngineTests.swift.

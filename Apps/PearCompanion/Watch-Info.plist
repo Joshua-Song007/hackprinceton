@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>NSHealthShareUsageDescription</key>
+	<string>Pear Companion reads your heart rate during a workout session and sends it to Pear Studio as game input.</string>
+	<key>NSHealthUpdateUsageDescription</key>
+	<string>Pear Companion runs a workout session to keep heart-rate sensing active. The workout is not saved.</string>
+	<key>NSMotionUsageDescription</key>
+	<string>Pear Companion detects wrist gestures from motion and sends them to Pear Studio as game input.</string>
+</dict>
+</plist>

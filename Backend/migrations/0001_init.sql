@@ -1,4 +1,4 @@
--- Omni backend schema v1 (overview.md Module 11): accounts, games, published game versions.
+-- Pear backend schema v1 (overview.md Module 11): accounts, games, published game versions.
 -- Game content only; sensor data (USIS) and output commands never reach the cloud.
 -- Game files are stored in Postgres (Vultr) for now; object storage is not decided.
 

@@ -1,7 +1,7 @@
 // Project model: scene JSON + client/server script sources + cloud link, dirty tracking and IndexedDB autosave.
 // The Flagship template is imported from Games/Flagship through Vite (never copied into the Studio).
-import type { GameVersion, NewGameVersion } from '@omni/cloud';
-import { parseGestures, parseInputs, parseScene, type SceneDescription } from '@omni/runtime';
+import type { GameVersion, NewGameVersion } from '@pear/cloud';
+import { parseGestures, parseInputs, parseScene, type SceneDescription } from '@pear/runtime';
 import flagshipScene from '../../../Games/Flagship/scene.json';
 import hotPotatoScene from '../../../Games/HotPotato/scene.json';
 import { blankClientScripts, blankScene, blankServerScripts } from './templates/blank';
@@ -437,7 +437,7 @@ export class Project {
       client_scripts: this.clientScripts,
       server_scripts: this.serverScripts,
       assets: {},
-      metadata: { name: this.name, source: 'omni-studio' },
+      metadata: { name: this.name, source: 'pear-studio' },
       run_mode: this.description().runMode,
     };
   }
@@ -448,7 +448,7 @@ export class Project {
 }
 
 // IndexedDB autosave: one recovery copy of the current project, restored on the next start.
-const DB_NAME = 'omni-studio';
+const DB_NAME = 'pear-studio';
 const STORE = 'drafts';
 
 function openDb(): Promise<IDBDatabase> {

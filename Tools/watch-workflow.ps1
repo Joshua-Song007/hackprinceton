@@ -62,7 +62,7 @@ while ($true) {
     $w = [Math]::Max(80, $Host.UI.RawUI.WindowSize.Width - 1)
     $out = @()
     Clear-Host
-    Write-Host ("Omni Phase 8 build loop   {0}   refresh {1}s   Ctrl+C to quit" -f (Get-Date -Format "HH:mm:ss"), $Interval) -ForegroundColor Cyan
+    Write-Host ("Pear Phase 8 build loop   {0}   refresh {1}s   Ctrl+C to quit" -f (Get-Date -Format "HH:mm:ss"), $Interval) -ForegroundColor Cyan
     Write-Host ("-" * $w) -ForegroundColor DarkGray
 
     # plan.md Phase 8 progress, per subsection

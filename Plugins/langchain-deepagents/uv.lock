@@ -878,7 +878,7 @@ wheels = [
 ]
 
 [[package]]
-name = "omni-langchain-deepagents"
+name = "pear-langchain-deepagents"
 version = "0.7.39"
 source = { virtual = "." }
 dependencies = [

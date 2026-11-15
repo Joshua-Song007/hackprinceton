@@ -1,6 +1,6 @@
 // Sign-in and session tokens.
 // [provisional: needs-tien-review] Sign-in method is not decided (Sign in with Apple preferred).
-// Default here: dev sign-in by (provider, subject), enabled only when OMNI_DEV_SIGNIN=1, issuing an
+// Default here: dev sign-in by (provider, subject), enabled only when PEAR_DEV_SIGNIN=1, issuing an
 // opaque random bearer token kept in server memory (lost on restart, single instance). Replace the
 // `signin` handler with a real provider check (Apple identity token) later; `authenticate` stays.
 // Runtime sqlx via db.rs only. No new crates: token randomness comes from std's OS-seeded RandomState.
@@ -143,7 +143,7 @@ async fn signin(
     State(state): State<AppState>,
     Json(req): Json<SignInRequest>,
 ) -> Result<Json<SignInResponse>, StatusCode> {
-    if !dev_signin_enabled(std::env::var("OMNI_DEV_SIGNIN").ok().as_deref()) {
+    if !dev_signin_enabled(std::env::var("PEAR_DEV_SIGNIN").ok().as_deref()) {
         return Err(StatusCode::FORBIDDEN);
     }
     if !valid_field(&req.provider)

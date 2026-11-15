@@ -46,6 +46,6 @@ jobs:
         if: steps.kind.outputs.managed == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
-          OMNI_ORCHESTRATOR_LOGIN: ${{ vars.OMNI_ORCHESTRATOR_LOGIN }}
+          PEAR_ORCHESTRATOR_LOGIN: ${{ vars.PEAR_ORCHESTRATOR_LOGIN }}
           CHECK_TIMEOUT: '900'
         run: python .agents/scripts/ci-dod.py

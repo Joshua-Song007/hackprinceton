@@ -14,8 +14,8 @@ Repository map
 - .claude/: human specification and memory. Read-only for autonomous agents, hidden in their worktrees. Never edit root CLAUDE.md or .agents/HUMAN.md.
 
 Architecture invariants
-- OmniCore imports Foundation only: no hardware, I/O, wall clock, random or logging.
-- OmniRuntime, OmniScript and Games remain hardware-blind: never depend on OmniSim or OmniBridge.
+- PearCore imports Foundation only: no hardware, I/O, wall clock, random or logging.
+- PearRuntime, PearScript and Games remain hardware-blind: never depend on PearSim or PearBridge.
 - No unrequested third-party dependency or manifest changes. The orchestrator must quote relevant package dependency edges in the issue.
 - Preserve existing comments unless the issue explicitly authorizes a change.
 - No secrets, .env files, build output, dependency caches or credentials in commits.
@@ -44,5 +44,5 @@ Failure handling
 The runtime checkpoints allowed files and retains all local worktrees. First failure retries with high effort, third attempt uses another worker, then blocked. Never resume a stale claim or publish after losing its lease. A hard-killed machine may leave dirty files locally; the checkpoint branch is only available if it was pushed. A STOP finishes/checkpoints the bounded current session and prevents further launches or merges.
 
 
-Repo directories: Apps/, Backend/, Deploy/, Games/, Omni.xcworkspace/, Packages/, Plugins/, Recordings/, Schema/, Tools/, Web/, apple-docs/, docs/
-Swift packages: OmniAdapters, OmniBridge, OmniCloud, OmniCollab, OmniCore, OmniInput, OmniLibrary, OmniOutput, OmniRuntime, OmniScript, OmniSim
+Repo directories: Apps/, Backend/, Deploy/, Games/, Pear.xcworkspace/, Packages/, Plugins/, Recordings/, Schema/, Tools/, Web/, apple-docs/, docs/
+Swift packages: PearAdapters, PearBridge, PearCloud, PearCollab, PearCore, PearInput, PearLibrary, PearOutput, PearRuntime, PearScript, PearSim

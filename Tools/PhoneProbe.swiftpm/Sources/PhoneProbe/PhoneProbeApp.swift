@@ -57,7 +57,7 @@ final class Probe: ObservableObject {
     // MARK: Link
 
     private func browse() {
-        let b = NWBrowser(for: .bonjour(type: "_omniprobe._tcp", domain: nil), using: tcpParameters())
+        let b = NWBrowser(for: .bonjour(type: "_pearprobe._tcp", domain: nil), using: tcpParameters())
         b.stateUpdateHandler = { [weak self] state in self?.setStatus("browser \(state)") }
         b.browseResultsChangedHandler = { [weak self] _, _ in self?.connectIfIdle() }
         b.start(queue: queue)
@@ -278,7 +278,7 @@ struct PhoneProbeApp: App {
     var body: some Scene {
         WindowGroup {
             VStack(spacing: 8) {
-                Text(isPad ? "Omni pencil probe" : "Omni phone probe").font(.headline)
+                Text(isPad ? "Pear pencil probe" : "Pear phone probe").font(.headline)
                 Text(probe.status).font(.subheadline).multilineTextAlignment(.center)
                 Text("host: \(probe.host)").font(.caption).lineLimit(1)
                 Text("\(probe.sentPerSecond) msgs/s").font(.title2.monospacedDigit())

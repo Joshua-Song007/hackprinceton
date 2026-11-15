@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Omni Studio",
+  "productName": "Pear Studio",
   "version": "../package.json",
-  "identifier": "dev.omni.studio",
+  "identifier": "dev.pear.studio",
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://localhost:5173",
@@ -13,7 +13,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "Omni Studio",
+        "title": "Pear Studio",
         "width": 1440,
         "height": 900,
         "minWidth": 1024,

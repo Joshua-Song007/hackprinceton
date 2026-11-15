@@ -1,12 +1,12 @@
 // Account: dev sign-in (provider "dev", subject = name), server URL, game picker, Publish with the version shown.
 // Only game content goes to the server (Network Rule); the token is kept in localStorage, or in memory for test-player tabs.
-import { ApiError, CloudClient, type Account, type Game, type GameVersion } from '@omni/cloud';
+import { ApiError, CloudClient, type Account, type Game, type GameVersion } from '@pear/cloud';
 import type { PreferenceStore } from './preferences';
 import { Project, type ProjectSnapshot } from './project';
 import { button, el, openSheet } from './ui';
 
-const SESSION_KEY = 'omni.studio.session';
-const GAME_KEY = 'omni.studio.game';
+const SESSION_KEY = 'pear.studio.session';
+const GAME_KEY = 'pear.studio.game';
 
 /** One sentence naming what happened and the fix, for any failure of a cloud call. */
 export function describeError(e: unknown, serverUrl: string): string {
@@ -14,7 +14,7 @@ export function describeError(e: unknown, serverUrl: string): string {
   const where = serverUrl || 'this page\'s origin';
   switch (e.kind) {
     case 'network': return `Cannot reach ${where}. Start the backend (Deploy/dev.sh) or correct the server URL in Settings.`;
-    case 'unauthorized': return 'Your session ended or the name was rejected. Sign in again (the server needs OMNI_DEV_SIGNIN=1 for dev sign-in).';
+    case 'unauthorized': return 'Your session ended or the name was rejected. Sign in again (the server needs PEAR_DEV_SIGNIN=1 for dev sign-in).';
     case 'forbidden': return 'This account does not own that game. Pick one of your games or create a new one.';
     case 'notFound': return 'The server has no such game or version. Refresh the game list and pick another.';
     case 'badRequest': return 'The server rejected the request (400). Check the display name and that the scene and scripts are valid.';
@@ -188,7 +188,7 @@ export function openAccountSheet(account: AccountController, prefs: PreferenceSt
         name.addEventListener('keydown', (e) => e.key === 'Enter' && void signIn());
         rows.push(
           el('div', { class: 'om-prop' }, [el('label', {}, ['Name']), el('div', { class: 'om-field' }, [name])]),
-          el('p', { class: 'sheet-note' }, ['Dev sign-in uses provider dev with your name as the subject. The server must run with OMNI_DEV_SIGNIN=1.']),
+          el('p', { class: 'sheet-note' }, ['Dev sign-in uses provider dev with your name as the subject. The server must run with PEAR_DEV_SIGNIN=1.']),
           el('div', { class: 'sheet-actions' }, [button('Close', close), button('Sign in', () => void signIn(), { variant: 'default' })]),
         );
       } else {

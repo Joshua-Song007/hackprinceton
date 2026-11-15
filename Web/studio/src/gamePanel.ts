@@ -1,5 +1,5 @@
 // Game panel: a checklist of what the open game still needs, plus who runs which script. Pure `checkGame` so it is testable.
-import { parseInputs, type SceneInputs } from '@omni/runtime';
+import { parseInputs, type SceneInputs } from '@pear/runtime';
 import type { SceneJson } from './project';
 import { walkEntities } from './project';
 import { describeInputs, inferInputs, missingInputs } from './needs';

@@ -5,7 +5,7 @@ import { BrowserInstaller, TauriInstaller, verifyBundle, type PluginInstaller } 
 import { RegistryClient, type InstallRecord, type PluginBundle, type PluginSummary } from '../src/marketplace/registry';
 
 const summary: PluginSummary = {
-  id: DEEP_AGENTS_ID, name: 'LangChain Deep Agents', version: '0.1.0', author: 'Omni', category: 'AI agents', description: 'Writes scripts.', installs: 7,
+  id: DEEP_AGENTS_ID, name: 'LangChain Deep Agents', version: '0.1.0', author: 'Pear', category: 'AI agents', description: 'Writes scripts.', installs: 7,
 };
 const manifest: { id: string } & Record<string, unknown> = { id: DEEP_AGENTS_ID, name: summary.name };
 
@@ -246,7 +246,7 @@ describe('marketplace runtime port', () => {
 
   it('browser start hint names the model key env vars and no fake mode', () => {
     expect(new BrowserInstaller().startHint).toContain('ANTHROPIC_API_KEY | OPENAI_API_KEY | GOOGLE_API_KEY');
-    expect(new BrowserInstaller().startHint).not.toContain('OMNI_AGENT_FAKE');
+    expect(new BrowserInstaller().startHint).not.toContain('PEAR_AGENT_FAKE');
   });
 });
 
@@ -310,7 +310,7 @@ describe('verifyBundle (browser installer)', () => {
     const keys = (await crypto.subtle.generateKey({ name: 'Ed25519' }, true, ['sign', 'verify'])) as CryptoKeyPair;
     const tarball = new TextEncoder().encode('pretend tarball bytes');
     const sha256 = hex(await crypto.subtle.digest('SHA-256', tarball));
-    const msg = new TextEncoder().encode(`omni-plugin-v1\nx\n1.0.0\n${sha256}`);
+    const msg = new TextEncoder().encode(`pear-plugin-v1\nx\n1.0.0\n${sha256}`);
     const signature = hex(await crypto.subtle.sign({ name: 'Ed25519' }, keys.privateKey, msg));
     const publicKey = hex(await crypto.subtle.exportKey('raw', keys.publicKey));
     return { tarball, release: { id: 'x', version: '1.0.0', manifest: { id: 'x' }, sha256, signature, size: tarball.length, publicKey } };

@@ -1,15 +1,15 @@
 // Run: Run local (runtime + sandbox + sim devices in this page), Run on server (publish a draft version, join
 // /play as player 1), Add test player (another tab), Stop. `LocalRun` has no DOM so the e2e test drives it in Node.
 // Simulated USIS packets never leave this page (Network Rule); only remote events reach /play.
-import { CloudClient, type DebugEvent, type PlayFrame, type ReconnectingSocket } from '@omni/cloud';
-import { quat, type UsisPacket } from '@omni/core';
+import { CloudClient, type DebugEvent, type PlayFrame, type ReconnectingSocket } from '@pear/cloud';
+import { quat, type UsisPacket } from '@pear/core';
 import {
   InputBus, SceneEvents, Viewport, readViewportColors, scriptName,
   type SceneDescription, type WorldEntity,
-} from '@omni/runtime';
-import { LocalServer, ScriptSandbox, type ScriptOutput } from '@omni/script';
-import prelude from '../../../Packages/OmniScript/Sources/OmniScript/Resources/prelude.js?raw';
-import { SIM_DEVICE_KINDS, SimDevices, UsisPlayer, attachGestureKeys, attachMouseLook, type SimDeviceKind, type SimDevicesOptions } from '@omni/sim';
+} from '@pear/runtime';
+import { LocalServer, ScriptSandbox, type ScriptOutput } from '@pear/script';
+import prelude from '../../../Packages/PearScript/Sources/PearScript/Resources/prelude.js?raw';
+import { SIM_DEVICE_KINDS, SimDevices, UsisPlayer, attachGestureKeys, attachMouseLook, type SimDeviceKind, type SimDevicesOptions } from '@pear/sim';
 import type { AccountController } from './account';
 import { describeError } from './account';
 import type { DebugStore } from './debug-panel';
@@ -498,7 +498,7 @@ export interface RunDeps {
   reveal?(panelId: string): void;
 }
 
-const RIG_KEY = 'omni.studio.rig';
+const RIG_KEY = 'pear.studio.rig';
 const loadRig = (): SimDeviceKind[] => {
   try {
     const saved = JSON.parse(localStorage.getItem(RIG_KEY) ?? 'null');

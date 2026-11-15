@@ -1,17 +1,17 @@
 #!/usr/bin/env bash
-# Scripted check of a running Omni stack, local or hosted: health, dev sign-in, create game,
+# Scripted check of a running Pear stack, local or hosted: health, dev sign-in, create game,
 # publish Games/Flagship, join /play as 2 players and /debug as the owner, banish the three
 # wraiths, print the debug event log and the final ctx.state. Exits non-zero on any mismatch.
 #   Deploy/demo.sh [base-url]      default http://localhost:8080
-# Needs Node 22+ (built-in WebSocket, no npm packages) and curl. The server needs OMNI_DEV_SIGNIN=1.
-# OMNI_INSECURE=1 accepts the self-signed certificate of an IP-only Vultr box.
+# Needs Node 22+ (built-in WebSocket, no npm packages) and curl. The server needs PEAR_DEV_SIGNIN=1.
+# PEAR_INSECURE=1 accepts the self-signed certificate of an IP-only Vultr box.
 set -euo pipefail
 
 BASE="${1:-http://localhost:8080}"
 BASE="${BASE%/}"
 GAME_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../Games/Flagship" && pwd)"
 CURL_OPTS=(-fsS --max-time 10)
-if [ "${OMNI_INSECURE:-}" = 1 ]; then
+if [ "${PEAR_INSECURE:-}" = 1 ]; then
   CURL_OPTS+=(-k)
   export NODE_TLS_REJECT_UNAUTHORIZED=0
 fi
@@ -39,7 +39,7 @@ async function api(method, route, token, body) {
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   const text = await res.text();
-  if (!res.ok) fail(`${method} ${route} -> ${res.status} ${text}` + (res.status === 403 ? " (start the server with OMNI_DEV_SIGNIN=1)" : ""));
+  if (!res.ok) fail(`${method} ${route} -> ${res.status} ${text}` + (res.status === 403 ? " (start the server with PEAR_DEV_SIGNIN=1)" : ""));
   return JSON.parse(text);
 }
 

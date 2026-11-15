@@ -1,4 +1,4 @@
-// Registry client for the plugin routes of the Omni backend: list, release metadata, signed tarball
+// Registry client for the plugin routes of the Pear backend: list, release metadata, signed tarball
 // bundles, per-account install records and the account's model API key (never read back).
 export interface PluginSummary {
   id: string;
@@ -10,7 +10,7 @@ export interface PluginSummary {
   installs: number;
 }
 
-/** The omni-plugin.json object. Only `id` and `version` are read here; the installer passes the rest to the runtime launcher. */
+/** The pear-plugin.json object. Only `id` and `version` are read here; the installer passes the rest to the runtime launcher. */
 export type PluginManifest = { id: string; version?: string } & Record<string, unknown>;
 
 /** GET /api/plugins/{id}: the listed version and what its tarball must hash and be signed to. */

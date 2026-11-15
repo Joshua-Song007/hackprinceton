@@ -4,7 +4,7 @@
 
 Games never know whether input is simulated or live. Every device, real or simulated, produces the same USIS packet (orientation, position, accel, touch, gesture, heart rate); the input layer strips `source` before scripts see anything. Web Studio uses simulated devices, or live phones through the local relay below. AirPods input is in the native macOS Studio.
 
-Real phones reach Web Studio through a local relay: `npm run relay` (in `Web/studio`) listens for the iOS companion over Bonjour (`_omni._tcp`, TCP port 7777) and serves Studio on `ws://127.0.0.1:8787`. In the Test panel set a player's Source to Live and tick the phone. Packets are marked `source: live` for the Packets tab only; scripts still cannot tell. The relay binds localhost and forwards nothing elsewhere. AirPods stay in the native macOS Studio.
+Real phones reach Web Studio through a local relay: `npm run relay` (in `Web/studio`) listens for the iOS companion over Bonjour (`_pear._tcp`, TCP port 7777) and serves Studio on `ws://127.0.0.1:8787`. In the Test panel set a player's Source to Live and tick the phone. Packets are marked `source: live` for the Packets tab only; scripts still cannot tell. The relay binds localhost and forwards nothing elsewhere. AirPods stay in the native macOS Studio.
 
 Capability tiers: 1 = orientation and touch, 2 = adds position, 3 = adds heart rate.
 

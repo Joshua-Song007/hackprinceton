@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { API, scriptStub, type ApiSide } from '../src/api';
 
-const prelude = readFileSync(new URL('../../../Packages/OmniScript/Sources/OmniScript/Resources/prelude.js', import.meta.url), 'utf8');
+const prelude = readFileSync(new URL('../../../Packages/PearScript/Sources/PearScript/Resources/prelude.js', import.meta.url), 'utf8');
 const parse = (name: string) => [...new RegExp(String.raw`var ${name} = \[([^\]]*)\]`).exec(prelude)![1]!.matchAll(/"(\w+)"/g)].map((m) => m[1]);
 
 describe('script API table', () => {

@@ -87,7 +87,7 @@ export class EditorBus {
 }
 
 // Syntax colors come from tokens only: keywords accent, comments secondary, the rest text.
-const omniHighlight = HighlightStyle.define([
+const pearHighlight = HighlightStyle.define([
   { tag: [tags.keyword, tags.controlKeyword, tags.definitionKeyword, tags.moduleKeyword], color: 'var(--accent)' },
   { tag: [tags.comment, tags.lineComment, tags.blockComment], color: 'var(--text-secondary)', fontStyle: 'italic' },
   { tag: [tags.string, tags.number, tags.bool, tags.null], color: 'var(--text)' },
@@ -185,7 +185,7 @@ export function createEditorPanel(project: Project, bus: EditorBus): PanelView {
         doc: project.scripts(ref.kind)[ref.name] ?? '',
         extensions: [
           EditorView.theme({}, { dark: document.documentElement.dataset.theme !== 'light' }), // colors come from theme.css tokens
-          basicSetup, javascript(), ...apiExtensions(ref.kind), syntaxHighlighting(omniHighlight), lintGutter(),
+          basicSetup, javascript(), ...apiExtensions(ref.kind), syntaxHighlighting(pearHighlight), lintGutter(),
           EditorView.contentAttributes.of({ 'aria-label': `${ref.name} ${ref.kind} script` }),
           EditorView.updateListener.of((u) => {
             if (u.docChanged) project.setScript(ref.kind, ref.name, u.state.doc.toString());

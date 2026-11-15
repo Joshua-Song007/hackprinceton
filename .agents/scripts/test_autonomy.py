@@ -162,12 +162,12 @@ class Rules(unittest.TestCase):
     def test_ci_scope_docs_and_component_dependencies(self):
         self.assertFalse(any(ci.scope(['docs/agents/worker-prompt.md']).values()))
         self.assertEqual(ci.scope(['Backend/src/main.rs']), {'swift': False, 'backend': True, 'nonswift': False})
-        self.assertTrue(ci.scope(['Packages/OmniCore/Sources/Core.swift'])['swift'])
-        for path in ('Packages/OmniScript/Sources/OmniScript/Resources/prelude.js', 'Games/Flagship/scripts/game.js'):
+        self.assertTrue(ci.scope(['Packages/PearCore/Sources/Core.swift'])['swift'])
+        for path in ('Packages/PearScript/Sources/PearScript/Resources/prelude.js', 'Games/Flagship/scripts/game.js'):
             selected = ci.scope([path])
             self.assertTrue(selected['backend'])
             self.assertTrue(selected['nonswift'])
-        self.assertFalse(any(ci.scope(['Backend/src/main.rs', 'Packages/OmniCore/Sources/Core.swift'], managed=True).values()))
+        self.assertFalse(any(ci.scope(['Backend/src/main.rs', 'Packages/PearCore/Sources/Core.swift'], managed=True).values()))
 
     def test_one_broken_pr_does_not_starve_other_reviews_or_planner(self):
         store = MemoryStore()
@@ -186,7 +186,7 @@ class Rules(unittest.TestCase):
             for executable in (git, bash):
                 executable.parent.mkdir(parents=True, exist_ok=True)
                 executable.touch()
-            with patch.dict(os.environ, {'OMNI_BASH': ''}), patch.object(a.shutil, 'which', return_value=str(git)):
+            with patch.dict(os.environ, {'PEAR_BASH': ''}), patch.object(a.shutil, 'which', return_value=str(git)):
                 self.assertEqual(Path(a.bash_executable()).resolve(), bash.resolve())
 
     def test_hung_command_has_wall_time_limit(self):
@@ -215,8 +215,8 @@ class Rules(unittest.TestCase):
         self.assertEqual(gh.call_count, 1)
 
     def test_local_stop_cancels_running_command(self):
-        with tempfile.TemporaryDirectory() as d, patch.dict(os.environ, {'OMNI_STOP_FILE': str(Path(d) / 'STOP')}):
-            Path(os.environ['OMNI_STOP_FILE']).touch()
+        with tempfile.TemporaryDirectory() as d, patch.dict(os.environ, {'PEAR_STOP_FILE': str(Path(d) / 'STOP')}):
+            Path(os.environ['PEAR_STOP_FILE']).touch()
             with self.assertRaisesRegex(RuntimeError, 'stopped'):
                 a.run([sys.executable, '-c', 'import time; time.sleep(60)'], timeout=60, stop_aware=True)
 
@@ -245,16 +245,16 @@ class Rules(unittest.TestCase):
                 a.dod(Path(d), b)
 
     def test_local_workers_use_distinct_ids_and_worker_credentials(self):
-        with patch.dict(os.environ, {'OMNI_LOCAL_WORKER_GH_TOKEN': 'worker-secret', 'GH_TOKEN': 'orch-secret'}):
+        with patch.dict(os.environ, {'PEAR_LOCAL_WORKER_GH_TOKEN': 'worker-secret', 'GH_TOKEN': 'orch-secret'}):
             envs = a.local_worker_envs('orch-laptop', 2, Path('/tmp/local.stop'))
-        self.assertEqual([e['OMNI_LAPTOP'] for e in envs], ['orch-laptop-local-1', 'orch-laptop-local-2'])
+        self.assertEqual([e['PEAR_LAPTOP'] for e in envs], ['orch-laptop-local-1', 'orch-laptop-local-2'])
         for env in envs:
-            self.assertEqual(env['OMNI_ROLE'], 'worker')
-            self.assertEqual(env['OMNI_LOCAL_WORKERS'], '0')
+            self.assertEqual(env['PEAR_ROLE'], 'worker')
+            self.assertEqual(env['PEAR_LOCAL_WORKERS'], '0')
             self.assertEqual(env['GH_TOKEN'], 'worker-secret')
             self.assertEqual(env['GITHUB_TOKEN'], 'worker-secret')
             self.assertEqual(env['GIT_CONFIG_VALUE_1'], '!gh auth git-credential')
-            self.assertNotIn('OMNI_LOCAL_WORKER_GH_TOKEN', env)
+            self.assertNotIn('PEAR_LOCAL_WORKER_GH_TOKEN', env)
 
     def test_quota_error_does_not_match_successful_discussion(self):
         self.assertFalse(a.limit_error({'is_error': False, 'result': 'Implemented quota and rate-limit tests'}))
@@ -263,7 +263,7 @@ class Rules(unittest.TestCase):
 
     def test_shared_quota_pauses_sibling_workers(self):
         store = MemoryStore()
-        with patch.dict(os.environ, {'OMNI_QUOTA_GROUP': 'physical-laptop'}):
+        with patch.dict(os.environ, {'PEAR_QUOTA_GROUP': 'physical-laptop'}):
             self.assertTrue(a.rate_limited(store, {'is_error': True, 'result': '429'}, 'local-one'))
             self.assertTrue(a.cooling(store, 'local-two'))
             self.assertTrue(a.cooling(store, 'orchestrator'))

@@ -1,6 +1,6 @@
 # Autonomous Agent Rules
 
-> V2: use `docs/agents/autonomy-setup.md`, the generated context pack, and the small role prompts. `loop.sh` defaults to a deterministic worker; only the designated laptop opts into orchestration. Models never load the legacy read-first rules below. No direct main pushes or worker merges are permitted. The remaining rules apply only to explicit legacy `run.sh` / `OMNI_LEGACY=1` sessions; do not mix them with V2.
+> V2: use `docs/agents/autonomy-setup.md`, the generated context pack, and the small role prompts. `loop.sh` defaults to a deterministic worker; only the designated laptop opts into orchestration. Models never load the legacy read-first rules below. No direct main pushes or worker merges are permitted. The remaining rules apply only to explicit legacy `run.sh` / `PEAR_LEGACY=1` sessions; do not mix them with V2.
 
 ## V2 parallel lanes
 
@@ -49,7 +49,7 @@ GitHub is the shared workspace: the issue is the unit of work, the PR is the del
 - Do only the task in your prompt (usually specific `plan.md` items). No drive-by refactors, no unrelated files. Other agents are working in parallel worktrees.
 - Never build Phase 7 or anything the plan does not list.
 - No agent, orchestrator included, writes to `.claude/`, `.agents/`, `.github/` or `CLAUDE.md`. Do not tick `plan.md` boxes or touch `currentDev.md`; a human ticks boxes after merge.
-- Items under `Apps/**` (OmniStudio, OmniCompanion) and any `.xcodeproj` are Mac-only. Their check is `xcodebuild -workspace Omni.xcworkspace -scheme <scheme> -destination 'platform=macOS' build` (iOS targets: `-destination 'generic/platform=iOS Simulator'`); paste its output in your Verification section. On a non-Mac laptop, stop and say so in your report.
+- Items under `Apps/**` (PearStudio, PearCompanion) and any `.xcodeproj` are Mac-only. Their check is `xcodebuild -workspace Pear.xcworkspace -scheme <scheme> -destination 'platform=macOS' build` (iOS targets: `-destination 'generic/platform=iOS Simulator'`); paste its output in your Verification section. On a non-Mac laptop, stop and say so in your report.
 - New `.md` files are allowed anywhere except the repo root and the protected places above, for notes other agents will read (put them in `docs/agents/`). Never create or edit `overview.md`, `CLAUDE.md` or `.agents/HUMAN.md`.
 - No new third-party dependencies. If a task needs one, take no action on it and put the need in your report.
 - If the plan contradicts `overview.md` or `architecture.md`, stop that item and report it. Do not guess.
@@ -57,8 +57,8 @@ GitHub is the shared workspace: the issue is the unit of work, the PR is the del
 
 ## Code
 - Preserve all existing comments exactly. Keep comments in place when rewriting code.
-- OmniCore is pure: Foundation only, no I/O, sockets or device APIs. Time and randomness enter as arguments.
-- Hardware-blind: OmniRuntime, OmniScript and Games never depend on OmniSim or OmniBridge. Respect the dependency graph and forbidden edges in `architecture.md`; they are enforced in each `Package.swift`.
+- PearCore is pure: Foundation only, no I/O, sockets or device APIs. Time and randomness enter as arguments.
+- Hardware-blind: PearRuntime, PearScript and Games never depend on PearSim or PearBridge. Respect the dependency graph and forbidden edges in `architecture.md`; they are enforced in each `Package.swift`.
 - Swift 6 strict concurrency: UI types and view models are `@MainActor`; anything crossing actors is `Sendable`. No `@unchecked Sendable` or `nonisolated(unsafe)` without a comment saying why.
 - No force unwraps (`!`), `try!` or `as!`. Use `guard`, `if let` or a typed default.
 - Tests live in `Packages/<Pkg>/Tests/<Pkg>Tests/` as named in `plan.md`; match the framework that package's existing tests use. Non-trivial logic ships with tests. Add the `testTarget` to the package's `Package.swift` if it has none; make no other manifest change.

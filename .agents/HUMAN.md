@@ -19,25 +19,25 @@ Overnight launch (paste into a Claude Code session opened on each laptop, after 
 follow .agents/BOOTSTRAP.md
 Laptop: <github handle, lowercase>       # must be a row in the ORCHESTRATOR.md table
 OS: <mac | windows>                      # must match uname -s
-Clone: <~/hack/omni>                     # outside OneDrive / iCloud / Dropbox
+Clone: <~/hack/pear>                     # outside OneDrive / iCloud / Dropbox
 Night settings: LOOP_DELAY=<300> IDLE_DELAY=<1800>      # add these to the loop.sh start command
 If a step fails: <stop and report | fix what is listed as fixable, retry once, then report>
 Report back: laptop, OS, lane, setup and verify results, where the loop runs, and the first cycle's STATUS line
 
 Running agents (one clone per laptop, outside OneDrive; Swift work needs a Mac, Windows laptops run the non-Swift lane only)
 
-export OMNI_LAPTOP=<name>                                               # lowercase letters, digits, dashes
+export PEAR_LAPTOP=<name>                                               # lowercase letters, digits, dashes
 .agents/scripts/run.sh <slug> "implement plan.md items 1.3"             # one worker: Sonnet, commits and pushes its own agent/* branch, $5 cap
 .agents/scripts/run.sh --orch orch "Run one orchestrator cycle."        # one orchestrator cycle: Opus, push + gh, $10 cap
 AGENT_BUDGET=10 .agents/scripts/run.sh <slug> "<task>"                  # change the cap
 .agents/scripts/run.sh -i <slug> "<task>"                               # interactive instead
-tail -f ../omni.worktrees/logs/<slug>.log                               # watch a headless run
-Worktrees land at ../omni.worktrees/<slug> on branch agent/<laptop>/<slug>. The orchestrator's is ../omni.worktrees/orch. (For a clone named omni; in general it is <clone folder name>.worktrees. Start loop.sh from the clone's root folder.)
-Workers started by the orchestrator use run.sh --detach: they return at once, and ../omni.worktrees/logs/<slug>.state says running / done / failed.
+tail -f ../pear.worktrees/logs/<slug>.log                               # watch a headless run
+Worktrees land at ../pear.worktrees/<slug> on branch agent/<laptop>/<slug>. The orchestrator's is ../pear.worktrees/orch. (For a clone named pear; in general it is <clone folder name>.worktrees. Start loop.sh from the clone's root folder.)
+Workers started by the orchestrator use run.sh --detach: they return at once, and ../pear.worktrees/logs/<slug>.state says running / done / failed.
 
 Overnight loop (watch the first few cycles; start.sh does setup, verify and the detached start for you)
 
-.agents/scripts/start.sh <laptop>                  # orchestrator: Mac = tmux "omni-loop" under caffeinate -i; Windows = its own Git Bash window + keep-awake helper
+.agents/scripts/start.sh <laptop>                  # orchestrator: Mac = tmux "pear-loop" under caffeinate -i; Windows = its own Git Bash window + keep-awake helper
 .agents/scripts/start.sh <laptop> --integrator     # then the integrator (INTEGRATOR.md): builds PR / worktree / CI tooling, then maintains it; STOP-integrator stops only it
 .agents/scripts/start.sh <laptop> --dry-run        # show the steps without doing them
 Env vars set before the command are passed on: LOOP_DELAY IDLE_DELAY BUILD_DELAY MAINT_DELAY BUILD_MAX_CYCLES CREDIT_WAIT AGENT_BUDGET AGENT_TURNS.
@@ -80,7 +80,7 @@ Things to remember
 - Workers never push main. Orchestrators can (and can force-push), as a rare exception, and must log each one in the "Agent status" issue.
 - Spec frozen: edits to overview.md or plan.md while a batch is in flight make agent PRs stale.
 - If a worker ended without a PR: read its log. For denied commands, the transcript is ~/.claude/projects/<worktree path, slashes as dashes>/*.jsonl (reviewer under subagents/).
-- Launcher hangs waiting: stale lock after a hard kill. rmdir ../omni.worktrees/.setup.lock
+- Launcher hangs waiting: stale lock after a hard kill. rmdir ../pear.worktrees/.setup.lock
 - The stop-gate lets a red branch through after 5 blocks. CI is the backstop.
 - Models are pinned in run.sh (orchestrator Opus 5.5, workers Sonnet 5.5) and agents.json (reviewer and swift-package-worker Sonnet 5.5).
 - Your .claude rule says never touch git unless asked; the Autonomous Mode section in instructions.md covers the agents only.

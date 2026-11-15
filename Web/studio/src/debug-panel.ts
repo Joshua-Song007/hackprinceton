@@ -1,7 +1,7 @@
 // Debug area: Output (client logs and errors), Server (/debug stream), State (live ctx.state tree), Packets (USIS log with source).
 // Each tab is its own dockable panel; they all read from one DebugStore so a re-created panel loses nothing.
-import type { DebugEvent } from '@omni/cloud';
-import type { UsisPacket } from '@omni/core';
+import type { DebugEvent } from '@pear/cloud';
+import type { UsisPacket } from '@pear/core';
 import type { PanelView } from './layout';
 import { announce, button, clock, el, packetHtml } from './ui';
 
@@ -160,7 +160,7 @@ export function consoleRows(output: OutputEntry[], server: ServerRow[], filter: 
 }
 
 const tableRow = (cells: (string | Node)[], cls = '') => el('tr', cls ? { class: cls } : {}, cells.map((c) => el('td', {}, [c])));
-const STATE_KEY = 'omni.console.state';
+const STATE_KEY = 'pear.console.state';
 const readState = (): boolean => {
   try {
     return localStorage.getItem(STATE_KEY) === '1';

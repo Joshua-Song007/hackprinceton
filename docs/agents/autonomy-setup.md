@@ -1,6 +1,6 @@
 # One orchestrator, three remote workers, optional local workers
 
-V2 replaces the four-planner default. The Python standard-library runtime performs coordination; `loop.sh` is a plain shell launcher with **no polling model**. Legacy tooling is retained for explicit `OMNI_LEGACY=1` use only. Do not run V1 and V2 simultaneously.
+V2 replaces the four-planner default. The Python standard-library runtime performs coordination; `loop.sh` is a plain shell launcher with **no polling model**. Legacy tooling is retained for explicit `PEAR_LEGACY=1` use only. Do not run V1 and V2 simultaneously.
 
 ## Architecture and trust
 
@@ -19,7 +19,7 @@ Current deployment baseline: the authenticated viewer has `WRITE` access and mai
 2. Merge the runtime PR, then its dependent launch/docs PR. Use fresh dedicated clones on all four machines; update them between nights. V2 deliberately does not rewrite a dirty clone or hot-reload running code.
 3. Protect main with a ruleset: PRs required; required automated gates `hygiene`, `verify` and `agent-dod`, without duplicate product builds; do not require conditional component jobs individually; strict/up-to-date checks or a merge queue; no force push/deletion; restrict updates/merges to the orchestrator bot/app identity; no bypass for workers or administrators used by automation. Confirm a worker token actually cannot update or merge main. `protected: true` is checked on startup, but the runtime cannot prove every ruleset policy from that flag.
 4. Use a **different GitHub identity per machine**, not four PATs for the same human. Fine-grained repo-only credentials: workers need Contents read/write (own branches + agent-control), Issues read/write (claim mirrors/status), Pull requests read/write (create only); no Actions/Workflows write, administration, secrets or organization permissions. Orchestrator needs those plus permission to merge under main's rules. Workers need no administration/bypass. The orchestrator may use explicitly granted repository administration for Actions, labels, variables and protection only to enforce existing automated gates, never to weaken them or bypass required checks. If administration is not granted, its absence remains an external setup blocker. PAT scope cannot distinguish “create PR” from “merge PR”: server rules are mandatory. Restrict worker branch updates with a ruleset to their own `agent/<laptop>/**` and `agent-control` where possible.
-5. Set repository Actions variable `OMNI_ORCHESTRATOR_LOGIN` to the orchestrator bot login. Enable `.github/workflows/agent-dod.yml`: it checks out the trusted base-branch verifier and runs each V2 PR's brief checks once per PR head on an ephemeral platform-appropriate runner (macOS for Swift) with read-only GitHub permissions and no merge credentials. Create labels `ready`, `claimed`, `in-review`, `blocked`. All bots need permission to read/push agent-control; the branch is created on the first CAS. Do not delete/rewrite it while loops run. Provision git user.name/user.email in each clone.
+5. Set repository Actions variable `PEAR_ORCHESTRATOR_LOGIN` to the orchestrator bot login. Enable `.github/workflows/agent-dod.yml`: it checks out the trusted base-branch verifier and runs each V2 PR's brief checks once per PR head on an ephemeral platform-appropriate runner (macOS for Swift) with read-only GitHub permissions and no merge credentials. Create labels `ready`, `claimed`, `in-review`, `blocked`. All bots need permission to read/push agent-control; the branch is created on the first CAS. Do not delete/rewrite it while loops run. Provision git user.name/user.email in each clone.
 6. Install git, gh, Python 3.10+, Claude Code with the flags used by autonomy.py, plus the toolchains named in briefs. Pin/verify the configured model IDs are available to your account. No paid “reply ok” preflight is made.
 7. Run the offline dry run on every platform before starting. Runtime PRs use quick Linux tests; broader Windows/macOS/Linux matrices run only manually/nightly. Local non-Mac validation alone is not Mac proof.
 
@@ -30,8 +30,8 @@ CI policy: manual PRs run relevant component checks behind the stable `verify` a
 Git Bash/macOS Bash:
 
 ```bash
-export OMNI_ORCHESTRATOR_LOGIN=your-orchestrator-bot
-export OMNI_ORCHESTRATOR_LAPTOP=tien-laptop
+export PEAR_ORCHESTRATOR_LOGIN=your-orchestrator-bot
+export PEAR_ORCHESTRATOR_LAPTOP=tien-laptop
 export LOOP_DELAY=60
 export CLAIM_TTL=900
 export LIMIT_WINDOW=18000
@@ -40,9 +40,9 @@ export LIMIT_WINDOW=18000
 export WORKER_TOKEN_LIMIT=1000000
 ```
 
-Keep machine secrets in the OS credential store/environment, never repo files. Authenticate gh and Claude once manually. With subscription OAuth, leave OMNI_BARE unset: project root CLAUDE.md and .claude/ are sparsely absent in model worktrees and personal settings are excluded. Claude may still discover user-level/global CLAUDE.md; audit/slim those on each machine. This cannot guarantee a zero-global-context process with OAuth.
+Keep machine secrets in the OS credential store/environment, never repo files. Authenticate gh and Claude once manually. With subscription OAuth, leave PEAR_BARE unset: project root CLAUDE.md and .claude/ are sparsely absent in model worktrees and personal settings are excluded. Claude may still discover user-level/global CLAUDE.md; audit/slim those on each machine. This cannot guarantee a zero-global-context process with OAuth.
 
-For strongest context isolation, use API-key auth and `export OMNI_BARE=1` plus ANTHROPIC_API_KEY. The installed CLI's `--bare` disables CLAUDE.md discovery, auto-memory, plugin/hooks and keychain/OAuth. It is **not** compatible with subscription-only login. Tools/jev-hooks remains untouched; V2 does not automatically load expensive legacy Stop hooks. DoD replaces their correctness gate.
+For strongest context isolation, use API-key auth and `export PEAR_BARE=1` plus ANTHROPIC_API_KEY. The installed CLI's `--bare` disables CLAUDE.md discovery, auto-memory, plugin/hooks and keychain/OAuth. It is **not** compatible with subscription-only login. Tools/jev-hooks remains untouched; V2 does not automatically load expensive legacy Stop hooks. DoD replaces their correctness gate.
 
 ## Orchestrator laptop
 
@@ -59,15 +59,15 @@ The planner laptop can contribute implementation capacity as well. These are ord
 
 ```bash
 # Separate worker identity/token, blocked from merging main by the same ruleset.
-export OMNI_LOCAL_WORKER_GH_TOKEN=your-worker-bot-token
+export PEAR_LOCAL_WORKER_GH_TOKEN=your-worker-bot-token
 bash .agents/scripts/start.sh tien-laptop --orch --local-workers 2
 ```
 
-Logical IDs are `tien-laptop-local-1`, `tien-laptop-local-2`, etc. They claim through the same CAS, use separate worktrees, run Sonnet, and report through the same issue/PR protocol. Their GitHub CLI and HTTPS Git credential helper use the worker token instead of inheriting the orchestrator credential. Use an HTTPS origin with gh authentication. Do not use an SSH remote backed by an orchestrator key for local workers. Zero to four local workers are supported; start with one to avoid oversubscribing RAM/build tools and **the same Claude account's quota**. These workers have no separate model quota just because they have separate loop IDs. Telemetry aggregates their sessions in the same local nightly directory. Local workers automatically share the orchestrator's quota-group key, so a detected 429 or configured group cap pauses sibling model launches too. If remote laptops share that same provider account, explicitly set the same `OMNI_QUOTA_GROUP` on those machines. Provider-account headroom and the reset window still require conservative calibration.
+Logical IDs are `tien-laptop-local-1`, `tien-laptop-local-2`, etc. They claim through the same CAS, use separate worktrees, run Sonnet, and report through the same issue/PR protocol. Their GitHub CLI and HTTPS Git credential helper use the worker token instead of inheriting the orchestrator credential. Use an HTTPS origin with gh authentication. Do not use an SSH remote backed by an orchestrator key for local workers. Zero to four local workers are supported; start with one to avoid oversubscribing RAM/build tools and **the same Claude account's quota**. These workers have no separate model quota just because they have separate loop IDs. Telemetry aggregates their sessions in the same local nightly directory. Local workers automatically share the orchestrator's quota-group key, so a detected 429 or configured group cap pauses sibling model launches too. If remote laptops share that same provider account, explicitly set the same `PEAR_QUOTA_GROUP` on those machines. Provider-account headroom and the reset window still require conservative calibration.
 
 The orchestrator supervisor signals a private local STOP file and waits for local workers to finish/checkpoint when it exits. Global STOP also reaches them through agent-control. A crashed child stops the supervisor rather than silently restarting/spending more sessions; inspect its `<logical-worker>.out` and stale lock before restarting. Local workers continue during ordinary planner idle cycles, not only while an Opus session is active.
 
-Only OMNI_ORCHESTRATOR_LAPTOP can opt into Opus. A local exclusive lock also prevents duplicate launches. Snapshot fingerprints include main, issue/comment updates, PR head and CI changes; heartbeat-only coordination commits do not wake the planner. Successful unchanged snapshots skip model calls. A state change during a planning call is deliberately observed on the next cycle, even if that occasionally causes one follow-up cycle for the planner's own issue creation.
+Only PEAR_ORCHESTRATOR_LAPTOP can opt into Opus. A local exclusive lock also prevents duplicate launches. Snapshot fingerprints include main, issue/comment updates, PR head and CI changes; heartbeat-only coordination commits do not wake the planner. Successful unchanged snapshots skip model calls. A state change during a planning call is deliberately observed on the next cycle, even if that occasionally causes one follow-up cycle for the planner's own issue creation.
 
 The planner must inspect merged PRs and named source files, not just unchecked boxes. It can create issues and explicitly retry corrected briefs; it cannot invoke merge tooling. The runtime is the only merger. Pending/failing CI defers only that PR; it does not block other reviews or the next planning cycle. Comments only report actionable review/unblocking information, not acknowledgements or plan-sync chatter.
 
@@ -79,9 +79,9 @@ bash .agents/scripts/start.sh worker-one --worker
 # On the other two machines: worker-two, worker-three.
 ```
 
-No worker polling call spends model tokens. `ready` briefs must be authored by OMNI_ORCHESTRATOR_LOGIN. Claims are CAS-protected before label/assignee updates; a failed mirror does not grant a second worker the issue. Missing/malformed briefs and wrong-platform work are not claimed. Swift/Apps/Packages changes require macOS, so assign appropriate machines and avoid starving that queue with three Windows workers.
+No worker polling call spends model tokens. `ready` briefs must be authored by PEAR_ORCHESTRATOR_LOGIN. Claims are CAS-protected before label/assignee updates; a failed mirror does not grant a second worker the issue. Missing/malformed briefs and wrong-platform work are not claimed. Swift/Apps/Packages changes require macOS, so assign appropriate machines and avoid starving that queue with three Windows workers.
 
-Windows: Python command execution explicitly locates Git Bash rather than Windows' WSL `bash.exe`; set `OMNI_BASH` to your Git Bash executable if using a portable/custom installation. Keep Git Bash open, plugged in, lid open, and disable OS idle sleep for the night; the new foreground launcher does not silently change power settings or spawn detached windows. macOS: use tmux plus the automatic caffeinate wrapper. Laptop lid sleep is not prevented. Local exclusive lock directories are under `<clone>.worktrees/nightly`; after a hard kill, verify no process remains before removing the stale `<laptop>-<role>.lock` directory.
+Windows: Python command execution explicitly locates Git Bash rather than Windows' WSL `bash.exe`; set `PEAR_BASH` to your Git Bash executable if using a portable/custom installation. Keep Git Bash open, plugged in, lid open, and disable OS idle sleep for the night; the new foreground launcher does not silently change power settings or spawn detached windows. macOS: use tmux plus the automatic caffeinate wrapper. Laptop lid sleep is not prevented. Local exclusive lock directories are under `<clone>.worktrees/nightly`; after a hard kill, verify no process remains before removing the stale `<laptop>-<role>.lock` directory.
 
 ## Brief format
 
@@ -115,7 +115,7 @@ The illustrative paths must be replaced with real files. All three commands must
 - Correct a brief/reassign with the designated orchestrator environment:
 
 ```bash
-OMNI_ROLE=orch OMNI_LAPTOP="$OMNI_ORCHESTRATOR_LAPTOP" python .agents/scripts/autonomy.py retry 123
+PEAR_ROLE=orch PEAR_LAPTOP="$PEAR_ORCHESTRATOR_LAPTOP" python .agents/scripts/autonomy.py retry 123
 ```
 
 This closes a superseded review PR, preserves attempt/review budgets, then requeues. Maximum three review contexts total; a rejected SHA is not re-reviewed endlessly. Exhausted budgets leave the failed issue blocked. The orchestrator diagnoses and decomposes/reassigns genuinely smaller repair issues, linking the original budget history, checkpoint and findings; it never resets the failed issue's counters or recreates the same task to evade limits. Ordinary scoped repairs and reversible product decisions need no human approval. Do not spin or force an unsafe merge.
@@ -126,16 +126,16 @@ Use only permissions actually granted. The orchestrator may configure repository
 
 ```bash
 # From the designated orchestrator environment: global shared kill switch
-OMNI_ROLE=orch OMNI_LAPTOP="$OMNI_ORCHESTRATOR_LAPTOP" python .agents/scripts/autonomy.py stop
+PEAR_ROLE=orch PEAR_LAPTOP="$PEAR_ORCHESTRATOR_LAPTOP" python .agents/scripts/autonomy.py stop
 # Local machine only: touch STOP (or STOP-<laptop>) in its primary clone.
 # A STOP file on origin/main also stops loops after fetch.
 # Only after inspecting claims/checkpoints:
-OMNI_ROLE=orch OMNI_LAPTOP="$OMNI_ORCHESTRATOR_LAPTOP" python .agents/scripts/autonomy.py resume
+PEAR_ROLE=orch PEAR_LAPTOP="$PEAR_ORCHESTRATOR_LAPTOP" python .agents/scripts/autonomy.py resume
 ```
 
 STOP prevents further launches/publication/merges. Local STOP files also cancel active model/check subprocess trees, allowing the checkpoint handler to run. Shared STOP is rechecked at publication/merge boundaries; an in-flight remote model may finish its bounded session. SESSION_TIMEOUT defaults to 1800 seconds, CHECK_TIMEOUT to 900 seconds per command, and network/Git commands to 120 seconds. Hung commands are terminated instead of heartbeating forever. Local supervised workers get 90 seconds to exit after their private STOP, then their process tree is terminated. Shared STOP latency can still be one bounded session, so it is not an instantaneous emergency kill. Revoke credentials/terminate processes for an immediate security incident. If any coordination/network check fails, publication/merge fails closed; recover claims by stale sweep when connectivity returns.
 
-Rollback: stop all V2 loops, retain coordination/log/checkpoint history, revert launch wiring through a reviewed PR, and only then explicitly use OMNI_LEGACY=1. Do not combine V1 takeover with V2 leases. Legacy maintain.sh is preserved but excludes AUTONOMY-V2 PRs from its merge path.
+Rollback: stop all V2 loops, retain coordination/log/checkpoint history, revert launch wiring through a reviewed PR, and only then explicitly use PEAR_LEGACY=1. Do not combine V1 takeover with V2 leases. Legacy maintain.sh is preserved but excludes AUTONOMY-V2 PRs from its merge path.
 
 ## Telemetry, context and validation
 
@@ -149,7 +149,7 @@ python .agents/scripts/autonomy.py summary
 python .agents/scripts/autonomy.py pack
 ```
 
-Per-session result/prompt/usage files are unique under `<clone>.worktrees/nightly/`; nightly-summary.json is grouped by UTC date and role (sessions, root turns, cost estimate, fresh/cache-created/cache-read/output tokens). It is local to each machine; copy the four usage directories into one collector and run summary with OMNI_LOGS set there to obtain a fleet total. Do not add the same session twice. CLI modelUsage is retained for subagent accounting; root num_turns is not a separately measured total of all subagent turns. On subscriptions USD is a relative estimate, not an invoice. Logs contain task/code content; keep them private and set retention deliberately.
+Per-session result/prompt/usage files are unique under `<clone>.worktrees/nightly/`; nightly-summary.json is grouped by UTC date and role (sessions, root turns, cost estimate, fresh/cache-created/cache-read/output tokens). It is local to each machine; copy the four usage directories into one collector and run summary with PEAR_LOGS set there to obtain a fleet total. Do not add the same session twice. CLI modelUsage is retained for subagent accounting; root num_turns is not a separately measured total of all subagent turns. On subscriptions USD is a relative estimate, not an invoice. Logs contain task/code content; keep them private and set retention deliberately.
 
 `docs/agents/context-source.txt` is the small maintained convention source; context-pack.md is generated from it and the merged tree's directory/package map. The runtime regenerates the local pack after each merge and before planning, and loads that stable text before role instructions. It does not commit a context-only PR after every merge or edit the human plan. Changed source conventions require a reviewed PR; workers cannot infer arbitrary new architecture automatically. A compact pack under 3k tokens is intentional, not padded to reach a quota.
 

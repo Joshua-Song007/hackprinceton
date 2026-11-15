@@ -14,8 +14,8 @@
 //   GET    /api/me/plugins                      -> 200 [{id, version, installed}]
 //   GET    /api/plugin-signing-key              -> 200 {publicKey} (hex Ed25519)
 // Publish, review, installs and /api/me need a session (401); review needs an account listed in
-// OMNI_PLUGIN_REVIEWERS (comma-separated account ids, 403 otherwise). Unknown id -> 404 {"error":..}.
-// The seed job (`omni-backend seed <dir>`, or OMNI_PLUGIN_SEED_DIR at startup on a dev box) publishes
+// PEAR_PLUGIN_REVIEWERS (comma-separated account ids, 403 otherwise). Unknown id -> 404 {"error":..}.
+// The seed job (`pear-backend seed <dir>`, or PEAR_PLUGIN_SEED_DIR at startup on a dev box) publishes
 // every plugin dir as approved with no author; re-running it with unchanged plugins changes nothing.
 
 use std::path::Path as FsPath;
@@ -181,7 +181,7 @@ async fn bundle_bytes(State(state): State<AppState>, Path(id): Path<String>, Que
             error(StatusCode::BAD_GATEWAY, "bundle storage failed")
         })?
         .ok_or_else(|| error(StatusCode::NOT_FOUND, "bundle missing from storage; re-run the seed job"))?;
-    Ok(([(header::CONTENT_TYPE, "application/gzip".to_string()), (header::HeaderName::from_static("x-omni-sha256"), v.sha256)], bytes).into_response())
+    Ok(([(header::CONTENT_TYPE, "application/gzip".to_string()), (header::HeaderName::from_static("x-pear-sha256"), v.sha256)], bytes).into_response())
 }
 
 async fn publish(State(state): State<AppState>, headers: HeaderMap, body: Bytes) -> Result<(StatusCode, Json<Value>), ApiError> {
@@ -195,7 +195,7 @@ async fn publish(State(state): State<AppState>, headers: HeaderMap, body: Bytes)
 }
 
 fn is_reviewer(account_id: &str) -> bool {
-    std::env::var("OMNI_PLUGIN_REVIEWERS").unwrap_or_default().split(',').any(|r| r.trim() == account_id)
+    std::env::var("PEAR_PLUGIN_REVIEWERS").unwrap_or_default().split(',').any(|r| r.trim() == account_id)
 }
 
 #[derive(Deserialize)]
@@ -269,7 +269,7 @@ pub fn routes() -> Router<AppState> {
         .route("/api/plugin-signing-key", get(signing_key))
 }
 
-/// Publishes one plugin per subdirectory of `seed_dir` that has an omni-plugin.json, as approved
+/// Publishes one plugin per subdirectory of `seed_dir` that has an pear-plugin.json, as approved
 /// with no author. Unchanged plugins are left alone; a bad plugin is logged and skipped.
 /// Returns (published, unchanged, failed) counts.
 pub async fn seed(db: &Db, seed_dir: &FsPath) -> (usize, usize, usize) {

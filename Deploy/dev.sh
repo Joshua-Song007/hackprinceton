@@ -1,17 +1,17 @@
 #!/usr/bin/env bash
 # Local dev, no Docker: the Rust backend (in-memory store unless DATABASE_URL is set) plus the
-# Studio's Vite dev server. Same env names as the Vultr box (OMNI_DEV_SIGNIN, DATABASE_URL, PORT).
+# Studio's Vite dev server. Same env names as the Vultr box (PEAR_DEV_SIGNIN, DATABASE_URL, PORT).
 # Works in Git Bash on Windows and on macOS. Ctrl+C stops both.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 export PATH="$HOME/.cargo/bin:$PATH"
-export OMNI_DEV_SIGNIN="${OMNI_DEV_SIGNIN:-1}"
+export PEAR_DEV_SIGNIN="${PEAR_DEV_SIGNIN:-1}"
 export PORT="${PORT:-8080}"
 # Marketplace on the dev box: seed Plugins/ at startup (in memory), and point the hosted-agent proxy at a
 # local runtime (`cd Plugins/langchain-deepagents && uv run python runtime/server.py`) for signed-in browsers.
-export OMNI_PLUGIN_SEED_DIR="${OMNI_PLUGIN_SEED_DIR:-$ROOT/Plugins}"
-export OMNI_AGENT_RUNTIME_URL="${OMNI_AGENT_RUNTIME_URL:-ws://127.0.0.1:9410/ws}"
+export PEAR_PLUGIN_SEED_DIR="${PEAR_PLUGIN_SEED_DIR:-$ROOT/Plugins}"
+export PEAR_AGENT_RUNTIME_URL="${PEAR_AGENT_RUNTIME_URL:-ws://127.0.0.1:9410/ws}"
 STUDIO_URL="http://localhost:5173" # Vite's default; the backend's default CORS list allows it
 
 command -v cargo >/dev/null || { echo "cargo not found: install Rust from https://rustup.rs" >&2; exit 1; }
@@ -33,7 +33,7 @@ trap cleanup EXIT INT TERM
 
 echo "Building backend"
 (cd "$ROOT/Backend" && cargo build)
-BIN="$ROOT/Backend/target/debug/omni-backend"
+BIN="$ROOT/Backend/target/debug/pear-backend"
 [ -x "$BIN" ] || BIN="$BIN.exe"
 
 if [ -z "${DATABASE_URL:-}" ]; then echo "DATABASE_URL not set: in-memory store, data is lost on restart"; fi
@@ -56,7 +56,7 @@ done
 curl -fsS "http://localhost:$PORT/health" >/dev/null || { echo "Backend did not answer /health in 30 s" >&2; exit 1; }
 
 echo
-echo "Backend  http://localhost:$PORT   (dev sign-in: OMNI_DEV_SIGNIN=$OMNI_DEV_SIGNIN)"
+echo "Backend  http://localhost:$PORT   (dev sign-in: PEAR_DEV_SIGNIN=$PEAR_DEV_SIGNIN)"
 echo "Studio   $STUDIO_URL"
 echo "Check it: Deploy/demo.sh http://localhost:$PORT"
 echo "Ctrl+C stops both."

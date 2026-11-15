@@ -191,9 +191,9 @@ let tcp = NWProtocolTCP.Options()
 tcp.noDelay = true
 let listener: NWListener
 do { listener = try NWListener(using: NWParameters(tls: nil, tcp: tcp)) } catch { print("listener: \(error)"); exit(1) }
-listener.service = NWListener.Service(name: Host.current().localizedName ?? "Omni Mac", type: "_omniprobe._tcp")
+listener.service = NWListener.Service(name: Host.current().localizedName ?? "Pear Mac", type: "_pearprobe._tcp")
 listener.stateUpdateHandler = { state in
-    print("listener \(state)\(listener.port.map { " on port \($0)" } ?? "")  advertising _omniprobe._tcp")
+    print("listener \(state)\(listener.port.map { " on port \($0)" } ?? "")  advertising _pearprobe._tcp")
     if case .failed = state { exit(1) }
 }
 listener.newConnectionHandler = { c in

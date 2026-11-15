@@ -57,8 +57,8 @@ def scripted_session() -> ScriptedModel:
 
 
 def test_health_and_scripted_prompt_over_websocket(tmp_path, monkeypatch):
-    monkeypatch.setenv("OMNI_PROJECT_DIR", str(tmp_path))
-    monkeypatch.setenv("OMNI_AGENT_MODEL", "anthropic:test")
+    monkeypatch.setenv("PEAR_PROJECT_DIR", str(tmp_path))
+    monkeypatch.setenv("PEAR_AGENT_MODEL", "anthropic:test")
     handler = functools.partial(server.handle_socket, model=scripted_session())
 
     async def scenario():
@@ -87,7 +87,7 @@ def test_health_and_scripted_prompt_over_websocket(tmp_path, monkeypatch):
     for e in written:
         assert (tmp_path / e["path"]).read_text(encoding="utf-8") == e["content"]
     assert '"name": "s"' in (tmp_path / "AGENTS.md").read_text(encoding="utf-8")
-    assert (tmp_path / ".omni" / "skills" / "omni-scripting" / "SKILL.md").is_file()
+    assert (tmp_path / ".pear" / "skills" / "pear-scripting" / "SKILL.md").is_file()
 
 
 def test_second_prompt_on_the_same_project_waits_for_the_first(tmp_path):
@@ -124,7 +124,7 @@ def test_foreign_origin_websocket_is_rejected():
 
 def test_choose_model_env_override_then_key_order():
     choose = server.choose_model
-    assert choose({"OMNI_AGENT_MODEL": "openai:x", "ANTHROPIC_API_KEY": "k"}) == "openai:x"
+    assert choose({"PEAR_AGENT_MODEL": "openai:x", "ANTHROPIC_API_KEY": "k"}) == "openai:x"
     assert choose({"ANTHROPIC_API_KEY": "k", "OPENAI_API_KEY": "k"}) == "anthropic:claude-sonnet-5-5"
     assert choose({"OPENAI_API_KEY": "k", "GOOGLE_API_KEY": "k"}) == "openai:gpt-5.5"
     assert choose({"GOOGLE_API_KEY": "k"}) == "google_genai:gemini-2.5-pro"
@@ -133,7 +133,7 @@ def test_choose_model_env_override_then_key_order():
 
 
 def test_no_key_prompt_yields_one_error(tmp_path, monkeypatch):
-    for name in ("OMNI_AGENT_MODEL", "ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GOOGLE_API_KEY", "GEMINI_API_KEY"):
+    for name in ("PEAR_AGENT_MODEL", "ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GOOGLE_API_KEY", "GEMINI_API_KEY"):
         monkeypatch.delenv(name, raising=False)
 
     async def collect():
@@ -143,7 +143,7 @@ def test_no_key_prompt_yields_one_error(tmp_path, monkeypatch):
 
 
 def test_providers_resolve_and_subagents_inherit_the_main_model(monkeypatch):
-    for name in ("OMNI_AGENT_MODEL", "ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GOOGLE_API_KEY"):
+    for name in ("PEAR_AGENT_MODEL", "ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GOOGLE_API_KEY"):
         monkeypatch.delenv(name, raising=False)
     assert all("model" not in spec for spec in server.SUBAGENTS)
     for env, spec in (("OPENAI_API_KEY", "openai"), ("GEMINI_API_KEY", "google_genai")):
@@ -153,7 +153,7 @@ def test_providers_resolve_and_subagents_inherit_the_main_model(monkeypatch):
 
 
 def test_health_reports_chosen_model_without_secrets(monkeypatch):
-    monkeypatch.delenv("OMNI_AGENT_MODEL", raising=False)
+    monkeypatch.delenv("PEAR_AGENT_MODEL", raising=False)
     monkeypatch.setenv("OPENAI_API_KEY", "sk-secret")
 
     async def scenario():
@@ -167,7 +167,7 @@ def test_health_reports_chosen_model_without_secrets(monkeypatch):
 
 
 def test_extra_origin_from_env_is_accepted(monkeypatch):
-    monkeypatch.setenv("OMNI_ALLOWED_ORIGINS", "http://localhost:5174, https://studio.example")
+    monkeypatch.setenv("PEAR_ALLOWED_ORIGINS", "http://localhost:5174, https://studio.example")
 
     async def scenario(origin):
         async with serve(server.handle_socket, "127.0.0.1", 0, process_request=server.handle_request) as srv:
@@ -202,8 +202,8 @@ def test_slow_reader_does_not_hold_the_project_lock(tmp_path):
 
 
 def test_hosted_mode_requires_the_secret_and_never_uses_env_keys(tmp_path, monkeypatch):
-    monkeypatch.setenv("OMNI_RUNTIME_SECRET", "s3cret")
-    monkeypatch.setenv("OMNI_PROJECTS_ROOT", str(tmp_path))
+    monkeypatch.setenv("PEAR_RUNTIME_SECRET", "s3cret")
+    monkeypatch.setenv("PEAR_PROJECTS_ROOT", str(tmp_path))
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-env-key-must-not-be-used")
 
     async def scenario():
@@ -217,11 +217,11 @@ def test_hosted_mode_requires_the_secret_and_never_uses_env_keys(tmp_path, monke
                         out[name] = "open"
                 except Exception as exc:  # noqa: BLE001
                     out[name] = str(exc)
-            ok = {"Authorization": "Bearer s3cret", "X-Omni-Account": "acct-1", "X-Omni-Project": "p1"}
+            ok = {"Authorization": "Bearer s3cret", "X-Pear-Account": "acct-1", "X-Pear-Project": "p1"}
             async with connect(url, additional_headers=ok) as ws:
                 await ws.send(json.dumps({"type": "prompt", "id": "p", "text": "hi"}))
                 out["nokey"] = json.loads(await ws.recv())
-            async with connect(url, additional_headers={**ok, "X-Omni-Project": "../x"}) as ws:
+            async with connect(url, additional_headers={**ok, "X-Pear-Project": "../x"}) as ws:
                 out["badid"] = json.loads(await ws.recv())
             health = await asyncio.to_thread(urllib.request.urlopen, f"http://127.0.0.1:{port}/health")
             out["health"] = json.load(health)["model"]
@@ -236,9 +236,9 @@ def test_hosted_mode_requires_the_secret_and_never_uses_env_keys(tmp_path, monke
 
 
 def test_hosted_model_uses_the_header_key_for_its_provider():
-    model, key = server.hosted_model({"X-Omni-Model-Provider": "openai", "X-Omni-Model-Key": "sk-header-key-123"})
+    model, key = server.hosted_model({"X-Pear-Model-Provider": "openai", "X-Pear-Model-Key": "sk-header-key-123"})
     assert key == "sk-header-key-123" and model.openai_api_key.get_secret_value() == "sk-header-key-123"
-    assert server.hosted_model({"X-Omni-Model-Provider": "nope", "X-Omni-Model-Key": "k"}) == (None, None)
+    assert server.hosted_model({"X-Pear-Model-Provider": "nope", "X-Pear-Model-Key": "k"}) == (None, None)
     assert server.hosted_model({}) == (None, None)
 
 

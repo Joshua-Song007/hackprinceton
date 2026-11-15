@@ -10,7 +10,7 @@
 - `settings.worker.json` is the slim V2 worker permission set without the legacy Stop hook.
 - `scripts/ci-dod.py` runs independent brief build/tests/lint on the hosted `agent-dod` CI job, never on the merge-credential machine.
 - `scripts/ci-scope.py` selects only relevant manual-PR component checks; managed PRs use independent DoD instead of duplicate product builds.
-- `scripts/legacy-loop.sh` preserves the prior loop, accessible only through explicit `OMNI_LEGACY=1`; never run both architectures concurrently.
+- `scripts/legacy-loop.sh` preserves the prior loop, accessible only through explicit `PEAR_LEGACY=1`; never run both architectures concurrently.
 - The generated context pack and small role prompts are under `docs/agents/`. V2 does not read the full-doc rules below.
 
 ## Legacy reference (not the current launch instructions)
@@ -31,7 +31,7 @@ Instructions and tooling for autonomous agents. `.claude/` is human-only: agents
 - `HUMAN.md` — human cheat sheet, hidden from agents (never materialized in an agent worktree).
 - `scripts/run.sh` — launcher: new worktree + `agent/<laptop>/<slug>` branch, then `claude -p`. Worker = Sonnet 5.5; `--orch` = Opus 5.5; `--detach` starts it in the background and writes `logs/<slug>.state`.
 - `scripts/start.sh <laptop> [--integrator] [--dry-run]` — one command per laptop: setup, verify, then start the loop (Mac: detached tmux under `caffeinate -i`; Windows: its own Git Bash window plus a keep-awake helper).
-- `scripts/loop.sh` — per-laptop overnight loop (`OMNI_ROLE=orch|integrator`): agent cycle, backoff, STOP check, build-to-maintain phase switch for the integrator, credit-exhaustion detection (OUT / BACK on the `Loop capacity` issue; OUT and a `handoff:` comment on every claimed issue at the first limit hit, a CLI limit warning, an agent's `OFFLINE:` line ; on a usage limit it sleeps until the reset + 60 s and resumes with BACK; `NIGHT_BUDGET_USD` 90 % spent stops it), failure issue + local notification.
+- `scripts/loop.sh` — per-laptop overnight loop (`PEAR_ROLE=orch|integrator`): agent cycle, backoff, STOP check, build-to-maintain phase switch for the integrator, credit-exhaustion detection (OUT / BACK on the `Loop capacity` issue; OUT and a `handoff:` comment on every claimed issue at the first limit hit, a CLI limit warning, an agent's `OFFLINE:` line ; on a usage limit it sleeps until the reset + 60 s and resumes with BACK; `NIGHT_BUDGET_USD` 90 % spent stops it), failure issue + local notification.
 - `scripts/setup.sh <laptop> [--check]` — installs and checks the tools the loop needs (Homebrew on macOS, winget on Windows); lists what only a human can do.
 - `scripts/verify-nonswift.sh` — JSON / JSONL validity and JS syntax; runs on macOS and Windows (the Windows lanes' check, also run in CI).
 - `scripts/selftest.sh [--keep]` — self-test of the agent tooling: `bash -n` on every script, `shellcheck -S error` when installed, `--help` of each tooling script, smoke runs of `prs.sh` / `worktrees.sh` / `health.sh` in a throwaway git repo with a stub `gh`, then `check-docs.sh`. Touches nothing outside a temp directory.
@@ -54,6 +54,6 @@ Instructions and tooling for autonomous agents. `.claude/` is human-only: agents
 
 Roles and models (same for everyone): orchestrator `claude-opus-5-5`; workers and every subagent `claude-sonnet-5-5`.
 
-Run: `OMNI_LAPTOP=<name> .agents/scripts/run.sh <slug> "implement plan.md items 1.3"`, or let the orchestrator do it (see `HUMAN.md`).
+Run: `PEAR_LAPTOP=<name> .agents/scripts/run.sh <slug> "implement plan.md items 1.3"`, or let the orchestrator do it (see `HUMAN.md`).
 
 Known limits: no MCP in agent runs. Protected paths are blocked for the edit tools and for shell writes (Bash is allow-listed), but `swift build` and `swift test` can run arbitrary code (package plugins, tests), so the PR diff and branch protection remain the real backstop.

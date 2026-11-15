@@ -1,13 +1,13 @@
-"""Omni Deep Agents runtime: /health over HTTP and /ws for panel prompts (websockets only).
+"""Pear Deep Agents runtime: /health over HTTP and /ws for panel prompts (websockets only).
 
-Live model: OMNI_AGENT_MODEL ("provider:model") or the first key set of ANTHROPIC_API_KEY, OPENAI_API_KEY,
-GOOGLE_API_KEY/GEMINI_API_KEY. Extra panel origins: OMNI_ALLOWED_ORIGINS (comma-separated).
+Live model: PEAR_AGENT_MODEL ("provider:model") or the first key set of ANTHROPIC_API_KEY, OPENAI_API_KEY,
+GOOGLE_API_KEY/GEMINI_API_KEY. Extra panel origins: PEAR_ALLOWED_ORIGINS (comma-separated).
 
-Hosted mode (OMNI_RUNTIME_SECRET set, run beside the Omni backend): /ws needs
-`Authorization: Bearer $OMNI_RUNTIME_SECRET` (the backend's /agent/ws proxy sends it), the project dir
-is OMNI_PROJECTS_ROOT/<X-Omni-Account>/<X-Omni-Project>, and the model key comes only from the
-X-Omni-Model-Provider / X-Omni-Model-Key headers (that account's key): env keys are never used.
-Bind address: OMNI_RUNTIME_HOST (default 127.0.0.1).
+Hosted mode (PEAR_RUNTIME_SECRET set, run beside the Pear backend): /ws needs
+`Authorization: Bearer $PEAR_RUNTIME_SECRET` (the backend's /agent/ws proxy sends it), the project dir
+is PEAR_PROJECTS_ROOT/<X-Pear-Account>/<X-Pear-Project>, and the model key comes only from the
+X-Pear-Model-Provider / X-Pear-Model-Key headers (that account's key): env keys are never used.
+Bind address: PEAR_RUNTIME_HOST (default 127.0.0.1).
 """
 import asyncio
 import hmac
@@ -37,15 +37,15 @@ NO_KEY_MESSAGE = "No model API key: set ANTHROPIC_API_KEY, OPENAI_API_KEY or GOO
 DEFAULT_MODELS = {
     "anthropic": "anthropic:claude-sonnet-5-5",
     "openai": "openai:gpt-5.5",
-    # shortcut: unverified model id, override with OMNI_AGENT_MODEL
+    # shortcut: unverified model id, override with PEAR_AGENT_MODEL
     "google": "google_genai:gemini-2.5-pro",
 }
 
 
 def choose_model(env) -> str | None:
-    """The "provider:model" to use, or None when no key is set. OMNI_AGENT_MODEL wins."""
-    if env.get("OMNI_AGENT_MODEL"):
-        return env["OMNI_AGENT_MODEL"]
+    """The "provider:model" to use, or None when no key is set. PEAR_AGENT_MODEL wins."""
+    if env.get("PEAR_AGENT_MODEL"):
+        return env["PEAR_AGENT_MODEL"]
     if env.get("ANTHROPIC_API_KEY"):
         return DEFAULT_MODELS["anthropic"]
     if env.get("OPENAI_API_KEY"):
@@ -80,14 +80,14 @@ PERMISSIONS = [
 SUBAGENTS = [
     {
         "name": "client-js",
-        "description": "Writes Omni client scripts (scripts/<name>.client.js) that react to input and fire RemoteEvents.",
-        "system_prompt": "You write Omni client scripts using script({...}). Follow the omni-scripting skill. "
+        "description": "Writes Pear client scripts (scripts/<name>.client.js) that react to input and fire RemoteEvents.",
+        "system_prompt": "You write Pear client scripts using script({...}). Follow the pear-scripting skill. "
         "Write only scripts/<name>.client.js files.",
     },
     {
         "name": "server-js",
-        "description": "Writes Omni server scripts (scripts/<name>.server.js) that handle RemoteEvents and keep room state.",
-        "system_prompt": "You write Omni server scripts using serverScript({...}). Follow the omni-scripting skill. "
+        "description": "Writes Pear server scripts (scripts/<name>.server.js) that handle RemoteEvents and keep room state.",
+        "system_prompt": "You write Pear server scripts using serverScript({...}). Follow the pear-scripting skill. "
         "Write only scripts/<name>.server.js files.",
     },
 ]
@@ -102,7 +102,7 @@ def build_agent(project_dir: Path, model=None):
     # The subagents specs carry no model, so they inherit this one.
     return create_deep_agent(
         model=model,
-        skills=["/.omni/skills/"],
+        skills=["/.pear/skills/"],
         memory=["/AGENTS.md"],
         middleware=[TodoListMiddleware()],
         subagents=SUBAGENTS,
@@ -113,7 +113,7 @@ def build_agent(project_dir: Path, model=None):
 
 def prepare_project(project_dir: Path, snapshot: dict) -> None:
     """Copy the skills into the project, write scene.json and render AGENTS.md from the prompt's project snapshot."""
-    shutil.copytree(PLUGIN_DIR / "skills", project_dir / ".omni" / "skills", dirs_exist_ok=True)
+    shutil.copytree(PLUGIN_DIR / "skills", project_dir / ".pear" / "skills", dirs_exist_ok=True)
     (project_dir / "scene.json").write_text(json.dumps(snapshot.get("scene") or {}, indent=2), encoding="utf-8")
     dump = lambda key: json.dumps(snapshot.get(key), indent=2)  # noqa: E731
     template = Template((PLUGIN_DIR / "AGENTS.md.tmpl").read_text(encoding="utf-8"))
@@ -171,18 +171,18 @@ ALLOWED_ORIGINS = {"http://localhost:5173", "http://127.0.0.1:5173", "tauri://lo
 
 
 def hosted() -> bool:
-    return bool(os.environ.get("OMNI_RUNTIME_SECRET"))
+    return bool(os.environ.get("PEAR_RUNTIME_SECRET"))
 
 
 SAFE_ID = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 
 
 def hosted_project_dir(headers) -> Path:
-    """OMNI_PROJECTS_ROOT/<account>/<project>; ValueError for ids that are not plain slugs."""
-    account, project = headers.get("X-Omni-Account", ""), headers.get("X-Omni-Project", "")
+    """PEAR_PROJECTS_ROOT/<account>/<project>; ValueError for ids that are not plain slugs."""
+    account, project = headers.get("X-Pear-Account", ""), headers.get("X-Pear-Project", "")
     if not SAFE_ID.match(account) or not SAFE_ID.match(project):
         raise ValueError("bad account or project id")
-    root = Path(os.environ.get("OMNI_PROJECTS_ROOT", "projects")).resolve()
+    root = Path(os.environ.get("PEAR_PROJECTS_ROOT", "projects")).resolve()
     path = root / account / project
     path.mkdir(parents=True, exist_ok=True)
     return path
@@ -190,7 +190,7 @@ def hosted_project_dir(headers) -> Path:
 
 def hosted_model(headers):
     """(chat model, key) from the account's key headers, or (None, None) when it sent none."""
-    provider, key = headers.get("X-Omni-Model-Provider"), headers.get("X-Omni-Model-Key")
+    provider, key = headers.get("X-Pear-Model-Provider"), headers.get("X-Pear-Model-Key")
     if not key or provider not in DEFAULT_MODELS:
         return None, None
     return init_chat_model(DEFAULT_MODELS[provider], api_key=key), key
@@ -207,10 +207,10 @@ def handle_request(connection, request):
         return connection.respond(HTTPStatus.NOT_FOUND, "not found\n")
     if hosted():
         given = request.headers.get("Authorization", "")
-        if not hmac.compare_digest(given.encode(), f"Bearer {os.environ['OMNI_RUNTIME_SECRET']}".encode()):
+        if not hmac.compare_digest(given.encode(), f"Bearer {os.environ['PEAR_RUNTIME_SECRET']}".encode()):
             return connection.respond(HTTPStatus.UNAUTHORIZED, "unauthorized\n")
     origin = request.headers.get("Origin")
-    extra = {o.strip() for o in os.environ.get("OMNI_ALLOWED_ORIGINS", "").split(",") if o.strip()}
+    extra = {o.strip() for o in os.environ.get("PEAR_ALLOWED_ORIGINS", "").split(",") if o.strip()}
     if origin is not None and origin not in ALLOWED_ORIGINS | extra:
         return connection.respond(HTTPStatus.FORBIDDEN, "origin not allowed\n")
     return None
@@ -238,7 +238,7 @@ async def handle_socket(websocket, model=None):
             if not is_prompt or not isinstance(message.get("text"), str):
                 await websocket.send(json.dumps({"type": "error", "id": prompt_id, "message": "expected a prompt message"}))
                 continue
-            project_dir = hosted_dir if hosted() else Path(os.environ.get("OMNI_PROJECT_DIR", ".")).resolve()
+            project_dir = hosted_dir if hosted() else Path(os.environ.get("PEAR_PROJECT_DIR", ".")).resolve()
             async for event in run_prompt(message, project_dir, model, env_model, secrets):
                 await websocket.send(json.dumps({**event, "id": prompt_id}))
     except ConnectionClosed:
@@ -246,8 +246,8 @@ async def handle_socket(websocket, model=None):
 
 
 async def main() -> None:
-    port = int(os.environ.get("OMNI_PLUGIN_PORT", "9410"))
-    host = os.environ.get("OMNI_RUNTIME_HOST", "127.0.0.1")
+    port = int(os.environ.get("PEAR_PLUGIN_PORT", "9410"))
+    host = os.environ.get("PEAR_RUNTIME_HOST", "127.0.0.1")
     async with serve(handle_socket, host, port, process_request=handle_request, max_size=2**22):
         await asyncio.Future()
 

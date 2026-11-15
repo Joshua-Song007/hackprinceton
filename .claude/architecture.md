@@ -1,6 +1,6 @@
 # Architecture
 
-Product name is Pear; package / env identifiers keep the Omni prefix (see overview.md Naming).
+Product name is Pear; package / env identifiers keep the Pear prefix (see overview.md Naming).
 
 File structure, component ownership, and dependency graph. Responsibility text for each file lives in `plan.md` — not duplicated here.
 
@@ -11,50 +11,50 @@ Source of truth for the boundaries below is `overview.md` (Modular Workspace Arc
 Internal package-to-package edges only. Third-party dependencies are tracked in `branchDep.md`.
 
 ```
-OmniCore ◄──── OmniInput ◄──── OmniRuntime ◄──── OmniScript
+PearCore ◄──── PearInput ◄──── PearRuntime ◄──── PearScript
    ▲              ▲  ▲
    │              │  └───────────────┐
-   ├──── OmniOutput ◄──┐             │
+   ├──── PearOutput ◄──┐             │
    │         ▲         │             │
    │         │         │             │
-   ├──── OmniSim ──────┤  (OmniSim:    Core + Input + Output)
-   ├──── OmniBridge ───┘  (OmniBridge: Core + Input + Output)
+   ├──── PearSim ──────┤  (PearSim:    Core + Input + Output)
+   ├──── PearBridge ───┘  (PearBridge: Core + Input + Output)
    │
-   ├──── OmniCollab                (stretch; Core only)
-   ├──── OmniAdapters              (stretch; Core + Input)
-   └──── OmniCompanion             (iOS + watchOS apps; Core only)
+   ├──── PearCollab                (stretch; Core only)
+   ├──── PearAdapters              (stretch; Core + Input)
+   └──── PearCompanion             (iOS + watchOS apps; Core only)
 
-OmniCloud                          (no Omni deps; backend client for Studio and the player)
+PearCloud                          (no Pear deps; backend client for Studio and the player)
    ▲
-   └──── OmniLibrary                (Phase 9: device profile + library model; OmniCloud only)
+   └──── PearLibrary                (Phase 9: device profile + library model; PearCloud only)
 
-OmniStudio (macOS app)  ──►  every package above except OmniCompanion and OmniLibrary
-OmniPlayer (iOS + macOS app) ──►  OmniLibrary, OmniCloud (Phase 9; library shell, no runtime yet)
-Games/Flagship          ──►  data only (scene + scripts) run through OmniRuntime + OmniScript
-Backend/ (Rust)         ──►  no Swift edges; reached over HTTP / WebSocket by OmniCloud
-                             (one file edge, not a package edge: `script_host.rs` includes OmniScript's `prelude.js`; see Placement Notes)
-Web/ (TypeScript, Phase 8) ─► no Swift edges; file-level imports of Schema/usis.schema.json, prelude.js, Games/*; reaches Backend/ over HTTP / WebSocket via @omni/cloud
-  @omni/core ◄── @omni/runtime ◄── @omni/script        (@omni/runtime, @omni/script never import @omni/sim: hardware-blind)
-  @omni/core ◄── @omni/sim ;  @omni/cloud (no Omni deps) ;  studio = composition root, depends on all
+PearStudio (macOS app)  ──►  every package above except PearCompanion and PearLibrary
+PearPlayer (iOS + macOS app) ──►  PearLibrary, PearCloud (Phase 9; library shell, no runtime yet)
+Games/Flagship          ──►  data only (scene + scripts) run through PearRuntime + PearScript
+Backend/ (Rust)         ──►  no Swift edges; reached over HTTP / WebSocket by PearCloud
+                             (one file edge, not a package edge: `script_host.rs` includes PearScript's `prelude.js`; see Placement Notes)
+Web/ (TypeScript, Phase 8) ─► no Swift edges; file-level imports of Schema/usis.schema.json, prelude.js, Games/*; reaches Backend/ over HTTP / WebSocket via @pear/cloud
+  @pear/core ◄── @pear/runtime ◄── @pear/script        (@pear/runtime, @pear/script never import @pear/sim: hardware-blind)
+  @pear/core ◄── @pear/sim ;  @pear/cloud (no Pear deps) ;  studio = composition root, depends on all
 ```
 
 | Package / target | Depends on |
 |---|---|
-| OmniCore | — |
-| OmniInput | OmniCore |
-| OmniOutput | OmniCore |
-| OmniRuntime | OmniCore, OmniInput (protocols only) |
-| OmniScript | OmniRuntime |
-| OmniSim | OmniCore, OmniInput, OmniOutput |
-| OmniBridge | OmniCore, OmniInput, OmniOutput |
-| OmniCollab (stretch) | OmniCore |
-| OmniAdapters (stretch) | OmniCore, OmniInput |
-| OmniCompanion (iOS, watchOS) | OmniCore |
-| OmniCloud | — |
-| OmniLibrary (Phase 9) | OmniCloud |
-| OmniPlayer (iOS + macOS app, Phase 9) | OmniLibrary, OmniCloud |
-| OmniStudio (macOS app) | all packages |
-| Games/Flagship | OmniRuntime, OmniScript (public API only) |
+| PearCore | — |
+| PearInput | PearCore |
+| PearOutput | PearCore |
+| PearRuntime | PearCore, PearInput (protocols only) |
+| PearScript | PearRuntime |
+| PearSim | PearCore, PearInput, PearOutput |
+| PearBridge | PearCore, PearInput, PearOutput |
+| PearCollab (stretch) | PearCore |
+| PearAdapters (stretch) | PearCore, PearInput |
+| PearCompanion (iOS, watchOS) | PearCore |
+| PearCloud | — |
+| PearLibrary (Phase 9) | PearCloud |
+| PearPlayer (iOS + macOS app, Phase 9) | PearLibrary, PearCloud |
+| PearStudio (macOS app) | all packages |
+| Games/Flagship | PearRuntime, PearScript (public API only) |
 
 ### Forbidden Edges
 
@@ -62,16 +62,16 @@ Enforced in each `Package.swift`; a violation is a build failure, not a conventi
 
 | From | Must never depend on | Why |
 |---|---|---|
-| OmniRuntime, OmniScript, Games/* | OmniSim, OmniBridge | Hardware-blind property: a game cannot tell sim from live |
-| OmniRuntime | OmniOutput | Runtime queues `OutputCommand` (OmniCore) and never touches a sink |
-| OmniRuntime | OmniScript | Scripts attach through the `EventDispatcher` protocol |
-| OmniCore | everything | Pure, no I/O |
-| OmniCompanion | anything but OmniCore | Phone/Watch apps share only the wire types |
-| OmniCollab | OmniInput, OmniRuntime | Syncs the project document only; never touches input |
-| OmniSim ↔ OmniBridge | each other | Siblings; both plug in through `InputSource` / `OutputSink` |
-| OmniRuntime, OmniScript, Games/* | OmniCloud | Module 11 boundary: only a composition root talks to the backend (Studio; since Phase 9 also OmniPlayer, **(plan decision)** until overview.md Module 11 changes) |
-| OmniLibrary | OmniRuntime, OmniScript, OmniInput, OmniSim, OmniBridge (this round) | **(plan decision)** the player shell is library-only; keeps the hardware-blind property and the Network Rule by dependency; revisit when Play embeds the runtime |
-| OmniCloud | any Omni package | Carries game content only, never input |
+| PearRuntime, PearScript, Games/* | PearSim, PearBridge | Hardware-blind property: a game cannot tell sim from live |
+| PearRuntime | PearOutput | Runtime queues `OutputCommand` (PearCore) and never touches a sink |
+| PearRuntime | PearScript | Scripts attach through the `EventDispatcher` protocol |
+| PearCore | everything | Pure, no I/O |
+| PearCompanion | anything but PearCore | Phone/Watch apps share only the wire types |
+| PearCollab | PearInput, PearRuntime | Syncs the project document only; never touches input |
+| PearSim ↔ PearBridge | each other | Siblings; both plug in through `InputSource` / `OutputSink` |
+| PearRuntime, PearScript, Games/* | PearCloud | Module 11 boundary: only a composition root talks to the backend (Studio; since Phase 9 also PearPlayer, **(plan decision)** until overview.md Module 11 changes) |
+| PearLibrary | PearRuntime, PearScript, PearInput, PearSim, PearBridge (this round) | **(plan decision)** the player shell is library-only; keeps the hardware-blind property and the Network Rule by dependency; revisit when Play embeds the runtime |
+| PearCloud | any Pear package | Carries game content only, never input |
 
 ## Protocol Seams
 
@@ -79,61 +79,61 @@ Where one package is swapped for another without the consumer changing. Studio's
 
 | Seam (declared in) | Implemented by | Consumed by |
 |---|---|---|
-| `InputSource` (OmniInput) | OmniSim: `VirtualDevice` subclasses, `UsisPlayer` · OmniBridge: `BridgeInputSource`, `AirPodsMotionSource` · OmniAdapters (stretch) | `InputBus` (a source is started with the bus: `start(bus:)`) |
-| `InputBus` (OmniInput) | OmniInput: `InputPipeline` | OmniRuntime `SceneRunner` (via `InputFrame`), OmniStudio |
-| `OutputSink` (OmniOutput) | OmniSim: `SimOutputSink` · OmniBridge: `BridgeOutputSink` · OmniStudio: `RecordingOutputSink` (placeholder in `AppModel.swift`, still the sim sink handed to `ModeController`) | `AppModel` (OmniStudio) drains the runtime's `OutputQueue` into the active sink |
-| `EventDispatcher` (OmniRuntime) | OmniScript: `ScriptEngine` | OmniRuntime `SceneRunner` |
-| `EventDeriver` (OmniRuntime) | OmniRuntime: `LookAtDetector`, `GestureEventMapper`, `HeartRateIntensity`, `RaycastHitDetector` (2.1) | OmniRuntime `SceneRunner` |
-| `RemoteChannel` (OmniScript) | OmniStudio: `InMemoryRemoteChannel` (in `LocalTestSession.swift`) · later the player app's game-server connection | OmniScript `ScriptEngine`, `ServerScriptEngine` |
-| `CatalogSource` (OmniLibrary, Phase 9) | OmniCloud: `CloudClient` | OmniLibrary `LibraryModel` |
-| `SessionStore` (OmniLibrary, Phase 9) | OmniLibrary: Keychain store · in-memory store (tests) | OmniPlayer `PlayerModel` |
-| `GameSource` (OmniLibrary, Phase 9) | OmniCloud: `CloudClient` | OmniLibrary `StubGameLauncher` |
-| `GameLauncher` (OmniLibrary, Phase 9) | OmniLibrary: `StubGameLauncher` (fetches the bundle only) · later a launcher that hands it to OmniRuntime / OmniScript | OmniPlayer `PlayerModel` |
+| `InputSource` (PearInput) | PearSim: `VirtualDevice` subclasses, `UsisPlayer` · PearBridge: `BridgeInputSource`, `AirPodsMotionSource` · PearAdapters (stretch) | `InputBus` (a source is started with the bus: `start(bus:)`) |
+| `InputBus` (PearInput) | PearInput: `InputPipeline` | PearRuntime `SceneRunner` (via `InputFrame`), PearStudio |
+| `OutputSink` (PearOutput) | PearSim: `SimOutputSink` · PearBridge: `BridgeOutputSink` · PearStudio: `RecordingOutputSink` (placeholder in `AppModel.swift`, still the sim sink handed to `ModeController`) | `AppModel` (PearStudio) drains the runtime's `OutputQueue` into the active sink |
+| `EventDispatcher` (PearRuntime) | PearScript: `ScriptEngine` | PearRuntime `SceneRunner` |
+| `EventDeriver` (PearRuntime) | PearRuntime: `LookAtDetector`, `GestureEventMapper`, `HeartRateIntensity`, `RaycastHitDetector` (2.1) | PearRuntime `SceneRunner` |
+| `RemoteChannel` (PearScript) | PearStudio: `InMemoryRemoteChannel` (in `LocalTestSession.swift`) · later the player app's game-server connection | PearScript `ScriptEngine`, `ServerScriptEngine` |
+| `CatalogSource` (PearLibrary, Phase 9) | PearCloud: `CloudClient` | PearLibrary `LibraryModel` |
+| `SessionStore` (PearLibrary, Phase 9) | PearLibrary: Keychain store · in-memory store (tests) | PearPlayer `PlayerModel` |
+| `GameSource` (PearLibrary, Phase 9) | PearCloud: `CloudClient` | PearLibrary `StubGameLauncher` |
+| `GameLauncher` (PearLibrary, Phase 9) | PearLibrary: `StubGameLauncher` (fetches the bundle only) · later a launcher that hands it to PearRuntime / PearScript | PearPlayer `PlayerModel` |
 
 ## Type Ownership
 
 | Type | Owner | Notes |
 |---|---|---|
-| `UsisPacket`, `UsisChannels`, USIS enums | OmniCore | Mirror `Schema/usis.schema.json` |
-| `Vector3`, `Quaternion`, `Pose` | OmniCore | world frame (overview.md Coordinate Frame) is right-handed, +X right, +Y up, −Z forward (RealityKit convention); every live source converts from its device frame (AirPods: `[x, z, −y, w]`) |
-| `InputFrame` | OmniCore | **(plan decision)** lets OmniRuntime avoid more than OmniInput's protocols |
-| `OutputCommand` | OmniCore | **(plan decision)** lets OmniRuntime queue commands without OmniOutput |
-| `TouchPoint`, `GestureEvent`, `PencilState` | OmniCore | **(plan decision)** channel payload types, shared by `UsisChannels` and `InputFrame` |
-| `DeviceSample` | OmniCore | **(plan decision)** one device's entry in an `InputFrame`; carries no `source` |
-| `OutputType` | OmniCore | **(plan decision)** `haptic` / `audio` for `OutputCommand` |
-| `WireMessage`, `LineFraming` | OmniCore | **(plan decision)** companions depend only on OmniCore |
-| `InputSource`, `InputBus`, `CapabilityTier`, `DeviceStats` | OmniInput | `DeviceStats` is the only place `source` survives |
-| `DeviceDescriptor`, `ChannelKind`, `PacketValidationError`, `HostClock` | OmniInput | **(plan decision)** supporting types for sources, capability tiers, validation and the host clock |
-| `OutputSink` | OmniOutput | |
-| `GameEvent`, `EventDispatcher`, components, systems | OmniRuntime | |
-| `EventDeriver`, `OutputQueue`, `TriggerProbe` | OmniRuntime | **(plan decision)** detector extension point, per-frame output buffer and the trigger-test point type |
-| `SceneDescription`, `SceneLoader` | OmniRuntime | **(plan decision)** scene file format not in overview.md |
-| `ScriptEngine`, `SelfBridge`, `ContextBridge`, `ScriptReloader` | OmniScript | |
-| `ServerScriptEngine`, `RemoteChannel` | OmniScript | server scripts and the remote-event seam (overview.md Module 3) |
-| `CloudClient` | OmniCloud | **(plan decision)** one HTTP client for sign-in, publish and fetch |
-| `CatalogEntry` | OmniCloud | **(plan decision)** one row of the public library (id, title, author, latest version, run mode, required tier) |
-| `DeviceProfile`, `Playability`, `LibraryModel` | OmniLibrary | **(plan decision)** what this device is, whether it can play an entry, and the browse state |
-| `StoredSession`, `SessionStore`, `GameSource`, `GameLauncher`, `LaunchResult` | OmniLibrary | **(plan decision)** the persisted sign-in, the fetch seam and the launch seam; `StubGameLauncher` is the only launcher this round |
+| `UsisPacket`, `UsisChannels`, USIS enums | PearCore | Mirror `Schema/usis.schema.json` |
+| `Vector3`, `Quaternion`, `Pose` | PearCore | world frame (overview.md Coordinate Frame) is right-handed, +X right, +Y up, −Z forward (RealityKit convention); every live source converts from its device frame (AirPods: `[x, z, −y, w]`) |
+| `InputFrame` | PearCore | **(plan decision)** lets PearRuntime avoid more than PearInput's protocols |
+| `OutputCommand` | PearCore | **(plan decision)** lets PearRuntime queue commands without PearOutput |
+| `TouchPoint`, `GestureEvent`, `PencilState` | PearCore | **(plan decision)** channel payload types, shared by `UsisChannels` and `InputFrame` |
+| `DeviceSample` | PearCore | **(plan decision)** one device's entry in an `InputFrame`; carries no `source` |
+| `OutputType` | PearCore | **(plan decision)** `haptic` / `audio` for `OutputCommand` |
+| `WireMessage`, `LineFraming` | PearCore | **(plan decision)** companions depend only on PearCore |
+| `InputSource`, `InputBus`, `CapabilityTier`, `DeviceStats` | PearInput | `DeviceStats` is the only place `source` survives |
+| `DeviceDescriptor`, `ChannelKind`, `PacketValidationError`, `HostClock` | PearInput | **(plan decision)** supporting types for sources, capability tiers, validation and the host clock |
+| `OutputSink` | PearOutput | |
+| `GameEvent`, `EventDispatcher`, components, systems | PearRuntime | |
+| `EventDeriver`, `OutputQueue`, `TriggerProbe` | PearRuntime | **(plan decision)** detector extension point, per-frame output buffer and the trigger-test point type |
+| `SceneDescription`, `SceneLoader` | PearRuntime | **(plan decision)** scene file format not in overview.md |
+| `ScriptEngine`, `SelfBridge`, `ContextBridge`, `ScriptReloader` | PearScript | |
+| `ServerScriptEngine`, `RemoteChannel` | PearScript | server scripts and the remote-event seam (overview.md Module 3) |
+| `CloudClient` | PearCloud | **(plan decision)** one HTTP client for sign-in, publish and fetch |
+| `CatalogEntry` | PearCloud | **(plan decision)** one row of the public library (id, title, author, latest version, run mode, required tier) |
+| `DeviceProfile`, `Playability`, `LibraryModel` | PearLibrary | **(plan decision)** what this device is, whether it can play an entry, and the browse state |
+| `StoredSession`, `SessionStore`, `GameSource`, `GameLauncher`, `LaunchResult` | PearLibrary | **(plan decision)** the persisted sign-in, the fetch seam and the launch seam; `StubGameLauncher` is the only launcher this round |
 
 ## Apple Framework Use
 
 | Package / target | Frameworks |
 |---|---|
-| OmniCore | Foundation only |
-| OmniInput | Foundation, Synchronization (`Mutex`) |
-| OmniOutput | none (OmniCore only) |
-| OmniRuntime | RealityKit, simd |
-| OmniScript | JavaScriptCore, RealityKit (`SelfBridge` sets `AudioEmitterComponent`) |
-| OmniSim | RealityKit (sensor rig), Synchronization |
-| OmniBridge | Network, CoreMotion (`CMHeadphoneMotionManager`), Synchronization |
-| OmniCollab | Automerge for Swift (third party; not added yet) |
-| OmniAdapters | CoreBluetooth (not used yet) |
-| OmniCompanion iOS | Network (via `Shared/BridgeClient.swift`), CoreMotion, Core Haptics, WatchConnectivity, SwiftUI, UIKit |
-| OmniCompanion watchOS | HealthKit, CoreMotion, WatchConnectivity, SwiftUI |
-| OmniCloud | Foundation (`URLSession`) |
-| OmniLibrary | Foundation, Security (Keychain), Observation, Synchronization (`Mutex` in the in-memory session store) |
-| OmniPlayer | SwiftUI, AuthenticationServices (Sign in with Apple) |
-| OmniStudio | SwiftUI, RealityKit, AppKit, Observation, Synchronization |
+| PearCore | Foundation only |
+| PearInput | Foundation, Synchronization (`Mutex`) |
+| PearOutput | none (PearCore only) |
+| PearRuntime | RealityKit, simd |
+| PearScript | JavaScriptCore, RealityKit (`SelfBridge` sets `AudioEmitterComponent`) |
+| PearSim | RealityKit (sensor rig), Synchronization |
+| PearBridge | Network, CoreMotion (`CMHeadphoneMotionManager`), Synchronization |
+| PearCollab | Automerge for Swift (third party; not added yet) |
+| PearAdapters | CoreBluetooth (not used yet) |
+| PearCompanion iOS | Network (via `Shared/BridgeClient.swift`), CoreMotion, Core Haptics, WatchConnectivity, SwiftUI, UIKit |
+| PearCompanion watchOS | HealthKit, CoreMotion, WatchConnectivity, SwiftUI |
+| PearCloud | Foundation (`URLSession`) |
+| PearLibrary | Foundation, Security (Keychain), Observation, Synchronization (`Mutex` in the in-memory session store) |
+| PearPlayer | SwiftUI, AuthenticationServices (Sign in with Apple) |
+| PearStudio | SwiftUI, RealityKit, AppKit, Observation, Synchronization |
 | Backend (Rust, not Apple) | axum (with `ws`), tokio, sqlx (Postgres), serde, serde_json, rquickjs 0.9 (provisional; deno_core not picked), jsonwebtoken 12 (`rust_crypto`) and reqwest 0.12 (`rustls-tls`) for Sign in with Apple (Phase 9), getrandom 0.3 for session tokens |
 
 ## File Structure
@@ -141,7 +141,7 @@ Where one package is swapped for another without the consumer changing. Studio's
 Full paths and per-file responsibilities are in `plan.md`. Phase tag in brackets is the phase that creates the file.
 
 ```
-Omni.xcworkspace/
+Pear.xcworkspace/
   contents.xcworkspacedata                          [P1]
 .gitignore                                          [P1]
 Schema/
@@ -150,36 +150,36 @@ Recordings/
   demo-fallback.usis.jsonl                          [P5]
 
 Packages/
-  OmniCore/
+  PearCore/
     Package.swift                                   [P1]
-    Sources/OmniCore/
+    Sources/PearCore/
       Math/        Vector3.swift  Quaternion.swift  Pose.swift                        [P1]
       USIS/        UsisEnums.swift  UsisChannels.swift  UsisPacket.swift              [P1]
       Frame/       InputFrame.swift                                                   [P1]
       Output/      OutputCommand.swift                                                [P1]
       Wire/        WireMessage.swift  LineFraming.swift                               [P3]
-    Tests/OmniCoreTests/
+    Tests/PearCoreTests/
       QuaternionTests.swift  UsisPacketTests.swift                                    [P1]
       LineFramingTests.swift                                                          [P3]
 
-  OmniInput/
+  PearInput/
     Package.swift                                   [P1]
-    Sources/OmniInput/
+    Sources/PearInput/
       InputSource.swift  InputBus.swift  PacketValidator.swift  ClockSync.swift
       JitterBuffer.swift  Calibration.swift  CapabilityTier.swift  DeviceStats.swift
       InputPipeline.swift                                                             [P1]
-    Tests/OmniInputTests/
+    Tests/PearInputTests/
       PacketValidatorTests.swift  ClockSyncTests.swift  JitterBufferTests.swift
       CalibrationTests.swift  SourceStrippingTests.swift                              [P1]
 
-  OmniOutput/
+  PearOutput/
     Package.swift                                   [P1]
-    Sources/OmniOutput/
+    Sources/PearOutput/
       OutputSink.swift                                                                [P1]
 
-  OmniRuntime/
+  PearRuntime/
     Package.swift                                   [P1]
-    Sources/OmniRuntime/
+    Sources/PearRuntime/
       SceneRunner.swift                                                               [P1]
       Components/  TriggerComponent.swift  AudioEmitterComponent.swift
                    ScriptComponent.swift                                              [P1]
@@ -190,25 +190,25 @@ Packages/
                    AudioListenerSystem.swift                                          [P2]
       Output/      OutputQueue.swift                                                  [P1]
       Scene/       SceneDescription.swift  SceneLoader.swift                          [P2]
-    Tests/OmniRuntimeTests/
+    Tests/PearRuntimeTests/
       SceneRunnerTriggerTests.swift                                                   [P1]
       LookAtDetectorTests.swift  HeartRateIntensityTests.swift                        [P2]
       GestureEventMapperTests.swift  RaycastHitDetectorTests.swift                    [P2]
       AudioListenerSystemTests.swift  SceneLoaderTests.swift                          [P2]
 
-  OmniScript/
+  PearScript/
     Package.swift                                   [P1]
-    Sources/OmniScript/
+    Sources/PearScript/
       Module.swift                                  [P1, removed P2]
       Resources/prelude.js                                                            [P2]
       SelfBridge.swift  ContextBridge.swift  ScriptEngine.swift  ScriptReloader.swift [P2]
       RemoteChannel.swift  ServerScriptEngine.swift                                   [P2]
-    Tests/OmniScriptTests/
+    Tests/PearScriptTests/
       ScriptEngineTests.swift  ServerScriptEngineTests.swift                          [P2]
 
-  OmniSim/
+  PearSim/
     Package.swift                                   [P1]
-    Sources/OmniSim/
+    Sources/PearSim/
       Module.swift                                  [P1, removed P2]
       NoiseModel.swift  VirtualDevice.swift                                           [P2]
       Devices/     VirtualAirPods.swift  VirtualWatch.swift
@@ -219,54 +219,54 @@ Packages/
                    pencil-barrel-roll.usis.jsonl                                      [P2]
       Rig/         SensorRigScene.swift  GizmoController.swift  GazeRaycaster.swift  [P2]
       Feedback/    SimOutputSink.swift                                                [P2]
-    Tests/OmniSimTests/
+    Tests/PearSimTests/
       UsisRecorderPlayerTests.swift  NoiseModelTests.swift                            [P2]
       SimPipelineTests.swift                                                          [P2]
       PresetLibraryTests.swift  RigTests.swift  SimOutputSinkTests.swift              [P2, extra]
 
-  OmniBridge/
+  PearBridge/
     Package.swift                                   [P1]
-    Sources/OmniBridge/
+    Sources/PearBridge/
       Module.swift                                  [P1, removed P3]
       BonjourListener.swift  DeviceSession.swift  BridgeInputSource.swift
       BridgeOutputSink.swift  AirPodsMotionSource.swift                               [P3]
-    Tests/OmniBridgeTests/
+    Tests/PearBridgeTests/
       DeviceSessionTests.swift                                                        [P3]
       AirPodsMotionSourceTests.swift  BonjourListenerTests.swift
       BridgeSourceSinkTests.swift                                                     [P3, extra]
 
-  OmniCollab/                                                                         (stretch)
+  PearCollab/                                                                         (stretch)
     Package.swift                                   [P1]
-    Sources/OmniCollab/
+    Sources/PearCollab/
       Module.swift                                  [P1, removed P6]
       ProjectDocument.swift  PeerSync.swift  Presence.swift                           [P6]
 
-  OmniAdapters/                                                                       (stretch)
+  PearAdapters/                                                                       (stretch)
     Package.swift                                   [P1]
-    Sources/OmniAdapters/
+    Sources/PearAdapters/
       Module.swift                                  [P1, stays until P7]
 
-  OmniCloud/
+  PearCloud/
     Package.swift                                   [P4]
-    Sources/OmniCloud/
+    Sources/PearCloud/
       CloudClient.swift                                                               [P4]
-    Tests/OmniCloudTests/
+    Tests/PearCloudTests/
       CloudClientTests.swift                                                          [P4]
       LibraryAPITests.swift                                                           [P9]
 
-  OmniLibrary/                                                                        (Phase 9)
+  PearLibrary/                                                                        (Phase 9)
     Package.swift                                   [P9]
-    Sources/OmniLibrary/
+    Sources/PearLibrary/
       DeviceProfile.swift  Playability.swift  SessionStore.swift
       LibraryModel.swift  GameLauncher.swift                                          [P9]
-    Tests/OmniLibraryTests/
+    Tests/PearLibraryTests/
       DeviceProfileTests.swift  PlayabilityTests.swift  LibraryModelTests.swift       [P9]
 
 Apps/
-  OmniStudio/
-    OmniStudio.xcodeproj/project.pbxproj            [P1]
-    OmniStudio/
-      OmniStudioApp.swift                                                             [P1]
+  PearStudio/
+    PearStudio.xcodeproj/project.pbxproj            [P1]
+    PearStudio/
+      PearStudioApp.swift                                                             [P1]
       AppModel.swift                                                                  [P1]
       Viewport/    ViewportView.swift                                                 [P1]
       Sim/         SimulatorPanelView.swift                                           [P2]
@@ -282,25 +282,25 @@ Apps/
       Game/        GameLoader.swift                                                   [P4, extra]
       Collab/      PresenceOverlayView.swift                                          [P6]
 
-  OmniCompanion/
-    OmniCompanion.xcodeproj/project.pbxproj         [P3]
-    Info.plist  Watch-Info.plist  OmniWatch.entitlements                              [P3, extra]
+  PearCompanion/
+    PearCompanion.xcodeproj/project.pbxproj         [P3]
+    Info.plist  Watch-Info.plist  PearWatch.entitlements                              [P3, extra]
     Shared/        BridgeClient.swift                                                 [P3]
-    iOS/           OmniCompanionApp.swift  MotionStreamer.swift  TouchCapture.swift
+    iOS/           PearCompanionApp.swift  MotionStreamer.swift  TouchCapture.swift
                    HapticPlayer.swift  WatchConnectivityReceiver.swift                [P3]
     watchOS/       WatchApp.swift  HeartRateWorkout.swift
                    WristGestureDetector.swift  WatchRelay.swift                       [P3]
 
-  OmniPlayer/                                       (Phase 9: iOS + macOS player app, library shell)
-    OmniPlayer.xcodeproj/project.pbxproj            [P9]
-    OmniPlayer.entitlements  Info.plist             [P9, Info.plist extra]
-    OmniPlayer/
-      OmniPlayerApp.swift  PlayerModel.swift                                          [P9]
+  PearPlayer/                                       (Phase 9: iOS + macOS player app, library shell)
+    PearPlayer.xcodeproj/project.pbxproj            [P9]
+    PearPlayer.entitlements  Info.plist             [P9, Info.plist extra]
+    PearPlayer/
+      PearPlayerApp.swift  PlayerModel.swift                                          [P9]
       Account/     AppleSignInView.swift                                              [P9]
       Library/     LibraryView.swift  GameDetailView.swift                            [P9]
-      Theme/       OmniTheme.swift  OmniGizmoMark.swift                                [P9, extra]
+      Theme/       PearTheme.swift  PearGizmoMark.swift                                [P9, extra]
 
-Tools/                                              (plan decision: hardware probes, no Omni deps, no graph edges)
+Tools/                                              (plan decision: hardware probes, no Pear deps, no graph edges)
   AirPodsProbe/
     Package.swift  Info.plist  bundle.sh                                              [HW]
     Sources/AirPodsProbe/main.swift                                                   [HW]
@@ -326,17 +326,17 @@ Backend/                                            (plan decision: Rust Cargo p
 ```
 
 ## Placement Notes
-- **(plan decision, Phase 8)** `Web/` is an npm-workspace TypeScript SDK + Studio (`Web/packages/omni-{core,runtime,script,sim,cloud}`, `Web/studio`, desktop shell `Web/studio/src-tauri`), mirroring the Swift package boundaries for a browser / desktop Studio. Contracts are shared by importing the same files, never copies. `Deploy/` holds the Dockerfile, compose, Caddyfile and Vultr scripts; the backend image serves the built Studio. overview.md now lists the web Studio under Additional surfaces.
+- **(plan decision, Phase 8)** `Web/` is an npm-workspace TypeScript SDK + Studio (`Web/packages/pear-{core,runtime,script,sim,cloud}`, `Web/studio`, desktop shell `Web/studio/src-tauri`), mirroring the Swift package boundaries for a browser / desktop Studio. Contracts are shared by importing the same files, never copies. `Deploy/` holds the Dockerfile, compose, Caddyfile and Vultr scripts; the backend image serves the built Studio. overview.md now lists the web Studio under Additional surfaces.
 
-- `OmniStudio` is the composition root: it constructs the `InputPipeline`, the active `InputSource` / `OutputSink` pair, the `ScriptEngine` and the `SceneRunner`, and wires them together, in `AppModel.swift`. No package does this wiring. `AppModel` also drains the runtime's `OutputQueue` into the active sink each frame; `ModeController` (P3) takes over choosing the source/sink pair. (Changed 2026-11-14: as built, `AppModel` constructs the `InputPipeline`, `SceneRunner`, one sim head device, a `RecordingOutputSink` placeholder, the `ModeController` and `DemoMode`, but no `ScriptEngine`; `ModeController` builds the live `BridgeInputSource`, `BridgeOutputSink` and `BonjourListener`; `ScriptEngine` and `ServerScriptEngine` are constructed only in `LocalTestSession`. `ScriptEditorView`, `InspectorView`, `SimulatorPanelView` and `DebugOverlayView` exist but are not mounted in the window yet.) (Changed 2026-11-14: `AppModel` now also builds a `ScriptEngine` and, for games with server scripts, a `ServerScriptEngine`, joined by `InMemoryRemoteChannel`; it loads games through `GameLoader` and owns the `CloudClient` / `AccountModel` for Open from cloud.)
-- **(plan decision)** `SceneDescription.requiredTier` is a plain `Int` (1…3), so `OmniRuntime` stays off `CapabilityTier`; Studio maps it to `CapabilityTier` for the capability warning.
-- `BridgeClient` is shared by the iOS and watchOS targets under `Apps/OmniCompanion/Shared/`; the Watch reaches the Mac through the phone via `WatchRelay` → `WatchConnectivityReceiver`.
-- `Games/Flagship` holds data (scene + JS) only, so it cannot import Swift packages by construction; it reaches the engine through `OmniScript`'s `self` / `ctx` API.
-- Cloud game hosting (`overview.md` Module 11): `OmniCloud` is the Mac-side client and `Backend/` is the Rust server. Published games are data only (scene + client scripts + server scripts + assets + metadata), the same shape as `Games/Flagship`, and are stored in Postgres on Vultr; sensor data (USIS) and output commands never go there.
-- Only `OmniStudio` (the composition root) depends on `OmniCloud`. It fetches a published game and hands the scene and script sources to `OmniRuntime` / `OmniScript`. `OmniCloud` carries game content only, never input, so the hardware-blind property holds. (Changed 2026-11-14: since Phase 9 `OmniLibrary` and `OmniPlayer` also depend on `OmniCloud`; `OmniLibrary` is a package of its own so its logic is tested with `swift test`. **(plan decision)** until overview.md Module 11 is updated.)
-- **(plan decision)** `OmniPlayer` (Phase 9) is a second composition root: it builds `CloudClient`, the session store, `DeviceProfile`, `LibraryModel` and a `GameLauncher` in `PlayerModel.swift`. Identity is Sign in with Apple; `DeviceProfile` only flags which games the device can play. Play is a stub (`StubGameLauncher` fetches the bundle and stops); running a game on the player needs `.iOS(.v18)` on OmniInput, OmniRuntime, OmniScript and OmniOutput, which are macOS-only today (`OmniCore` already declares iOS; `OmniCloud` gets it in 9.2). overview.md now lists the player app under Additional surfaces.
+- `PearStudio` is the composition root: it constructs the `InputPipeline`, the active `InputSource` / `OutputSink` pair, the `ScriptEngine` and the `SceneRunner`, and wires them together, in `AppModel.swift`. No package does this wiring. `AppModel` also drains the runtime's `OutputQueue` into the active sink each frame; `ModeController` (P3) takes over choosing the source/sink pair. (Changed 2026-11-14: as built, `AppModel` constructs the `InputPipeline`, `SceneRunner`, one sim head device, a `RecordingOutputSink` placeholder, the `ModeController` and `DemoMode`, but no `ScriptEngine`; `ModeController` builds the live `BridgeInputSource`, `BridgeOutputSink` and `BonjourListener`; `ScriptEngine` and `ServerScriptEngine` are constructed only in `LocalTestSession`. `ScriptEditorView`, `InspectorView`, `SimulatorPanelView` and `DebugOverlayView` exist but are not mounted in the window yet.) (Changed 2026-11-14: `AppModel` now also builds a `ScriptEngine` and, for games with server scripts, a `ServerScriptEngine`, joined by `InMemoryRemoteChannel`; it loads games through `GameLoader` and owns the `CloudClient` / `AccountModel` for Open from cloud.)
+- **(plan decision)** `SceneDescription.requiredTier` is a plain `Int` (1…3), so `PearRuntime` stays off `CapabilityTier`; Studio maps it to `CapabilityTier` for the capability warning.
+- `BridgeClient` is shared by the iOS and watchOS targets under `Apps/PearCompanion/Shared/`; the Watch reaches the Mac through the phone via `WatchRelay` → `WatchConnectivityReceiver`.
+- `Games/Flagship` holds data (scene + JS) only, so it cannot import Swift packages by construction; it reaches the engine through `PearScript`'s `self` / `ctx` API.
+- Cloud game hosting (`overview.md` Module 11): `PearCloud` is the Mac-side client and `Backend/` is the Rust server. Published games are data only (scene + client scripts + server scripts + assets + metadata), the same shape as `Games/Flagship`, and are stored in Postgres on Vultr; sensor data (USIS) and output commands never go there.
+- Only `PearStudio` (the composition root) depends on `PearCloud`. It fetches a published game and hands the scene and script sources to `PearRuntime` / `PearScript`. `PearCloud` carries game content only, never input, so the hardware-blind property holds. (Changed 2026-11-14: since Phase 9 `PearLibrary` and `PearPlayer` also depend on `PearCloud`; `PearLibrary` is a package of its own so its logic is tested with `swift test`. **(plan decision)** until overview.md Module 11 is updated.)
+- **(plan decision)** `PearPlayer` (Phase 9) is a second composition root: it builds `CloudClient`, the session store, `DeviceProfile`, `LibraryModel` and a `GameLauncher` in `PlayerModel.swift`. Identity is Sign in with Apple; `DeviceProfile` only flags which games the device can play. Play is a stub (`StubGameLauncher` fetches the bundle and stops); running a game on the player needs `.iOS(.v18)` on PearInput, PearRuntime, PearScript and PearOutput, which are macOS-only today (`PearCore` already declares iOS; `PearCloud` gets it in 9.2). overview.md now lists the player app under Additional surfaces.
 - `LocalTestSession` (Studio) is the composition root for a multiplayer test: one `ServerScriptEngine` plus several simulated players, each with its own `InputPipeline`, `SceneRunner` and client `ScriptEngine`, joined by an in-memory `RemoteChannel`. **(plan decision)** The viewport shows one selected player.
 - **(plan decision)** `Backend/src/game_server/script_host.rs` implements the same `serverScript` API as `ServerScriptEngine` in a different JS engine; `Backend/tests/script_host.rs` and `ServerScriptEngineTests.swift` run the same fixture so the two stay aligned.
-- **(plan decision)** `Backend/src/game_server/script_host.rs` includes `Packages/OmniScript/Sources/OmniScript/Resources/prelude.js` with `include_str!`, so the Rust and Swift engines share one `serverScript` definition. This is a file-level edge from `Backend/` into a Swift package: `Backend/` no longer builds standalone (Windows laptops need the whole repo checked out), and a change to `prelude.js` affects both engines. `overview.md` describes `Backend/` as a separate Rust project; the mismatch is flagged, not decided.
-- `Tools/` holds validation tests that prove data can actually be read from each peripheral; it is not production code. (Changed 2026-11-14: these were the only working peripheral code until Phase 3; the production sources now exist in `OmniBridge` and `OmniCompanion`, and the probes remain for reference.) They are: `AirPodsProbe` (AirPods head motion on the Mac via `CMHeadphoneMotionManager`), `PhoneProbe.swiftpm` (iPhone motion, touch and haptics over Bonjour + TCP) and `PhoneProbeHost` (the Mac side that receives it). They are standalone probes with no Omni package dependencies; their measured results are recorded in `plan.md` (Cross-Cutting: Hardware verification). The production sources are built from them in Phase 3: `AirPodsMotionSource` and the `OmniBridge` session code on the Mac, `MotionStreamer` / `TouchCapture` / `HapticPlayer` / `BridgeClient` in `OmniCompanion`.
+- **(plan decision)** `Backend/src/game_server/script_host.rs` includes `Packages/PearScript/Sources/PearScript/Resources/prelude.js` with `include_str!`, so the Rust and Swift engines share one `serverScript` definition. This is a file-level edge from `Backend/` into a Swift package: `Backend/` no longer builds standalone (Windows laptops need the whole repo checked out), and a change to `prelude.js` affects both engines. `overview.md` describes `Backend/` as a separate Rust project; the mismatch is flagged, not decided.
+- `Tools/` holds validation tests that prove data can actually be read from each peripheral; it is not production code. (Changed 2026-11-14: these were the only working peripheral code until Phase 3; the production sources now exist in `PearBridge` and `PearCompanion`, and the probes remain for reference.) They are: `AirPodsProbe` (AirPods head motion on the Mac via `CMHeadphoneMotionManager`), `PhoneProbe.swiftpm` (iPhone motion, touch and haptics over Bonjour + TCP) and `PhoneProbeHost` (the Mac side that receives it). They are standalone probes with no Pear package dependencies; their measured results are recorded in `plan.md` (Cross-Cutting: Hardware verification). The production sources are built from them in Phase 3: `AirPodsMotionSource` and the `PearBridge` session code on the Mac, `MotionStreamer` / `TouchCapture` / `HapticPlayer` / `BridgeClient` in `PearCompanion`.
 - **(plan decision)** `SceneDescription.runMode` (`screen` / `device`) is the game's declared run mode (overview.md Module 7).

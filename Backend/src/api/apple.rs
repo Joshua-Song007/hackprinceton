@@ -4,7 +4,7 @@
 // comes from the same `store_session` as dev sign-in, so `authenticate` works for both.
 // Order per request: body shape, field limits (400), db (503), audiences configured (503), verify (401,
 // or 502 when Apple's keys cannot be fetched), upsert (500).
-// [provisional: needs-tien-review] Audiences (the app bundle ids) come from env OMNI_APPLE_AUDIENCES,
+// [provisional: needs-tien-review] Audiences (the app bundle ids) come from env PEAR_APPLE_AUDIENCES,
 // comma-separated; unset means the route answers 503 and never accepts a token. No nonce check: a stolen
 // identity token can be replayed until it expires (about 10 minutes). No rate limit on this route.
 // The key source is a trait so tests inject keys and never touch the network.
@@ -159,9 +159,9 @@ impl AppleVerifier {
         AppleVerifier { keys, audiences: Arc::new(audiences) }
     }
 
-    /// Apple's real keys, audiences from env OMNI_APPLE_AUDIENCES (read once, when the router is built).
+    /// Apple's real keys, audiences from env PEAR_APPLE_AUDIENCES (read once, when the router is built).
     pub fn from_env() -> Self {
-        let raw = std::env::var("OMNI_APPLE_AUDIENCES").unwrap_or_default();
+        let raw = std::env::var("PEAR_APPLE_AUDIENCES").unwrap_or_default();
         AppleVerifier::new(Arc::new(HttpAppleKeys::new()), parse_audiences(&raw))
     }
 }
@@ -320,7 +320,7 @@ mod tests {
 
     #[tokio::test]
     async fn bad_input_is_400_before_anything_else() {
-        let v = verifier(&["com.omni.player"]);
+        let v = verifier(&["com.pear.player"]);
         let r = post_apple(v.clone(), None, r#"{"identityToken":""}"#).await;
         assert!(r.starts_with("HTTP/1.1 400"), "{r}");
         let big = "x".repeat(MAX_NAME_LEN + 1);
@@ -330,7 +330,7 @@ mod tests {
 
     #[tokio::test]
     async fn no_database_is_503() {
-        let r = post_apple(verifier(&["com.omni.player"]), None, r#"{"identityToken":"a.b.c"}"#).await;
+        let r = post_apple(verifier(&["com.pear.player"]), None, r#"{"identityToken":"a.b.c"}"#).await;
         assert!(r.starts_with("HTTP/1.1 503"), "{r}");
     }
 
@@ -342,7 +342,7 @@ mod tests {
 
     #[tokio::test]
     async fn undecodable_token_is_401_without_a_key_lookup() {
-        let r = post_apple(verifier(&["com.omni.player"]), mem(), r#"{"identityToken":"not.a.jwt"}"#).await;
+        let r = post_apple(verifier(&["com.pear.player"]), mem(), r#"{"identityToken":"not.a.jwt"}"#).await;
         assert!(r.starts_with("HTTP/1.1 401"), "{r}");
     }
 }

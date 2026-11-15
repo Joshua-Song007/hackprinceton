@@ -14,11 +14,11 @@ The shared `prelude.js` and the Rust / TS hosts now have these; the Swift engine
 - Client: `onTick(self, ctx, dt)` at 5 Hz, `ctx.player.id` (from a `_welcome` frame `{id, name}`), `ctx.position` (null unless `permissions.location`).
 - Scene: entity `shape` (`box` | `sphere`) and `color`; scene `permissions.location`.
 - Files: `ServerScriptEngine.swift`, `ScriptEngine.swift`, `ContextBridge.swift`, `SceneDescription.swift`, `SceneLoader.swift`.
-- Tests: the shared server fixture in `Backend/tests/script_host.rs` and `Web/packages/omni-script/test/server-local.test.ts` must also pass in `ServerScriptEngineTests.swift`; add timer, welcome and `onTick` cases mirroring `Backend/src/game_server/session.rs` tests.
+- Tests: the shared server fixture in `Backend/tests/script_host.rs` and `Web/packages/pear-script/test/server-local.test.ts` must also pass in `ServerScriptEngineTests.swift`; add timer, welcome and `onTick` cases mirroring `Backend/src/game_server/session.rs` tests.
 
 ## 2. Location source (companion)
 
-- `OmniCompanion` iOS: `CLLocationManager` source emitting USIS `position` in local meters east / north about a game origin (server sends `_origin` lat / lon; until then the first fix). Map east to +X, north to -Z.
+- `PearCompanion` iOS: `CLLocationManager` source emitting USIS `position` in local meters east / north about a game origin (server sends `_origin` lat / lon; until then the first fix). Map east to +X, north to -Z.
 - Carry horizontal accuracy: add an optional `accuracy` (meters) to the `position` channel in `Schema/usis.schema.json` and `UsisChannels.swift` (a schema change, flag to the user). The web Studio currently sends a fixed `acc: 2` in scripts.
 - Foreground only (iOS suspends the companion ~0.5 s after backgrounding). Info.plist needs `NSLocationWhenInUseUsageDescription`.
 - Show a visible "Sharing location" indicator in Studio and the companion while a game with `permissions.location` runs.
@@ -35,11 +35,11 @@ AirPods head motion (nod / lunge) and Watch wrist swing already produce gestures
 
 ```
 ### 9.x Phase 10: Real-world tag (Mac worker)
-- [ ] `Packages/OmniScript/Sources/OmniScript/ServerScriptEngine.swift` — onTimer, ctx.after / cancel / now, player name (parity with script_host.rs).
-- [ ] `Packages/OmniScript/Sources/OmniScript/ScriptEngine.swift` — onTick at 5 Hz, ctx.player.id, ctx.position gated by permissions.location.
-- [ ] `Packages/OmniRuntime/Sources/OmniRuntime/Scene/SceneDescription.swift` — shape, color, permissions.location.
+- [ ] `Packages/PearScript/Sources/PearScript/ServerScriptEngine.swift` — onTimer, ctx.after / cancel / now, player name (parity with script_host.rs).
+- [ ] `Packages/PearScript/Sources/PearScript/ScriptEngine.swift` — onTick at 5 Hz, ctx.player.id, ctx.position gated by permissions.location.
+- [ ] `Packages/PearRuntime/Sources/PearRuntime/Scene/SceneDescription.swift` — shape, color, permissions.location.
 - [ ] `Schema/usis.schema.json` — position accuracy field.
-- [ ] `Apps/OmniCompanion/iOS/LocationStreamer.swift` — CLLocationManager to USIS position.
+- [ ] `Apps/PearCompanion/iOS/LocationStreamer.swift` — CLLocationManager to USIS position.
 ```
 
 ## 6. overview.md items to flag (not decided)

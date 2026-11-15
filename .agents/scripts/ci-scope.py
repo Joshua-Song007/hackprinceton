@@ -9,7 +9,7 @@ import subprocess
 def scope(paths, managed=False):
     return {
         'swift': not managed and any(p.startswith(('Packages/', 'Apps/')) or p.endswith('.swift') or p == '.agents/scripts/verify-swift.sh' for p in paths),
-        'backend': not managed and any(p.startswith('Backend/') or p in ('.agents/scripts/verify-backend.sh', 'Packages/OmniScript/Sources/OmniScript/Resources/prelude.js', 'Games/Flagship/scripts/game.js') for p in paths),
+        'backend': not managed and any(p.startswith('Backend/') or p in ('.agents/scripts/verify-backend.sh', 'Packages/PearScript/Sources/PearScript/Resources/prelude.js', 'Games/Flagship/scripts/game.js') for p in paths),
         'nonswift': not managed and any(p.startswith(('Games/', 'Schema/', 'Recordings/')) or (p.startswith('.agents/') and p.endswith('.json')) or p.endswith(('.js', '.jsonl')) or p == '.agents/scripts/verify-nonswift.sh' for p in paths),
     }
 

@@ -1,11 +1,11 @@
 # Run from Deploy/: docker compose up -d --build   (vultr-bootstrap.sh does this and writes .env)
-# .env keys: OMNI_DOMAIN, OMNI_DEV_SIGNIN, DATABASE_URL, OMNI_CORS_ORIGINS (optional),
-# OMNI_CADDY_GLOBAL (local_certs when OMNI_DOMAIN is an IP), POSTGRES_PASSWORD and
+# .env keys: PEAR_DOMAIN, PEAR_DEV_SIGNIN, DATABASE_URL, PEAR_CORS_ORIGINS (optional),
+# PEAR_CADDY_GLOBAL (local_certs when PEAR_DOMAIN is an IP), POSTGRES_PASSWORD and
 # COMPOSE_PROFILES=localdb (only when no external DATABASE_URL).
 # DATABASE_URL unset = the backend's in-memory store (data lost on restart).
-# Marketplace (Phase 10): OMNI_S3_ENDPOINT, OMNI_S3_BUCKET, OMNI_S3_ACCESS_KEY, OMNI_S3_SECRET_KEY
-# (Vultr Object Storage), OMNI_PLUGIN_SIGNING_KEY, OMNI_SECRET_KEY, OMNI_RUNTIME_SECRET (64 hex each,
-# written by vultr-bootstrap.sh), OMNI_PLUGIN_REVIEWERS (account ids, optional).
+# Marketplace (Phase 10): PEAR_S3_ENDPOINT, PEAR_S3_BUCKET, PEAR_S3_ACCESS_KEY, PEAR_S3_SECRET_KEY
+# (Vultr Object Storage), PEAR_PLUGIN_SIGNING_KEY, PEAR_SECRET_KEY, PEAR_RUNTIME_SECRET (64 hex each,
+# written by vultr-bootstrap.sh), PEAR_PLUGIN_REVIEWERS (account ids, optional).
 
 services:
   backend:
@@ -15,8 +15,8 @@ services:
     env_file: .env
     environment:
       PORT: "8080"
-      OMNI_STUDIO_DIR: /app/studio
-      OMNI_AGENT_RUNTIME_URL: ws://runtime:9410/ws
+      PEAR_STUDIO_DIR: /app/studio
+      PEAR_AGENT_RUNTIME_URL: ws://runtime:9410/ws
     depends_on:
       postgres:
         condition: service_healthy
@@ -29,13 +29,13 @@ services:
       start_period: 10s
     restart: unless-stopped
 
-  # Hosted agent runtime: no published port, only the backend reaches it (with OMNI_RUNTIME_SECRET).
+  # Hosted agent runtime: no published port, only the backend reaches it (with PEAR_RUNTIME_SECRET).
   runtime:
     build:
       context: ..
       dockerfile: Deploy/runtime.Dockerfile
     environment:
-      OMNI_RUNTIME_SECRET: ${OMNI_RUNTIME_SECRET:?set OMNI_RUNTIME_SECRET in .env}
+      PEAR_RUNTIME_SECRET: ${PEAR_RUNTIME_SECRET:?set PEAR_RUNTIME_SECRET in .env}
     volumes:
       - agent_projects:/data/projects
     healthcheck:
@@ -50,13 +50,13 @@ services:
     image: postgres:16
     profiles: ["localdb"]
     environment:
-      POSTGRES_USER: omni
-      POSTGRES_DB: omni
+      POSTGRES_USER: pear
+      POSTGRES_DB: pear
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-}
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U omni -d omni"]
+      test: ["CMD-SHELL", "pg_isready -U pear -d pear"]
       interval: 5s
       timeout: 3s
       retries: 10
@@ -69,8 +69,8 @@ services:
       - "443:443"
       - "443:443/udp"
     environment:
-      OMNI_DOMAIN: ${OMNI_DOMAIN:-localhost}
-      OMNI_CADDY_GLOBAL: ${OMNI_CADDY_GLOBAL:-}
+      PEAR_DOMAIN: ${PEAR_DOMAIN:-localhost}
+      PEAR_CADDY_GLOBAL: ${PEAR_CADDY_GLOBAL:-}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data

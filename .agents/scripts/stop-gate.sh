@@ -8,7 +8,7 @@ max_blocks=5   # ponytail: after N consecutive blocks let it stop so a stuck fai
 if git rev-parse --verify -q origin/main >/dev/null; then
   changed=$({ git diff --name-only origin/main; git ls-files --others --exclude-standard; })
 else
-  changed='Packages/OmniCore/x'   # no baseline: OmniCore pulls in every dependent
+  changed='Packages/PearCore/x'   # no baseline: PearCore pulls in every dependent
 fi
 changed=$(grep -v -E '/\.build/|^Backend/target/' <<<"$changed")   # build output is never a source change
 

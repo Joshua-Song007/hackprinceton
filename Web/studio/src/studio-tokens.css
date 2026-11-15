@@ -1,4 +1,4 @@
-/* Omni — generated from tokens.json */
+/* Pear — generated from tokens.json */
 :root, [data-theme="dark"] {
   --bg-window: #232427; /* Toolbar, title bar and status bar: the window chrome. */
   --bg-panel: #2a2b2f; /* Sidebars, inspector, debug area. Panels are split by `line`, never floated as cards. */

@@ -30,7 +30,7 @@ The **Source** select picks Manual (your devices, the default) or Replay. Replay
 
 ## Live devices via relay
 
-The Source select also has **Live**. Run `npm run relay` in `Web/studio`; it advertises `_omni._tcp` for the iOS companion and passes each phone's USIS packets to Studio over `ws://127.0.0.1:8787`. Pick Live on a player, then tick the devices that feed it. That player's manual devices go silent, and a script `ctx.haptic` goes back to its phones. Without the relay the row says "Relay not running: npm run relay". Nothing leaves your machine. See [real-world-input.md](real-world-input.md).
+The Source select also has **Live**. Run `npm run relay` in `Web/studio`; it advertises `_pear._tcp` for the iOS companion and passes each phone's USIS packets to Studio over `ws://127.0.0.1:8787`. Pick Live on a player, then tick the devices that feed it. That player's manual devices go silent, and a script `ctx.haptic` goes back to its phones. Without the relay the row says "Relay not running: npm run relay". Nothing leaves your machine. See [real-world-input.md](real-world-input.md).
 
 ## Bots
 

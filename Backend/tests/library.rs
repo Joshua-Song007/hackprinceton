@@ -1,9 +1,9 @@
 // GET /api/library over HTTP against the in-memory store (what the server uses when DATABASE_URL is unset).
-// One test function on purpose: it sets OMNI_DEV_SIGNIN, and std::env::set_var must not race another
-// test thread reading the environment (signin, and cors_layer reads OMNI_CORS_ORIGINS on every app build).
-use omni_backend::app_with_studio;
-use omni_backend::db::Db;
-use omni_backend::memstore::MemStore;
+// One test function on purpose: it sets PEAR_DEV_SIGNIN, and std::env::set_var must not race another
+// test thread reading the environment (signin, and cors_layer reads PEAR_CORS_ORIGINS on every app build).
+use pear_backend::app_with_studio;
+use pear_backend::db::Db;
+use pear_backend::memstore::MemStore;
 use serde_json::{json, Value};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
@@ -67,7 +67,7 @@ async fn library(addr: std::net::SocketAddr, token: &str) -> Vec<Value> {
 
 #[tokio::test]
 async fn library_lists_published_games_for_any_signed_in_account() {
-    std::env::set_var("OMNI_DEV_SIGNIN", "1");
+    std::env::set_var("PEAR_DEV_SIGNIN", "1");
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
     let router = app_with_studio(Some(Db::Mem(MemStore::default())), None);

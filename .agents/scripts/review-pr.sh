@@ -36,8 +36,8 @@ prot=$(grep -E '^(\.claude|\.agents|\.github)/' <<<"$files" || true)
 [ -n "$prot" ] && out "  ✗ touches protected paths: $(tr '\n' ' ' <<<"$prot")" || out "  ✓ no protected paths touched"
 npk=$(grep -c . <<<"$pkgs" || true)
 [ "$npk" -le 1 ] && out "  ✓ packages touched: ${pkgs:-none}" || out "  ✗ touches $npk packages: $(tr '\n' ' ' <<<"$pkgs")"
-extra=$(grep -v -E '^(Packages|Schema|Games|Apps|Recordings|Backend|docs/agents|Omni\.xcworkspace)/' <<<"$files" || true)   # the workspace file is a plan.md item (1.1, 4.1)
-[ -n "$extra" ] && out "  ✗ files outside Packages/, Schema/, Games/, Apps/, Recordings/, Backend/, docs/agents/, Omni.xcworkspace/: $(tr '\n' ' ' <<<"$extra")"
+extra=$(grep -v -E '^(Packages|Schema|Games|Apps|Recordings|Backend|docs/agents|Pear\.xcworkspace)/' <<<"$files" || true)   # the workspace file is a plan.md item (1.1, 4.1)
+[ -n "$extra" ] && out "  ✗ files outside Packages/, Schema/, Games/, Apps/, Recordings/, Backend/, docs/agents/, Pear.xcworkspace/: $(tr '\n' ' ' <<<"$extra")"
 fi
 grep -q '^Backend/target/' <<<"$files" && out "  ✗ Rust build output (Backend/target/) committed"
 
@@ -49,15 +49,15 @@ arch = sh("git", "show", "origin/main:.claude/architecture.md")
 sec = arch.split("## Package Dependency Graph", 1)[-1].split("### Forbidden Edges", 1)[0]
 allowed = {}
 for line in sec.splitlines():
-    m = re.match(r"^\|\s*(Omni\w+)[^|]*\|\s*([^|]*)\|", line)
+    m = re.match(r"^\|\s*(Pear\w+)[^|]*\|\s*([^|]*)\|", line)
     if m: allowed[m.group(1)] = m.group(2)
 for p in os.environ["PKGS"].split():
     swift = sh("git", "show", os.environ["REF"] + ":Packages/" + p + "/Package.swift")
     local = sorted(set(re.findall(r'\.package\(path:\s*"\.\./(\w+)"', swift)))
     ext = re.findall(r'\.package\(url:\s*"([^"]+)"', swift)
     if p not in allowed: print("  · " + p + ": not in the architecture.md graph, check by hand"); continue
-    ok = set(re.findall(r"Omni\w+", allowed[p]))
-    if "all packages" in allowed[p].lower(): ok = None   # OmniStudio may depend on every package
+    ok = set(re.findall(r"Pear\w+", allowed[p]))
+    if "all packages" in allowed[p].lower(): ok = None   # PearStudio may depend on every package
     bad = [d for d in local if ok is not None and d not in ok]
     if bad: print("  ✗ " + p + ": deps outside the graph: " + ", ".join(bad))
     else: print("  ✓ " + p + ": deps match the graph (" + (", ".join(local) or "none") + ")")
@@ -69,13 +69,13 @@ deps_out=$(PYTHONUTF8=1 PKGS="$pkgs" REF="$ref" "$py" -c "$PYDEPS")   # utf-8 st
 while IFS= read -r l; do [ -n "$l" ] && out "$l"; done <<<"$deps_out"
 
 section "Purity and hardware-blind rule"
-if grep -qx OmniCore <<<"$pkgs"; then
-  imp=$(git grep -n -E '^import ' "$ref" -- Packages/OmniCore/Sources | sed "s#^$ref:##" | grep -v 'import Foundation$' | head -10 || true)
-  io=$(git grep -n -E 'FileManager|URLSession|NWConnection|NWListener|Date\(\)|SystemRandomNumberGenerator|\.random\(|(^|[^A-Za-z_])print\(' "$ref" -- Packages/OmniCore/Sources | sed "s#^$ref:##" | head -10 || true)
-  [ -n "$imp$io" ] && out "  ✗ OmniCore: $(printf '%s %s' "$imp" "$io" | tr '\n' ';')" || out "  ✓ OmniCore: Foundation only, no I/O or clock"
-else echo "  · OmniCore not touched"; fi
-blind=$(git grep -n -E 'import (OmniSim|OmniBridge)' "$ref" -- Packages/OmniRuntime Packages/OmniScript Games | sed "s#^$ref:##" | head -10 || true)
-[ -n "$blind" ] && out "  ✗ hardware-blind rule broken: $(tr '\n' ';' <<<"$blind")" || out "  ✓ OmniRuntime, OmniScript, Games import neither OmniSim nor OmniBridge"
+if grep -qx PearCore <<<"$pkgs"; then
+  imp=$(git grep -n -E '^import ' "$ref" -- Packages/PearCore/Sources | sed "s#^$ref:##" | grep -v 'import Foundation$' | head -10 || true)
+  io=$(git grep -n -E 'FileManager|URLSession|NWConnection|NWListener|Date\(\)|SystemRandomNumberGenerator|\.random\(|(^|[^A-Za-z_])print\(' "$ref" -- Packages/PearCore/Sources | sed "s#^$ref:##" | head -10 || true)
+  [ -n "$imp$io" ] && out "  ✗ PearCore: $(printf '%s %s' "$imp" "$io" | tr '\n' ';')" || out "  ✓ PearCore: Foundation only, no I/O or clock"
+else echo "  · PearCore not touched"; fi
+blind=$(git grep -n -E 'import (PearSim|PearBridge)' "$ref" -- Packages/PearRuntime Packages/PearScript Games | sed "s#^$ref:##" | head -10 || true)
+[ -n "$blind" ] && out "  ✗ hardware-blind rule broken: $(tr '\n' ';' <<<"$blind")" || out "  ✓ PearRuntime, PearScript, Games import neither PearSim nor PearBridge"
 
 section "Comments"
 rm_c=$(git diff --diff-filter=d "$base" "$ref" -- '*.swift' | grep -E '^-[[:space:]]*//' || true)   # a file the plan deletes (Module.swift markers) takes its comments with it

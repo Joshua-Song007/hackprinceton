@@ -19,6 +19,6 @@ A game with no server script runs entirely on the player's machine.
 3. Click the viewport so it has focus, press **T** (tap). Open the **State** tab in the bottom panel: the tap count is `ctx.state`.
 4. Open the **Game** panel (left, next to Explorer). It lists what the game still needs: entities, script attachments, a server script, a Play result, a published version.
 5. Edit the client script. The editor autocompletes handler names and `ctx` members; hover for docs. Changes reload on the next Play.
-6. **Shift+F5** stops. **Ctrl+S** saves a `*.omni.json` file you can reopen with File > Open file.
+6. **Shift+F5** stops. **Ctrl+S** saves a `*.pear.json` file you can reopen with File > Open file.
 
 Next: [studio-guide.md](studio-guide.md), then [hot-potato.md](hot-potato.md) for a multiplayer game.

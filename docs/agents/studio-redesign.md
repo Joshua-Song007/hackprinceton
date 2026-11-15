@@ -43,7 +43,7 @@ Status: proposal, nothing built. Written 2026-11-14 on Windows. Waiting for owne
 
 | # | Step | What happened |
 |---|---|---|
-| 1 | Login | Tab title "Hollow Choir - Omni Studio" on the login page: stale title from the last project. |
+| 1 | Login | Tab title "Hollow Choir - Pear Studio" on the login page: stale title from the last project. |
 | 2 | Projects, Hot potato, Create | Editor opened with only the Viewport. A saved layout was restored; found Window > Default by hunting. |
 | 3 | Default layout | Devices and Game tabs sit behind Explorer. Devices "Remove" buttons are clipped at the panel's left edge. |
 | 4 | How do I start? | Nothing on screen says. Had to read `player.js` to learn Double tap starts a round. Double tap has no key; clicking its button moves focus off the canvas, so WASD stops. |
@@ -55,20 +55,20 @@ Result: I could not deliberately play one round of the game the template is buil
 ### Mental model
 
 - Run kinds, players, rig, tier, run mode and permissions are spread across toolbar, Inspector, Devices, Game and menus. Nothing connects "this game needs position + tap" to "here is how you simulate it".
-- The rig is per browser, not per project or per player (`Web/studio/src/run.ts:438-464`, key `omni.studio.rig`).
+- The rig is per browser, not per project or per player (`Web/studio/src/run.ts:438-464`, key `pear.studio.rig`).
 - Start message always says "simulated AirPods, phone and watch" whatever the rig (`run.ts:585`). Button says "Run local", Game panel says "Play" (`main.ts:188`, `gamePanel.ts:135`).
 - `ctx.position` is silently `null` unless the Inspector checkbox `permissions.location` is on (`run.ts:151`, `scene.ts:146`).
 - `onTick` runs once per scripted entity, so attaching a script twice doubles every `pos` send (`run.ts:144-145`).
 
 ### Input fidelity
 
-- Position is carried by the AirPods head packet (`Web/packages/omni-sim/src/devices.ts:107-110`). Remove AirPods and `ctx.position` freezes at `playerOrigin` while you keep walking.
+- Position is carried by the AirPods head packet (`Web/packages/pear-sim/src/devices.ts:107-110`). Remove AirPods and `ctx.position` freezes at `playerOrigin` while you keep walking.
 - No GPS: no lat/lon, no accuracy, no update-rate or noise model. Scripts hard-code `acc: 2` (`Games/HotPotato/scripts/player.js`).
-- No accel: the sim never emits it and scripts cannot read it (`devices.ts:107-110`, ctx shape in `omni-script/src/evaluate.ts:94`). USIS defines `accel` and the real iPhone companion already streams it at 100 Hz (`Apps/OmniCompanion/iOS/MotionStreamer.swift:40-49`).
-- Gestures are a fixed list (tap, doubleTap, flick, squeeze, pinch). On real hardware only the Watch turns IMU into a gesture (flick at > 2 g, `watchOS/WristGestureDetector.swift:17-50`); the runtime only passes gestures through (`Packages/OmniRuntime/.../GestureEventMapper.swift`). A creator cannot define "tag swing" or "punch".
+- No accel: the sim never emits it and scripts cannot read it (`devices.ts:107-110`, ctx shape in `pear-script/src/evaluate.ts:94`). USIS defines `accel` and the real iPhone companion already streams it at 100 Hz (`Apps/PearCompanion/iOS/MotionStreamer.swift:40-49`).
+- Gestures are a fixed list (tap, doubleTap, flick, squeeze, pinch). On real hardware only the Watch turns IMU into a gesture (flick at > 2 g, `watchOS/WristGestureDetector.swift:17-50`); the runtime only passes gestures through (`Packages/PearRuntime/.../GestureEventMapper.swift`). A creator cannot define "tag swing" or "punch".
 - Flick direction is always `[1,0,0]` in the sim.
-- `onRaycastHit` is documented and allowed but never fires (`omni-runtime/src/events.ts:8`).
-- No noise or rate variation; the native sim has both at measured rates (`Packages/OmniSim/Sources/OmniSim/NoiseModel.swift`).
+- `onRaycastHit` is documented and allowed but never fires (`pear-runtime/src/events.ts:8`).
+- No noise or rate variation; the native sim has both at measured rates (`Packages/PearSim/Sources/PearSim/NoiseModel.swift`).
 
 ### Multiplayer control
 
@@ -76,13 +76,13 @@ Result: I could not deliberately play one round of the game the template is buil
 - Bots cannot be selected, steered or removed one by one (`run.ts:270`, `:733`). The Devices panel shows only your own player (`run.ts:774`).
 - Bot haptics and audio are dropped; only remote events are forwarded (`run.ts:647-651`).
 - On "Run on server", bots use the creator's account, and `/play` keys players by account id, so a second socket replaces the first (`Backend/src/game_server/session.rs:220-223`).
-- `.usis.jsonl` playback exists (`omni-sim/src/playback.ts`, `UsisPlayer`, `parseUsisJsonl`) but nothing in `Web/studio` uses it. There is no recorder in the web sim.
+- `.usis.jsonl` playback exists (`pear-sim/src/playback.ts`, `UsisPlayer`, `parseUsisJsonl`) but nothing in `Web/studio` uses it. There is no recorder in the web sim.
 
 ### Real devices
 
 - Web Studio: none.
-- Native macOS Studio: the window is a viewport plus a Sim/Live toggle (`Apps/OmniStudio/OmniStudio/OmniStudioApp.swift:8-13`) over a hard-coded sphere scene and a sweeping sim head (`AppModel.swift:82-143`). Inspector, script editor, simulator, publish and sign-in views exist but are never mounted. `LocalTestSession` is never created. No HTTP or WebSocket code, so it cannot reach `/play`.
-- The bridge protocol is simple and language-neutral: Bonjour `_omni._tcp`, TCP, newline JSON, `hello`/`ping`/`pong`/`output` plus raw USIS lines (`Packages/OmniBridge/Sources/OmniBridge/BonjourListener.swift:17`, `Packages/OmniCore/Sources/OmniCore/Wire/WireMessage.swift`, `LineFraming.swift`). A Node or Rust process can speak it with no Swift change.
+- Native macOS Studio: the window is a viewport plus a Sim/Live toggle (`Apps/PearStudio/PearStudio/PearStudioApp.swift:8-13`) over a hard-coded sphere scene and a sweeping sim head (`AppModel.swift:82-143`). Inspector, script editor, simulator, publish and sign-in views exist but are never mounted. `LocalTestSession` is never created. No HTTP or WebSocket code, so it cannot reach `/play`.
+- The bridge protocol is simple and language-neutral: Bonjour `_pear._tcp`, TCP, newline JSON, `hello`/`ping`/`pong`/`output` plus raw USIS lines (`Packages/PearBridge/Sources/PearBridge/BonjourListener.swift:17`, `Packages/PearCore/Sources/PearCore/Wire/WireMessage.swift`, `LineFraming.swift`). A Node or Rust process can speak it with no Swift change.
 - No CoreLocation anywhere in the companion. No player app runs a game on a phone (Phase 9 only lists and fetches).
 
 ### Network Rule
@@ -136,7 +136,7 @@ Notation: S = simulated, R = real device, C = cloud.
   - Layer 2: creator-defined recognizers declared in `scene.json` (`gestures: { "punch": { "slot": "hand", "channel": "accel", "axis": [0,0,-1], "threshold": 25, "windowMs": 150, "cooldownMs": 400 } }`), run by the runtime on the `InputFrame` and delivered as `onGesture({ type: "punch" })`. Same path for sim and live, so the hardware-blind rule holds. Needs Swift parity later (Mac-worker spec).
   - Optional `ctx.motion` (smoothed own-device accel and orientation, read only) for continuous mechanics. It never leaves the device unless a script fires it.
   - The sim emits accel. Gesture buttons play short accel/orientation clips (recorded once from a real phone), not bare gesture packets.
-- **Recordings.** Any player's input can be recorded to `.usis.jsonl` and assigned back to a player. Reuse `UsisPlayer` / `parseUsisJsonl` (`Web/packages/omni-sim/src/playback.ts`). Native recordings and presets (`Packages/OmniSim/.../Presets/*.usis.jsonl`) load as-is.
+- **Recordings.** Any player's input can be recorded to `.usis.jsonl` and assigned back to a player. Reuse `UsisPlayer` / `parseUsisJsonl` (`Web/packages/pear-sim/src/playback.ts`). Native recordings and presets (`Packages/PearSim/.../Presets/*.usis.jsonl`) load as-is.
 
 ## 6. Test panel (replaces Devices and Game)
 
@@ -152,7 +152,7 @@ Notation: S = simulated, R = real device, C = cloud.
 
 1. **Two Studios.** The native macOS Studio is not a usable creator app today and is macOS-only; the team builds on Windows. Recommend the web Studio (browser + Tauri) as the only creator app. Keep the Swift packages and companion as the device side. Contradicts `overview.md` Module 7: flagged, owner decides.
 2. **Real devices into the web Studio.** Two tracks, smallest first (a phone web player was considered and dropped by the owner, 2026-11-14):
-   - Track 0, local relay (no Swift change): a small process started by `Deploy/dev.sh` (later inside the Tauri shell) advertises `_omni._tcp`, speaks the existing wire protocol and forwards USIS to the Studio on a localhost WebSocket. The existing iPhone companion then drives any player live: orientation, accel, touch, Watch through the phone. Stays on the LAN. No GPS until the companion gets CoreLocation.
+   - Track 0, local relay (no Swift change): a small process started by `Deploy/dev.sh` (later inside the Tauri shell) advertises `_pear._tcp`, speaks the existing wire protocol and forwards USIS to the Studio on a localhost WebSocket. The existing iPhone companion then drives any player live: orientation, accel, touch, Watch through the phone. Stays on the LAN. No GPS until the companion gets CoreLocation.
    - Track B, full native: Tauri embeds the bridge in Rust; companion adds CoreLocation and forwards AirPods head motion (`CMHeadphoneMotionManager` also works on iOS). Swift work goes to a Mac worker as a spec.
    - Consequence: real GPS testing waits on companion CoreLocation (Swift, Mac worker); until then GPS games use the simulated location device. All games, `device` run mode included, run in the Studio during testing; the phone acts as that player's sensors.
 3. **Identity in tests.** `/play` keys players by account, so every simulated or extra real player needs its own test identity (dev sign-in per player). Fixes the bot collision.

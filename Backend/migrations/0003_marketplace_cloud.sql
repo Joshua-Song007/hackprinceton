@@ -36,7 +36,7 @@ CREATE TABLE plugin_installs (
     PRIMARY KEY (plugin_id, account_id)
 );
 
--- Model API key per account, AES-256-GCM (nonce || ciphertext, base64) under OMNI_SECRET_KEY.
+-- Model API key per account, AES-256-GCM (nonce || ciphertext, base64) under PEAR_SECRET_KEY.
 CREATE TABLE account_model_keys (
     account_id  UUID        PRIMARY KEY REFERENCES accounts (id) ON DELETE CASCADE,
     provider    TEXT        NOT NULL,

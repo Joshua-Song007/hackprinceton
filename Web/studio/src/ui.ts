@@ -1,5 +1,5 @@
 // Small DOM helpers shared by every panel: element builder, icons, announcer, modal sheet, popup menu.
-import type { UsisPacket } from '@omni/core';
+import type { UsisPacket } from '@pear/core';
 
 type Attr = string | number | boolean | undefined;
 

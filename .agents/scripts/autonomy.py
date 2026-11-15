@@ -20,7 +20,7 @@ import uuid
 REF = 'refs/heads/agent-control'
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent.parent
-LOGS = Path(os.environ.get('OMNI_LOGS', str(ROOT.parent / (ROOT.name + '.worktrees') / 'nightly')))
+LOGS = Path(os.environ.get('PEAR_LOGS', str(ROOT.parent / (ROOT.name + '.worktrees') / 'nightly')))
 TTL = int(os.environ.get('CLAIM_TTL', '900'))
 MODELS = {'orch': 'claude-opus-5-5', 'worker': 'claude-sonnet-5-5', 'reviewer': 'claude-sonnet-5-5'}
 
@@ -42,8 +42,8 @@ def terminate_tree(process):
 
 
 def bash_executable():
-    if os.environ.get('OMNI_BASH'):
-        return os.environ['OMNI_BASH']
+    if os.environ.get('PEAR_BASH'):
+        return os.environ['PEAR_BASH']
     if os.name == 'nt':
         executable = shutil.which('git')
         if executable:
@@ -51,7 +51,7 @@ def bash_executable():
                 for candidate in (install / 'bin/bash.exe', install / 'usr/bin/bash.exe'):
                     if candidate.is_file():
                         return str(candidate)
-        raise RuntimeError('Git Bash not found; set OMNI_BASH to its bash.exe (not WSL bash)')
+        raise RuntimeError('Git Bash not found; set PEAR_BASH to its bash.exe (not WSL bash)')
     return shutil.which('bash') or 'bash'
 
 
@@ -68,7 +68,7 @@ def run(args, cwd=None, data=None, check=True, env=None, timeout=120, stop_aware
             break
         except subprocess.TimeoutExpired:
             data = None
-            stop = stop_aware and (local_stop() or (ROOT / 'STOP').exists() or (ROOT / f'STOP-{os.environ.get("OMNI_LAPTOP", "")}').exists())
+            stop = stop_aware and (local_stop() or (ROOT / 'STOP').exists() or (ROOT / f'STOP-{os.environ.get("PEAR_LAPTOP", "")}').exists())
             if stop or time.monotonic() >= deadline:
                 terminate_tree(p)
                 try:
@@ -236,7 +236,7 @@ def model(role, wt, task, pack, attempt=1):
             '--max-budget-usd', os.environ.get('AGENT_BUDGET', '5'), '--output-format', 'json',
             '--setting-sources', '', '--strict-mcp-config', '--permission-mode', 'dontAsk',
             '--append-system-prompt-file', str(prompt_path)]
-    if os.environ.get('OMNI_BARE') == '1':
+    if os.environ.get('PEAR_BARE') == '1':
         args += ['--bare', '--disable-slash-commands']
     if role == 'orch':
         args += ['--tools', 'Read,Grep,Glob,Bash', '--allowedTools', f'Read,Grep,Glob,Bash(gh issue *),Bash(gh label *),Bash(gh pr list *),Bash(gh pr view *),Bash(gh pr edit *),Bash(gh api *),Bash(gh repo view *),Bash(gh auth status),Bash(gh variable *),Bash(gh workflow *),Bash(gh run list *),Bash(gh run view *),Bash(git show *),Bash(python "{(HERE / "autonomy.py").as_posix()}" retry *)']
@@ -303,7 +303,7 @@ def worktree(branch):
 
 
 def local_stop():
-    return bool(os.environ.get('OMNI_STOP_FILE') and Path(os.environ['OMNI_STOP_FILE']).exists())
+    return bool(os.environ.get('PEAR_STOP_FILE') and Path(os.environ['PEAR_STOP_FILE']).exists())
 
 
 def stopped(store, worker):
@@ -330,7 +330,7 @@ def status(repo, number, state, pr='', tests='', blocker=''):
 
 
 def quota_group(worker):
-    return os.environ.get('OMNI_QUOTA_GROUP', worker)
+    return os.environ.get('PEAR_QUOTA_GROUP', worker)
 
 
 def cooling(store, worker):
@@ -364,7 +364,7 @@ def worker_cycle(store, repo, worker):
         return
     issues = json.loads(gh('issue', 'list', '--state', 'open', '--label', 'ready', '--limit', '200', '--json', 'number,body,author'))
     for issue in issues:
-        if issue['author']['login'].lower() != os.environ['OMNI_ORCHESTRATOR_LOGIN'].lower():
+        if issue['author']['login'].lower() != os.environ['PEAR_ORCHESTRATOR_LOGIN'].lower():
             continue
         try:
             b = brief(issue['body'])
@@ -590,7 +590,7 @@ def review_merge(store, repo, number, c, orchestrator=None):
             # PR commands execute only on an isolated hosted CI runner, never with merge credentials.
             evidence = {'worker_checks': c.get('evidence', {}), 'independent_ci': 'agent-dod passed at current head'}
             result = model('reviewer', wt, f'Issue brief:\n{issue["body"]}\nReview git diff origin/main...HEAD. SHA: {sha}\nDoD evidence:\n{json.dumps(evidence)}', pack_text())
-            if rate_limited(store, result, os.environ.get('OMNI_LAPTOP', 'orch')):
+            if rate_limited(store, result, os.environ.get('PEAR_LAPTOP', 'orch')):
                 return
             approve = not result.get('is_error') and str(result.get('result', '')).strip().endswith('VERDICT: APPROVE')
             gh('pr', 'comment', pr, '--body', f'REVIEW-SHA: {sha}\n{str(result.get("result", ""))[-3500:]}')
@@ -612,7 +612,7 @@ def review_merge(store, repo, number, c, orchestrator=None):
         return
     if not passing_ci(pr):
         return
-    if stopped(store, orchestrator or os.environ.get('OMNI_LAPTOP', 'orch')):
+    if stopped(store, orchestrator or os.environ.get('PEAR_LAPTOP', 'orch')):
         return
     gh('pr', 'merge', pr, '--squash', '--match-head-commit', sha)
     store.update(lambda s: s['claims'][number].update(status='done'))
@@ -648,7 +648,7 @@ def main():
         generate_pack(); return
     store = Store()
     if args.command in ('stop', 'resume', 'retry'):
-        if os.environ.get('OMNI_ROLE') != 'orch' or os.environ['OMNI_LAPTOP'] != os.environ['OMNI_ORCHESTRATOR_LAPTOP']:
+        if os.environ.get('PEAR_ROLE') != 'orch' or os.environ['PEAR_LAPTOP'] != os.environ['PEAR_ORCHESTRATOR_LAPTOP']:
             raise ValueError('control commands require designated orchestrator')
         if args.command != 'retry':
             store.update(lambda s: s.update(stop=args.command == 'stop')); return
@@ -666,13 +666,13 @@ def main():
         repo = repository()
         mirror(repo, args.issue, store.read()[1]['claims'][str(args.issue)])
         return
-    worker = os.environ['OMNI_LAPTOP']
+    worker = os.environ['PEAR_LAPTOP']
     if not re.fullmatch('[a-z0-9-]+', worker):
-        raise ValueError('invalid OMNI_LAPTOP')
-    role = os.environ.get('OMNI_ROLE', 'worker')
+        raise ValueError('invalid PEAR_LAPTOP')
+    role = os.environ.get('PEAR_ROLE', 'worker')
     if role not in ('worker', 'orch'):
-        raise ValueError('OMNI_ROLE must be worker or orch')
-    if role == 'orch' and worker != os.environ['OMNI_ORCHESTRATOR_LAPTOP']:
+        raise ValueError('PEAR_ROLE must be worker or orch')
+    if role == 'orch' and worker != os.environ['PEAR_ORCHESTRATOR_LAPTOP']:
         raise ValueError('only the designated laptop may run Opus')
     repo = repository()
     if not api(f'repos/{repo}/branches/main').get('protected'):
@@ -686,15 +686,15 @@ def main():
     children = []
     stop_path = LOGS / f'{worker}-local-{uuid.uuid4().hex[:8]}.stop'
     try:
-        count = int(os.environ.get('OMNI_LOCAL_WORKERS', '0')) if role == 'orch' else 0
+        count = int(os.environ.get('PEAR_LOCAL_WORKERS', '0')) if role == 'orch' else 0
         if not 0 <= count <= 4:
-            raise ValueError('OMNI_LOCAL_WORKERS must be between 0 and 4')
+            raise ValueError('PEAR_LOCAL_WORKERS must be between 0 and 4')
         if count and args.command == 'once':
             raise ValueError('local worker supervision requires loop, not once')
         if count and not git('remote', 'get-url', 'origin').startswith('https://github.com/'):
             raise ValueError('local workers require HTTPS github.com origin, not inherited SSH credentials')
         for env in local_worker_envs(worker, count, stop_path):
-            output = (LOGS / f'{env["OMNI_LAPTOP"]}.out').open('a', encoding='utf-8')
+            output = (LOGS / f'{env["PEAR_LAPTOP"]}.out').open('a', encoding='utf-8')
             child = subprocess.Popen([sys.executable, str(HERE / 'autonomy.py'), 'loop'], cwd=ROOT,
                                      env=env, stdout=output, stderr=subprocess.STDOUT,
                                      **({'creationflags': subprocess.CREATE_NEW_PROCESS_GROUP} if os.name == 'nt' else {'start_new_session': True}))
@@ -714,15 +714,15 @@ def main():
 
 
 def local_worker_envs(worker, count, stop_path):
-    if count and not os.environ.get('OMNI_LOCAL_WORKER_GH_TOKEN'):
-        raise ValueError('local workers require a separate worker-scoped OMNI_LOCAL_WORKER_GH_TOKEN')
+    if count and not os.environ.get('PEAR_LOCAL_WORKER_GH_TOKEN'):
+        raise ValueError('local workers require a separate worker-scoped PEAR_LOCAL_WORKER_GH_TOKEN')
     result = []
     for i in range(count):
         env = os.environ.copy()
-        token = env.pop('OMNI_LOCAL_WORKER_GH_TOKEN')
-        env.update(OMNI_ROLE='worker', OMNI_LAPTOP=f'{worker}-local-{i + 1}',
-                   OMNI_LOCAL_WORKERS='0', OMNI_STOP_FILE=str(stop_path),
-                   OMNI_QUOTA_GROUP=os.environ.get('OMNI_QUOTA_GROUP', worker),
+        token = env.pop('PEAR_LOCAL_WORKER_GH_TOKEN')
+        env.update(PEAR_ROLE='worker', PEAR_LAPTOP=f'{worker}-local-{i + 1}',
+                   PEAR_LOCAL_WORKERS='0', PEAR_STOP_FILE=str(stop_path),
+                   PEAR_QUOTA_GROUP=os.environ.get('PEAR_QUOTA_GROUP', worker),
                    GH_TOKEN=token, GITHUB_TOKEN=token,
                    GIT_CONFIG_COUNT='2', GIT_CONFIG_KEY_0='credential.helper', GIT_CONFIG_VALUE_0='',
                    GIT_CONFIG_KEY_1='credential.helper', GIT_CONFIG_VALUE_1='!gh auth git-credential')

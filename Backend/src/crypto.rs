@@ -1,5 +1,5 @@
 // Server keys: Ed25519 signing of plugin bundles and AES-256-GCM encryption of per-account model keys.
-// OMNI_PLUGIN_SIGNING_KEY and OMNI_SECRET_KEY are 64 hex chars (32 bytes) each. Unset = a random key
+// PEAR_PLUGIN_SIGNING_KEY and PEAR_SECRET_KEY are 64 hex chars (32 bytes) each. Unset = a random key
 // for this process only (dev): signatures and stored model keys stop verifying after a restart, so the
 // hosted box must set both (Deploy/vultr-bootstrap.sh writes them to .env).
 use std::sync::OnceLock;
@@ -25,14 +25,14 @@ fn key_from_env(var: &str) -> [u8; 32] {
 
 /// The text a bundle signature covers: plugin id, version and tarball SHA-256 (hex).
 pub fn signed_message(id: &str, version: &str, sha256: &str) -> String {
-    format!("omni-plugin-v1\n{id}\n{version}\n{sha256}")
+    format!("pear-plugin-v1\n{id}\n{version}\n{sha256}")
 }
 
 pub struct Signer(SigningKey);
 
 pub fn signer() -> &'static Signer {
     static S: OnceLock<Signer> = OnceLock::new();
-    S.get_or_init(|| Signer(SigningKey::from_bytes(&key_from_env("OMNI_PLUGIN_SIGNING_KEY"))))
+    S.get_or_init(|| Signer(SigningKey::from_bytes(&key_from_env("PEAR_PLUGIN_SIGNING_KEY"))))
 }
 
 impl Signer {
@@ -54,7 +54,7 @@ pub struct SecretBox(Aes256Gcm);
 
 pub fn secret_box() -> &'static SecretBox {
     static S: OnceLock<SecretBox> = OnceLock::new();
-    S.get_or_init(|| SecretBox::new(key_from_env("OMNI_SECRET_KEY")))
+    S.get_or_init(|| SecretBox::new(key_from_env("PEAR_SECRET_KEY")))
 }
 
 impl SecretBox {

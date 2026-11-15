@@ -1,6 +1,6 @@
 // Client for the local device relay (`npm run relay`): lists the phones the relay has accepted and receives their USIS packets.
 // Localhost only (Network Rule): sensor data goes from the relay to this page and nowhere else.
-import { validateUsis, type UsisPacket } from '@omni/core';
+import { validateUsis, type UsisPacket } from '@pear/core';
 
 export const RELAY_URL = 'ws://127.0.0.1:8787';
 

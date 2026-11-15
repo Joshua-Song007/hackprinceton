@@ -1,7 +1,7 @@
-// Plugin bundle object storage: S3-compatible (Vultr Object Storage) when OMNI_S3_BUCKET is set,
+// Plugin bundle object storage: S3-compatible (Vultr Object Storage) when PEAR_S3_BUCKET is set,
 // else an in-memory map (dev; lost on restart, the startup seed refills it).
-// Env: OMNI_S3_ENDPOINT (e.g. https://ewr1.vultrobjects.com), OMNI_S3_BUCKET, OMNI_S3_REGION
-// (default us-east-1), OMNI_S3_ACCESS_KEY, OMNI_S3_SECRET_KEY. Path-style URLs, SigV4 signed by hand
+// Env: PEAR_S3_ENDPOINT (e.g. https://ewr1.vultrobjects.com), PEAR_S3_BUCKET, PEAR_S3_REGION
+// (default us-east-1), PEAR_S3_ACCESS_KEY, PEAR_S3_SECRET_KEY. Path-style URLs, SigV4 signed by hand
 // (hmac + sha2) so no AWS SDK is pulled in.
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, OnceLock};
@@ -33,17 +33,17 @@ pub fn blobs() -> &'static Blobs {
 impl Blobs {
     pub fn from_env() -> Blobs {
         let var = |k: &str| std::env::var(k).ok().filter(|v| !v.trim().is_empty());
-        match (var("OMNI_S3_BUCKET"), var("OMNI_S3_ENDPOINT"), var("OMNI_S3_ACCESS_KEY"), var("OMNI_S3_SECRET_KEY")) {
+        match (var("PEAR_S3_BUCKET"), var("PEAR_S3_ENDPOINT"), var("PEAR_S3_ACCESS_KEY"), var("PEAR_S3_SECRET_KEY")) {
             (Some(bucket), Some(endpoint), Some(access_key), Some(secret_key)) => Blobs::S3(Arc::new(S3 {
                 endpoint: endpoint.trim_end_matches('/').to_string(),
                 bucket,
-                region: var("OMNI_S3_REGION").unwrap_or_else(|| "us-east-1".into()),
+                region: var("PEAR_S3_REGION").unwrap_or_else(|| "us-east-1".into()),
                 access_key,
                 secret_key,
                 client: reqwest::Client::new(),
             })),
             (Some(_), ..) => {
-                eprintln!("blobs: OMNI_S3_BUCKET set without OMNI_S3_ENDPOINT/ACCESS_KEY/SECRET_KEY; using memory");
+                eprintln!("blobs: PEAR_S3_BUCKET set without PEAR_S3_ENDPOINT/ACCESS_KEY/SECRET_KEY; using memory");
                 Blobs::Mem(Arc::default())
             }
             _ => Blobs::Mem(Arc::default()),

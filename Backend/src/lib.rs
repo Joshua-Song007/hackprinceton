@@ -16,7 +16,7 @@ use sqlx::postgres::PgPool;
 use tower_http::cors::{AllowOrigin, CorsLayer};
 use tower_http::services::{ServeDir, ServeFile};
 
-/// Origins allowed when OMNI_CORS_ORIGINS is unset: the Studio desktop app (Tauri) and the Vite dev server.
+/// Origins allowed when PEAR_CORS_ORIGINS is unset: the Studio desktop app (Tauri) and the Vite dev server.
 const DEFAULT_CORS_ORIGINS: &str =
     "tauri://localhost,http://tauri.localhost,https://tauri.localhost,http://localhost:5173";
 
@@ -31,9 +31,9 @@ async fn health() -> &'static str {
     "ok"
 }
 
-/// CORS for the Studio: origins from OMNI_CORS_ORIGINS (comma-separated), else the defaults above.
+/// CORS for the Studio: origins from PEAR_CORS_ORIGINS (comma-separated), else the defaults above.
 fn cors_layer() -> CorsLayer {
-    let configured = std::env::var("OMNI_CORS_ORIGINS").unwrap_or_else(|_| DEFAULT_CORS_ORIGINS.to_string());
+    let configured = std::env::var("PEAR_CORS_ORIGINS").unwrap_or_else(|_| DEFAULT_CORS_ORIGINS.to_string());
     let origins: Vec<HeaderValue> = configured
         .split(',')
         .filter_map(|o| HeaderValue::from_str(o.trim()).ok())
@@ -53,7 +53,7 @@ pub fn app(db: Option<PgPool>) -> Router {
 /// back to its index.html (single-page app routing).
 pub fn app_with_studio(db: Option<Db>, studio_dir: Option<PathBuf>) -> Router {
     // Needs a Tokio runtime; main and the tests that build the app run inside one.
-    if let (Some(db), Ok(dir)) = (db.clone(), std::env::var("OMNI_PLUGIN_SEED_DIR")) {
+    if let (Some(db), Ok(dir)) = (db.clone(), std::env::var("PEAR_PLUGIN_SEED_DIR")) {
         tokio::spawn(async move { api::marketplace::seed(&db, std::path::Path::new(&dir)).await });
     }
     let router = Router::new()

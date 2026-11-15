@@ -1,7 +1,7 @@
 // Publish -> fetch round trip against the in-memory store (what the server uses when DATABASE_URL is unset).
-use omni_backend::db::Db;
-use omni_backend::memstore::MemStore;
-use omni_backend::app_with_studio;
+use pear_backend::db::Db;
+use pear_backend::memstore::MemStore;
+use pear_backend::app_with_studio;
 use serde_json::{json, Value};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
@@ -41,7 +41,7 @@ async fn sign_in(addr: std::net::SocketAddr, subject: &str) -> String {
 #[tokio::test]
 async fn memory_mode_publish_then_fetch_round_trip() {
     // Only this test binary touches the variable; the dev sign-in route is gated on it.
-    std::env::set_var("OMNI_DEV_SIGNIN", "1");
+    std::env::set_var("PEAR_DEV_SIGNIN", "1");
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
     let router = app_with_studio(Some(Db::Mem(MemStore::default())), None);

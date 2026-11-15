@@ -1,5 +1,5 @@
 [project]
-name = "omni-langchain-deepagents"
+name = "pear-langchain-deepagents"
 version = "0.7.39"
 requires-python = ">=3.11"
 dependencies = [

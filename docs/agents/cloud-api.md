@@ -1,6 +1,6 @@
 Cloud API (provisional) — written 2026-11-14
 
-Status: provisional contract between `OmniCloud/CloudClient.swift` and the Rust backend (`Backend/src/api/*`, plan.md 4.2). Nothing in the backend exists yet; whoever builds it should match this or change both sides together. Sign-in method is not decided (overview.md Module 11), so token sign-in below is `[provisional: needs-tien-review]`.
+Status: provisional contract between `PearCloud/CloudClient.swift` and the Rust backend (`Backend/src/api/*`, plan.md 4.2). Nothing in the backend exists yet; whoever builds it should match this or change both sides together. Sign-in method is not decided (overview.md Module 11), so token sign-in below is `[provisional: needs-tien-review]`.
 
 Carries game content only. Never USIS packets or output commands.
 

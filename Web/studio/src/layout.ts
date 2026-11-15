@@ -31,9 +31,9 @@ export interface LayoutHooks {
   popOut?(panelId: string): void;
 }
 
-const CURRENT_KEY = 'omni.studio.layout.current';
+const CURRENT_KEY = 'pear.studio.layout.current';
 const CORE_PANELS = ['viewport', 'explorer', 'inspector'];
-const NAMED_KEY = 'omni.studio.layouts';
+const NAMED_KEY = 'pear.studio.layouts';
 const SASH_STEP = 16;
 const COLLAPSED_SIZE = 28;
 type Direction = 'left' | 'right' | 'top' | 'bottom';
@@ -55,7 +55,7 @@ export class LayoutManager {
   ) {
     for (const p of panels) this.specs.set(p.id, p);
     this.api = createDockview(host, {
-      theme: { name: 'omni', className: 'dockview-theme-omni' },
+      theme: { name: 'pear', className: 'dockview-theme-pear' },
       disableFloatingGroups: true,
       createComponent: ({ id, name }) => {
         const view = this.specs.get(name)!.create();

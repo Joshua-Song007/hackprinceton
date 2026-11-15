@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Pear Companion streams this device's motion and touch to Pear Studio on your local network.</string>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_pear._tcp</string>
+	</array>
+	<key>NSMotionUsageDescription</key>
+	<string>Pear Companion streams this device's motion to Pear Studio as game input.</string>
+</dict>
+</plist>

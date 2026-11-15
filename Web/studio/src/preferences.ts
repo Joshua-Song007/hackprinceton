@@ -19,7 +19,7 @@ export interface Preferences {
 
 export const UI_SCALE_RANGE = [90, 200] as const;
 export const EDITOR_FONT_RANGE = [10, 32] as const;
-const STORAGE_KEY = 'omni.studio.preferences';
+const STORAGE_KEY = 'pear.studio.preferences';
 
 /** True inside the Tauri desktop shell (Windows serves it from http://tauri.localhost, macOS/Linux from tauri:). */
 export const inDesktopApp = (): boolean =>

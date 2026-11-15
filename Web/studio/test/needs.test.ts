@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { SceneInputs } from '@omni/runtime';
+import type { SceneInputs } from '@pear/runtime';
 import { describeInputs, inferInputs, missingInputs, rigFor } from '../src/needs';
 import { templateSnapshot } from '../src/project';
 

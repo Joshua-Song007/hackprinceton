@@ -1,4 +1,4 @@
-# Phase 8 handoff: Omni Web Studio and live hosting
+# Phase 8 handoff: Pear Web Studio and live hosting
 
 From: tienvu-lol laptop (Windows), manual session plus Opus orchestrator and Sonnet 5.5 workers, 2026-11-14.
 Branch: `phase8/web-studio`. Spec: `.claude/plan.md` section `## Phase 8` (every checklist line, with divergence notes). Source of truth stays `.claude/overview.md`.
@@ -11,7 +11,7 @@ All Phase 8 checklist lines (8.1 to 8.6) are ticked `[x]`. Each one passed its l
 | Area | Path | Verified by |
 |---|---|---|
 | Backend live integration (8.1) | `Backend/` | `cargo test` (lib, api, live, memstore_api, script_host) |
-| Web SDK (8.2) | `Web/packages/omni-{core,runtime,script,sim,cloud}` | `npm test` (46 tests), `npm run typecheck` |
+| Web SDK (8.2) | `Web/packages/pear-{core,runtime,script,sim,cloud}` | `npm test` (46 tests), `npm run typecheck` |
 | Web Studio (8.3, 8.6 blank template) | `Web/studio/` | `npm test` (60 with the server e2e), build, headless page load |
 | Desktop executable (8.4) | `Web/studio/src-tauri/` | `cargo check`, `npx tauri build` produced the NSIS installer |
 | Hosting (8.5) | `Deploy/`, `.github/workflows/studio-release.yml` | `bash -n`; `dev.sh` reaches `/health` |
@@ -28,14 +28,14 @@ Needs cargo (`~/.cargo/bin` on PATH) and Node 22+. Docker and Postgres are not n
 
 ```bash
 cd Web && npm install && cd ..
-bash Deploy/dev.sh                     # backend :8080 (in-memory store, OMNI_DEV_SIGNIN=1) + Studio :5173
+bash Deploy/dev.sh                     # backend :8080 (in-memory store, PEAR_DEV_SIGNIN=1) + Studio :5173
 bash Deploy/demo.sh                    # in a second shell: scripted 2-player Flagship round, prints debug log + ctx.state
-OMNI_E2E_URL=http://localhost:8080 npm --prefix Web test   # includes the server e2e
+PEAR_E2E_URL=http://localhost:8080 npm --prefix Web test   # includes the server e2e
 ```
 
 - Studio: http://localhost:5173. Sign in with any name (dev sign-in), open the Flagship or Blank template, then try Run local, Run on server, and the Debug tabs (Output, Server, State, Packets).
-- Desktop installer (Windows): `cd Web/studio && npx tauri build` writes `src-tauri/target/release/bundle/nsis/Omni Studio_0.1.0_x64-setup.exe`. The macOS dmg must be built on a Mac or by the release workflow (tag `studio-v*`).
-- Hosted (Vultr): `Deploy/vultr-bootstrap.sh` (see its header). Same env names as local: `DATABASE_URL`, `OMNI_DOMAIN`, `OMNI_DEV_SIGNIN`, `OMNI_STUDIO_DIR`, `OMNI_CORS_ORIGINS`, `PORT`.
+- Desktop installer (Windows): `cd Web/studio && npx tauri build` writes `src-tauri/target/release/bundle/nsis/Pear Studio_0.1.0_x64-setup.exe`. The macOS dmg must be built on a Mac or by the release workflow (tag `studio-v*`).
+- Hosted (Vultr): `Deploy/vultr-bootstrap.sh` (see its header). Same env names as local: `DATABASE_URL`, `PEAR_DOMAIN`, `PEAR_DEV_SIGNIN`, `PEAR_STUDIO_DIR`, `PEAR_CORS_ORIGINS`, `PORT`.
 
 ## Open items (pick up here)
 
@@ -61,7 +61,7 @@ OMNI_E2E_URL=http://localhost:8080 npm --prefix Web test   # includes the server
    - Create the Vultr instance and DNS record.
    - Paste `DATABASE_URL` (Vultr Postgres).
    - Code-signing certificates (installers are unsigned until secrets exist).
-   - Store `~/.tauri/omni-studio.key` (on the tienvu-lol laptop) as the GitHub secret `TAURI_SIGNING_PRIVATE_KEY`. Never commit it.
+   - Store `~/.tauri/pear-studio.key` (on the tienvu-lol laptop) as the GitHub secret `TAURI_SIGNING_PRIVATE_KEY`. Never commit it.
    - `vultr-bootstrap.sh` fetches from `main`, so it works only after this branch is merged (and the repo is reachable from the box).
    - Docker, Caddy and Vultr files are written but have never been run.
 

@@ -3,7 +3,7 @@ import { announce, button, el } from './ui';
 import { describeError, type AccountController } from './account';
 import { openSettingsSheet, type PreferenceStore } from './preferences';
 
-const NAME_KEY = 'omni.studio.lastName';
+const NAME_KEY = 'pear.studio.lastName';
 
 export function renderLoginScreen(root: HTMLElement, account: AccountController, prefs: PreferenceStore, onDone: () => void): void {
   let last = '';
@@ -27,7 +27,7 @@ export function renderLoginScreen(root: HTMLElement, account: AccountController,
   };
   name.addEventListener('keydown', (e) => e.key === 'Enter' && void go());
   root.replaceChildren(el('div', { class: 'scr-card scr-login' }, [
-    el('h1', {}, ['Omni Studio']),
+    el('h1', {}, ['Pear Studio']),
     el('div', { class: 'om-prop' }, [el('label', {}, ['Name']), el('div', { class: 'om-field' }, [name])]),
     error,
     el('div', { class: 'sheet-actions' }, [button('Sign in', () => void go(), { variant: 'default' })]),

@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Workspace
+   version = "1.0">
+   <FileRef
+      location = "group:Packages/PearCore">
+   </FileRef>
+   <FileRef
+      location = "group:Packages/PearInput">
+   </FileRef>
+   <FileRef
+      location = "group:Packages/PearOutput">
+   </FileRef>
+   <FileRef
+      location = "group:Packages/PearRuntime">
+   </FileRef>
+   <FileRef
+      location = "group:Packages/PearScript">
+   </FileRef>
+   <FileRef
+      location = "group:Packages/PearSim">
+   </FileRef>
+   <FileRef
+      location = "group:Packages/PearBridge">
+   </FileRef>
+   <FileRef
+      location = "group:Packages/PearCollab">
+   </FileRef>
+   <FileRef
+      location = "group:Packages/PearAdapters">
+   </FileRef>
+   <FileRef
+      location = "group:Packages/PearCloud">
+   </FileRef>
+   <FileRef
+      location = "group:Packages/PearLibrary">
+   </FileRef>
+   <FileRef
+      location = "group:Apps/PearStudio/PearStudio.xcodeproj">
+   </FileRef>
+   <FileRef
+      location = "group:Apps/PearCompanion/PearCompanion.xcodeproj">
+   </FileRef>
+   <FileRef
+      location = "group:Apps/PearPlayer/PearPlayer.xcodeproj">
+   </FileRef>
+</Workspace>

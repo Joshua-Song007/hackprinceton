@@ -12,8 +12,8 @@ Repository map
 - .claude/: human specification and memory. Read-only for autonomous agents, hidden in their worktrees. Never edit root CLAUDE.md or .agents/HUMAN.md.
 
 Architecture invariants
-- OmniCore imports Foundation only: no hardware, I/O, wall clock, random or logging.
-- OmniRuntime, OmniScript and Games remain hardware-blind: never depend on OmniSim or OmniBridge.
+- PearCore imports Foundation only: no hardware, I/O, wall clock, random or logging.
+- PearRuntime, PearScript and Games remain hardware-blind: never depend on PearSim or PearBridge.
 - No unrequested third-party dependency or manifest changes. The orchestrator must quote relevant package dependency edges in the issue.
 - Preserve existing comments unless the issue explicitly authorizes a change.
 - No secrets, .env files, build output, dependency caches or credentials in commits.

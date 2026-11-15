@@ -3,7 +3,7 @@
 // Tests that need the database read DATABASE_URL and return early when it is unset, like tests/api.rs.
 use std::time::Duration;
 
-use omni_backend::{app, db};
+use pear_backend::{app, db};
 use serde_json::{json, Value};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
@@ -157,7 +157,7 @@ async fn pool_or_skip() -> Option<sqlx::postgres::PgPool> {
     let pool = db::connect_lazy(&url).expect("DATABASE_URL invalid");
     db::migrate(&pool).await.expect("migrate");
     // Only this test binary touches the variable; the dev sign-in route is gated on it.
-    std::env::set_var("OMNI_DEV_SIGNIN", "1");
+    std::env::set_var("PEAR_DEV_SIGNIN", "1");
     Some(pool)
 }
 

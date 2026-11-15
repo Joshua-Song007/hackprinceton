@@ -2,8 +2,8 @@
 // Every edit goes through `project.updateEntity`, so the scene JSON is the single source of truth.
 import type { PanelView } from './layout';
 import type { Selection } from './explorer';
-import { GESTURE_TYPES, SLOTS } from '@omni/core';
-import { parseGestures, parseInputs, type CustomGesture, type SceneInputs } from '@omni/runtime';
+import { GESTURE_TYPES, SLOTS } from '@pear/core';
+import { parseGestures, parseInputs, type CustomGesture, type SceneInputs } from '@pear/runtime';
 import { inferInputs } from './needs';
 import { eulerToQuat, quatToEuler, type Project, type RawEntity } from './project';
 import { announce, button, el, icon, openMenu, promptSheet } from './ui';

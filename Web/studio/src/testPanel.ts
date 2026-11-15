@@ -1,6 +1,6 @@
 // Test panel: every player in a running multiplayer test, a top-down map, and controls for the driven player.
-import { parseGestures } from '@omni/runtime';
-import { SIM_DEVICE_KINDS, accelPulse, parseUsisJsonl, type SimDeviceKind } from '@omni/sim';
+import { parseGestures } from '@pear/runtime';
+import { SIM_DEVICE_KINDS, accelPulse, parseUsisJsonl, type SimDeviceKind } from '@pear/sim';
 import { slotDevice } from './needs';
 import { button, el, icon, openMenu } from './ui';
 import type { PanelView } from './layout';

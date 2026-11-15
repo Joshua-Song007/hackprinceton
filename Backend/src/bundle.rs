@@ -10,7 +10,7 @@ use flate2::Compression;
 
 pub type Files = BTreeMap<String, Vec<u8>>;
 
-pub const MANIFEST_FILE: &str = "omni-plugin.json";
+pub const MANIFEST_FILE: &str = "pear-plugin.json";
 /// Per-file cap (uv.lock is ~400 KB).
 pub const MAX_FILE_BYTES: u64 = 1024 * 1024;
 /// Whole-bundle caps, uncompressed.
@@ -138,7 +138,7 @@ mod tests {
 
     #[test]
     fn tarball_is_deterministic_and_round_trips_binary_and_dotfiles() {
-        let f = files(&[("omni-plugin.json", b"{}"), (".python-version", b"3.12\n"), ("bin/x", &[0, 0xff, 7])]);
+        let f = files(&[("pear-plugin.json", b"{}"), (".python-version", b"3.12\n"), ("bin/x", &[0, 0xff, 7])]);
         let a = build_tarball(&f);
         assert_eq!(a, build_tarball(&f));
         assert_eq!(read_tarball(&a).unwrap(), f);
@@ -185,15 +185,15 @@ mod tests {
 
     #[test]
     fn collect_dir_keeps_lock_and_dotfiles_skips_venv() {
-        let dir = std::env::temp_dir().join(format!("omni-bundle-collect-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("pear-bundle-collect-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
-        for (rel, data) in [("omni-plugin.json", &b"{}"[..]), (".python-version", b"3.12"), ("uv.lock", &vec![b'l'; 500 * 1024]), (".venv/x", b"skip"), ("a/__pycache__/y", b"skip")] {
+        for (rel, data) in [("pear-plugin.json", &b"{}"[..]), (".python-version", b"3.12"), ("uv.lock", &vec![b'l'; 500 * 1024]), (".venv/x", b"skip"), ("a/__pycache__/y", b"skip")] {
             let p = dir.join(rel);
             std::fs::create_dir_all(p.parent().unwrap()).unwrap();
             std::fs::write(p, data).unwrap();
         }
         let f = collect_dir(&dir).unwrap();
-        assert_eq!(f.keys().map(String::as_str).collect::<Vec<_>>(), [".python-version", "omni-plugin.json", "uv.lock"]);
+        assert_eq!(f.keys().map(String::as_str).collect::<Vec<_>>(), [".python-version", "pear-plugin.json", "uv.lock"]);
         std::fs::write(dir.join("huge"), vec![0u8; MAX_FILE_BYTES as usize + 1]).unwrap();
         assert!(collect_dir(&dir).is_err());
         std::fs::remove_dir_all(&dir).unwrap();

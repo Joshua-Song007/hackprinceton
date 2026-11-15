@@ -16,7 +16,7 @@ let package = Package(
         .iOSApplication(
             name: "PhoneProbe",
             targets: ["PhoneProbe"],
-            bundleIdentifier: "local.omni.phoneprobe",
+            bundleIdentifier: "local.pear.phoneprobe",
             teamIdentifier: "273VUSUL9H",
             displayVersion: "1.0",
             bundleVersion: "1",
@@ -31,8 +31,8 @@ let package = Package(
                 .landscapeRight(.when(deviceFamilies: [.pad]))
             ],
             capabilities: [
-                .localNetwork(purposeString: "Finds the Omni probe host on your Mac.", bonjourServiceTypes: ["_omniprobe._tcp"]),
-                .motion(purposeString: "Streams phone motion to verify Omni input.")
+                .localNetwork(purposeString: "Finds the Pear probe host on your Mac.", bonjourServiceTypes: ["_pearprobe._tcp"]),
+                .motion(purposeString: "Streams phone motion to verify Pear input.")
             ]
         )
     ],

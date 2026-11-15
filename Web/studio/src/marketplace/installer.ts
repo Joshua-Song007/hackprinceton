@@ -69,6 +69,6 @@ export async function verifyBundle({ tarball, release }: PluginBundle): Promise<
   const sha = hex(await crypto.subtle.digest('SHA-256', tarball as Uint8Array<ArrayBuffer>));
   if (sha !== release.sha256) throw new Error(`Bundle hash mismatch: got ${sha}, registry says ${release.sha256}`);
   const key = await crypto.subtle.importKey('raw', unhex(release.publicKey), { name: 'Ed25519' }, false, ['verify']);
-  const message = new TextEncoder().encode(`omni-plugin-v1\n${release.id}\n${release.version}\n${release.sha256}`);
+  const message = new TextEncoder().encode(`pear-plugin-v1\n${release.id}\n${release.version}\n${release.sha256}`);
   if (!(await crypto.subtle.verify({ name: 'Ed25519' }, key, unhex(release.signature), message))) throw new Error('Bundle signature does not verify');
 }

@@ -1,9 +1,9 @@
 # Integrator
 
-For the integrator instance (`run.sh --integrator`, started by `loop.sh` with `OMNI_ROLE=integrator`). Read `.agents/AGENTS.md` first; this file adds to it. One run = one cycle, then exit. State lives in GitHub and git, never in memory. You are not an orchestrator: you do not build the product. You build and then maintain the tooling that keeps the four orchestrators' PRs, worktrees and CI clean.
+For the integrator instance (`run.sh --integrator`, started by `loop.sh` with `PEAR_ROLE=integrator`). Read `.agents/AGENTS.md` first; this file adds to it. One run = one cycle, then exit. State lives in GitHub and git, never in memory. You are not an orchestrator: you do not build the product. You build and then maintain the tooling that keeps the four orchestrators' PRs, worktrees and CI clean.
 
 ## Phases and spend
-`OMNI_PHASE` is in your cycle prompt.
+`PEAR_PHASE` is in your cycle prompt.
 - **build** (Opus, up to $20 and 100 turns per cycle, cycles about a minute apart): most of the night's budget goes here. You create the deliverables below. `loop.sh` switches you to maintain when you end a cycle with `STATUS: done`, or after `BUILD_MAX_CYCLES` (default 40) cycles.
 - **maintain** (Sonnet, up to $3 and 40 turns per cycle, cycles 30 minutes apart): you keep the tooling working. Change something only when a signal below calls for it; otherwise `STATUS: idle`.
 
@@ -25,9 +25,9 @@ Build is done when all five are merged or `human-hold`, `selftest.sh` passes, an
 Read each cycle, newest first: the `Agent status` issue and its comments, issues labeled `tooling` (an orchestrator asking for a command or CI change), `[permission]`, `[ci]`, `[loop]` and `flaky` issues, `gh run list --branch main --limit 10`, `health.sh`, and `cleanup.sh` / `worktrees.sh` / `prs.sh` dry-run output. When a script misbehaves, a check is wrong or flaky, or an orchestrator asks for a new helper, fix it with one small PR. Remove a check that nobody needs instead of piling up exceptions.
 
 ## One cycle
-1. `git fetch origin`, then `git merge --ff-only origin/main`. If `STOP`, `STOP-$OMNI_LAPTOP` or `STOP-integrator` exists on `origin/main` (`git show origin/main:<name>`), end with `STATUS: idle`.
+1. `git fetch origin`, then `git merge --ff-only origin/main`. If `STOP`, `STOP-$PEAR_LAPTOP` or `STOP-integrator` exists on `origin/main` (`git show origin/main:<name>`), end with `STATUS: idle`.
 2. Read the `Mission` issue and obey its limits (as in `ORCHESTRATOR.md` step 1a). Find your own open PRs (`gh pr list --author @me --state open`): fix CI failures and review comments first.
-3. Build phase: take the next unmerged deliverable. Create a branch (`git switch -c agent/$OMNI_LAPTOP/integrator-<name>`), write the script or workflow, run `bash -n`, its `--help` and a dry run, run the `reviewer` subagent on the committed diff, push, open the PR with `gh pr create --title ... --body-file` (body: what it does, how you tested it, `Refs #<issue>`; bold labels, no `#` headings). Maintain phase: act on the signals above.
+3. Build phase: take the next unmerged deliverable. Create a branch (`git switch -c agent/$PEAR_LAPTOP/integrator-<name>`), write the script or workflow, run `bash -n`, its `--help` and a dry run, run the `reviewer` subagent on the committed diff, push, open the PR with `gh pr create --title ... --body-file` (body: what it does, how you tested it, `Refs #<issue>`; bold labels, no `#` headings). Maintain phase: act on the signals above.
 4. Merge your own PR with `gh pr merge <n> --squash` only when CI is green, `review-pr.sh` reports 0 flags, and the reviewer ended with `VERDICT: APPROVE`. `review-pr.sh` flags `.agents/` and `.github/` as protected paths; on your own `integrator-*` PR, that flag does not count for the paths in your lane (`.agents/scripts/**`, `.agents/README.md`, `.github/workflows/**`). If you have not merged a green PR within 1 h, a lead orchestrator (`tienvu-lol` or `jacob-e-lee`, through `maintain.sh`) merges it. Attempt counter and three-strikes rule as in `ORCHESTRATOR.md` step 7.
 5. Post one comment on the issue titled `Integrator status` (create it if absent) when a deliverable merges or something blocks you. No heartbeats.
 6. End with the STATUS line alone on its own line: `STATUS: worked`, `STATUS: idle`, `STATUS: blocked` (only waiting for a human) or `STATUS: done` (build deliverables complete; ignored in maintain).

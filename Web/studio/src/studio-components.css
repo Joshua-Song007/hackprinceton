@@ -1,4 +1,4 @@
-/* Omni Studio component styles. Every color and length comes from tokens.css. Native macOS scale: 13px body, 11px dense panels. */
+/* Pear Studio component styles. Every color and length comes from tokens.css. Native macOS scale: 13px body, 11px dense panels. */
 body { margin: 0; background: var(--bg-panel); color: var(--text); font-family: var(--font-sans); font-size: 13px; line-height: 16px; -webkit-font-smoothing: antialiased; }
 :focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
 .om-num { font-variant-numeric: tabular-nums; }

@@ -12,17 +12,17 @@ describe('project file', () => {
   it.each([
     ['not json', '{'],
     ['wrong format', '{"format":"x","v":1}'],
-    ['future version', JSON.stringify({ format: 'omni-project', v: 2 })],
-    ['no scene', JSON.stringify({ format: 'omni-project', v: 1, clientScripts: {}, serverScripts: {} })],
-    ['script not text', JSON.stringify({ format: 'omni-project', v: 1, scene: {}, clientScripts: { a: 1 }, serverScripts: {} })],
-    ['bad cloud link', JSON.stringify({ format: 'omni-project', v: 1, scene: {}, clientScripts: {}, serverScripts: {}, gameId: 7 })],
+    ['future version', JSON.stringify({ format: 'pear-project', v: 2 })],
+    ['no scene', JSON.stringify({ format: 'pear-project', v: 1, clientScripts: {}, serverScripts: {} })],
+    ['script not text', JSON.stringify({ format: 'pear-project', v: 1, scene: {}, clientScripts: { a: 1 }, serverScripts: {} })],
+    ['bad cloud link', JSON.stringify({ format: 'pear-project', v: 1, scene: {}, clientScripts: {}, serverScripts: {}, gameId: 7 })],
   ])('rejects %s', (_n, text) => {
     expect(() => parseProjectFile(text)).toThrow();
   });
 
   it('file names are safe', () => {
-    expect(safeFileName('a/b:c')).toBe('abc.omni.json');
-    expect(safeFileName('???')).toBe('project.omni.json');
+    expect(safeFileName('a/b:c')).toBe('abc.pear.json');
+    expect(safeFileName('???')).toBe('project.pear.json');
   });
 });
 

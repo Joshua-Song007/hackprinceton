@@ -1,6 +1,6 @@
 # Scene format
 
-A scene is one JSON object (`scene.json`, or the `scene` inside a `*.omni.json` file). Unknown fields are ignored. The Inspector edits all of these; you rarely need to touch the JSON.
+A scene is one JSON object (`scene.json`, or the `scene` inside a `*.pear.json` file). Unknown fields are ignored. The Inspector edits all of these; you rarely need to touch the JSON.
 
 ```json
 {

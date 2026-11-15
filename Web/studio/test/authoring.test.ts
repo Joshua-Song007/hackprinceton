@@ -1,4 +1,4 @@
-import { parseScene } from '@omni/runtime';
+import { parseScene } from '@pear/runtime';
 import { describe, expect, it } from 'vitest';
 import { eulerToQuat, Project, quatToEuler, templateSnapshot } from '../src/project';
 

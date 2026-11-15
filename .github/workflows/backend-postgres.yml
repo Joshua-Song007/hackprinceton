@@ -3,7 +3,7 @@
 name: backend-postgres
 on:
   pull_request:
-    paths: ["Backend/**", "Packages/OmniScript/Sources/OmniScript/Resources/prelude.js", ".github/workflows/backend-postgres.yml"]
+    paths: ["Backend/**", "Packages/PearScript/Sources/PearScript/Resources/prelude.js", ".github/workflows/backend-postgres.yml"]
   push:
     branches: [main]
     paths: ["Backend/**", ".github/workflows/backend-postgres.yml"]
@@ -14,14 +14,14 @@ jobs:
       postgres:
         image: postgres:16
         env:
-          POSTGRES_USER: omni
-          POSTGRES_PASSWORD: omni
-          POSTGRES_DB: omni
+          POSTGRES_USER: pear
+          POSTGRES_PASSWORD: pear
+          POSTGRES_DB: pear
         ports: ["5432:5432"]
         options: >-
-          --health-cmd "pg_isready -U omni -d omni" --health-interval 5s --health-timeout 3s --health-retries 10
+          --health-cmd "pg_isready -U pear -d pear" --health-interval 5s --health-timeout 3s --health-retries 10
     env:
-      DATABASE_URL: postgres://omni:omni@localhost:5432/omni
+      DATABASE_URL: postgres://pear:pear@localhost:5432/pear
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable

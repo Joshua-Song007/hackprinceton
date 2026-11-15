@@ -1,5 +1,5 @@
 // Composition root: wires the SDK packages (core, runtime, script, sim, cloud) to the panels.
-import { flattenScene } from '@omni/runtime';
+import { flattenScene } from '@pear/runtime';
 import './theme.css';
 import { AccountController, describeError, openAccountSheet } from './account';
 import { createInspectorPanel } from './inspector';
@@ -145,7 +145,7 @@ const showScreen = (s: Screen) => {
   const overlay = s !== 'editor';
   screenEl.hidden = !overlay;
   studioEl.inert = overlay;
-  if (overlay) document.title = `${s === 'login' ? 'Sign in' : 'Projects'} - Omni Studio`;
+  if (overlay) document.title = `${s === 'login' ? 'Sign in' : 'Projects'} - Pear Studio`;
   else renderChrome();
   if (s === 'login') renderLoginScreen(screenEl, account, prefs, () => showScreen(nextScreen(true, hasProject)));
   else if (s === 'projects') {
@@ -264,7 +264,7 @@ const renderChrome = () => {
   const label = project.name + (project.dirty ? ' (unsaved)' : '');
   projectButton.replaceChildren(label);
   projectButton.setAttribute('aria-label', `${label}, project menu`);
-  if (screenEl.hidden) document.title = `${testPlayer ? 'Test player: ' : ''}${project.dirty ? '* ' : ''}${project.name} - Omni Studio`;
+  if (screenEl.hidden) document.title = `${testPlayer ? 'Test player: ' : ''}${project.dirty ? '* ' : ''}${project.name} - Pear Studio`;
   renderActivity();
 };
 run.onChange(renderState);
@@ -412,7 +412,7 @@ const checkForUpdate = async () => {
       throw e;
     }
     install.remove();
-    status(`Update ${update.version} installed. Close and reopen Omni Studio to finish.`);
+    status(`Update ${update.version} installed. Close and reopen Pear Studio to finish.`);
   }), { variant: 'small' });
   activity.after(install);
   status(`Update ${update.version} available`);
@@ -424,7 +424,7 @@ marketplace.registerInstalled(); // before start(), so a saved layout that names
 layout.start();
 refreshScene();
 if (testPlayer) {
-  document.title = `Test player ${testPlayer.name} - Omni Studio`;
+  document.title = `Test player ${testPlayer.name} - Pear Studio`;
   void guard(async () => {
     status(`Signing in as ${testPlayer.name}`);
     await account.signIn(testPlayer.name);

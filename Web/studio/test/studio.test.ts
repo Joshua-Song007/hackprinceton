@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { flattenScene } from '@omni/runtime';
-import { ScriptRuntime } from '@omni/script';
-import prelude from '../../../Packages/OmniScript/Sources/OmniScript/Resources/prelude.js?raw';
+import { flattenScene } from '@pear/runtime';
+import { ScriptRuntime } from '@pear/script';
+import prelude from '../../../Packages/PearScript/Sources/PearScript/Resources/prelude.js?raw';
 import { DebugStore, packetRowKey } from '../src/debug-panel';
 import { menuPosition } from '../src/ui';
 import { errorRange } from '../src/editor';

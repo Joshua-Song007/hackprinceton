@@ -11,7 +11,7 @@ use tauri::{webview::NewWindowResponse, AppHandle, Manager, WebviewUrl, WebviewW
 fn open_panel_window(app: AppHandle, panel_id: String) -> Result<(), String> {
     let label: String = panel_id.chars().filter(|c| c.is_ascii_alphanumeric() || *c == '-' || *c == '_').collect();
     WebviewWindowBuilder::new(&app, format!("panel-{label}"), WebviewUrl::App(format!("popout.html#{label}").into()))
-        .title(format!("Omni Studio - {label}"))
+        .title(format!("Pear Studio - {label}"))
         .build()
         .map(|_| ())
         .map_err(|e| e.to_string())
@@ -51,7 +51,7 @@ fn main() {
             Ok(())
         })
         .build(tauri::generate_context!())
-        .expect("error while building Omni Studio")
+        .expect("error while building Pear Studio")
         .run(|app, event| {
             if let tauri::RunEvent::Exit = event {
                 plugins::stop_all(&app.state::<plugins::Runtimes>());

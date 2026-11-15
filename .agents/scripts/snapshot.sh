@@ -4,7 +4,7 @@
 #   Prints: origin/main head, STOP files, the Mission issue (body + DECISION: comments), the latest Loop capacity line per
 #   laptop/role, open PRs (CI, review, mergeable, labels), open issues (labels), and this laptop's worker states.
 #   Contains no clock-relative fields, so loop.sh compares two snapshots to skip a cycle when nothing changed.
-# Env: OMNI_LAPTOP (for STOP-<laptop>), SNAPSHOT_LOGS (worker state dir; default <clone>.worktrees/logs).
+# Env: PEAR_LAPTOP (for STOP-<laptop>), SNAPSHOT_LOGS (worker state dir; default <clone>.worktrees/logs).
 set -uo pipefail
 out=""
 case "${1:-}" in --out) out=${2:?--out needs a file};; -h|--help) sed -n '2,7p' "$0" | sed 's/^# \{0,1\}//'; exit 0;; '') ;; *) echo "usage: snapshot.sh [--out FILE]" >&2; exit 2;; esac
@@ -15,7 +15,7 @@ ok=1   # a failed gh read must not look like "nothing changed"
 snap() {
   echo "# snapshot"
   echo "main: $(git rev-parse --short origin/main 2>/dev/null || echo unknown)"
-  for s in STOP ${OMNI_LAPTOP:+"STOP-$OMNI_LAPTOP"}; do git cat-file -e "origin/main:$s" 2>/dev/null && echo "STOP FILE PRESENT: $s"; done
+  for s in STOP ${PEAR_LAPTOP:+"STOP-$PEAR_LAPTOP"}; do git cat-file -e "origin/main:$s" 2>/dev/null && echo "STOP FILE PRESENT: $s"; done
 
   m=$(gh issue list --search 'Mission in:title' --state open --json number --jq '.[0].number // empty' 2>/dev/null)
   echo; echo "## mission ${m:+#$m}"

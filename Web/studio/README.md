@@ -1,11 +1,11 @@
-# Omni Web Studio
+# Pear Web Studio
 
-The creator app for Omni games: scene, scripts, simulated devices, local and server test runs, live debugging and publishing. It is one TypeScript web app (Vite, dockview-core, CodeMirror 6, three.js) that ships two ways:
+The creator app for Pear games: scene, scripts, simulated devices, local and server test runs, live debugging and publishing. It is one TypeScript web app (Vite, dockview-core, CodeMirror 6, three.js) that ships two ways:
 
 - **Browser:** the backend serves the built Studio. Locally it runs on `http://localhost:5173`.
 - **Desktop:** Tauri 2 wraps the same build in the OS webview (WebView2 on Windows, WKWebView on macOS) as a native installer with auto-update.
 
-All input in this Studio is simulated. Live AirPods, iPhone and Apple Watch input is only in the native macOS Studio (`Apps/OmniStudio`, needs a Mac and Xcode).
+All input in this Studio is simulated. Live AirPods, iPhone and Apple Watch input is only in the native macOS Studio (`Apps/PearStudio`, needs a Mac and Xcode).
 
 Spec: `.claude/plan.md`, section Phase 8. Brand kit: `docs/brand-kit/index.html`. The Studio still uses the previous kit's tokens and components, kept in `src/studio-tokens.css` and `src/studio-components.css`.
 
@@ -34,7 +34,7 @@ From the repo root:
 cd Web && npm install
 ```
 
-`Web/` is an npm workspace: `packages/omni-{core,runtime,script,sim,cloud}` (the SDK) and `studio/` (this app).
+`Web/` is an npm workspace: `packages/pear-{core,runtime,script,sim,cloud}` (the SDK) and `studio/` (this app).
 
 ## 2. Run the dev stack
 
@@ -49,7 +49,7 @@ This builds and starts the backend on `http://localhost:8080` (in-memory store, 
 | Variable | Default | Meaning |
 |---|---|---|
 | `PORT` | `8080` | Backend port |
-| `OMNI_DEV_SIGNIN` | `1` | Sign in with any name (no real accounts) |
+| `PEAR_DEV_SIGNIN` | `1` | Sign in with any name (no real accounts) |
 | `DATABASE_URL` | unset | Set it to use Postgres instead of memory |
 
 ## 3. Try it
@@ -72,7 +72,7 @@ Panels dock, split, tab, resize and collapse. Keyboard: F6 / Shift+F6 move betwe
 Run these before opening a PR. The server e2e needs `dev.sh` running.
 
 ```bash
-cd Web && OMNI_E2E_URL=http://localhost:8080 npm test
+cd Web && PEAR_E2E_URL=http://localhost:8080 npm test
 ```
 
 ```bash
@@ -90,7 +90,7 @@ bash Deploy/demo.sh
 Run the desktop shell with hot reload. `tauri dev` starts its own Vite on port 5173, so stop `dev.sh` first and run the backend on its own:
 
 ```bash
-cd Backend && OMNI_DEV_SIGNIN=1 cargo run
+cd Backend && PEAR_DEV_SIGNIN=1 cargo run
 ```
 
 ```bash
@@ -103,7 +103,7 @@ Build the installer:
 cd Web/studio && npx tauri build
 ```
 
-- Windows output: `src-tauri/target/release/bundle/nsis/Omni Studio_<version>_x64-setup.exe`. macOS (`.app`, `.dmg`) must be built on a Mac or by `.github/workflows/studio-release.yml` (tag `studio-v*`).
+- Windows output: `src-tauri/target/release/bundle/nsis/Pear Studio_<version>_x64-setup.exe`. macOS (`.app`, `.dmg`) must be built on a Mac or by `.github/workflows/studio-release.yml` (tag `studio-v*`).
 - The build ends with "no private key" unless `TAURI_SIGNING_PRIVATE_KEY` is set. The installer is still produced; only the updater signature is missing. Never commit the key.
 - Installers are unsigned, so Windows SmartScreen may warn.
 - In the desktop app, set Settings, Server URL to `http://localhost:8080` (the default is the page origin, which the desktop app does not have).
@@ -113,7 +113,7 @@ cd Web/studio && npx tauri build
 
 | Path | What |
 |---|---|
-| `src/main.ts` | Composition root: the only file that wires `@omni/sim` and `@omni/cloud` to the runtime |
+| `src/main.ts` | Composition root: the only file that wires `@pear/sim` and `@pear/cloud` to the runtime |
 | `src/layout.ts` | Docking, presets, saved layouts, keyboard panel control |
 | `src/run.ts` | Run local, Run on server, test players, viewport and Devices panel |
 | `src/debug-panel.ts` | Console panel: client output and server rows merged, State column, Packets (Advanced) |
@@ -123,12 +123,12 @@ cd Web/studio && npx tauri build
 | `src-tauri/` | Desktop shell (Tauri 2) |
 | `test/` | Unit tests and the e2e (`e2e.test.ts`) |
 
-Rules: the runtime and script code never import `@omni/sim` (hardware-blind); sensor data never goes to the backend; UI follows the brand kit (sentence case, no emoji, `live` orange never used here).
+Rules: the runtime and script code never import `@pear/sim` (hardware-blind); sensor data never goes to the backend; UI follows the brand kit (sentence case, no emoji, `live` orange never used here).
 
 ## Troubleshooting
 
 - **Tests fail with `Unknown file extension ".ts"`**: the test workers already pass `--experimental-strip-types`. Make sure you are on a branch with that fix, or use Node 22.18+.
 - **`bash` exits 127 on Windows**: it resolved to WSL. Use the Git Bash path above.
 - **Port 5173 or 8080 in use**: Vite uses `strictPort`. Stop the other process, or set `PORT` for the backend.
-- **Sign-in fails**: the backend needs `OMNI_DEV_SIGNIN=1` (the `dev.sh` default), and Settings, Server URL must point at it.
+- **Sign-in fails**: the backend needs `PEAR_DEV_SIGNIN=1` (the `dev.sh` default), and Settings, Server URL must point at it.
 - **A test player in a background tab updates slowly**: browsers throttle timers in hidden tabs to about 1 Hz. Keep it visible or in its own window.

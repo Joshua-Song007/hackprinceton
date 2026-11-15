@@ -5,14 +5,14 @@
 // calls handlers as (self, ctx, ...args), not serverScript's (ctx, player, ...args). Server behaviour is covered by the runtime pytest.
 import { Worker } from 'node:worker_threads';
 import { afterEach, describe, expect, it } from 'vitest';
-import { ScriptSandbox, type WorkerLike } from '@omni/script';
+import { ScriptSandbox, type WorkerLike } from '@pear/script';
 import { Project, templateSnapshot } from '../src/project';
 import { LocalRun, type EffectOutput } from '../src/run';
 
 class NodeWorkerLike implements WorkerLike {
   onmessage: WorkerLike['onmessage'] = null;
   onerror: WorkerLike['onerror'] = null;
-  private worker = new Worker(new URL('../../packages/omni-script/test/node-worker.ts', import.meta.url), { execArgv: ['--experimental-strip-types'] }); // Node < 22.18 does not strip TS types by default
+  private worker = new Worker(new URL('../../packages/pear-script/test/node-worker.ts', import.meta.url), { execArgv: ['--experimental-strip-types'] }); // Node < 22.18 does not strip TS types by default
   constructor() {
     this.worker.on('message', (data) => this.onmessage?.({ data }));
     this.worker.on('error', (e) => this.onerror?.({ message: e.message }));

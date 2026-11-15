@@ -6,8 +6,8 @@
 //   DELETE /api/me/model-key                  -> 204
 //   GET    /agent/health                      -> the runtime's /health, 503 when no runtime is configured
 //   GET    /agent/ws?token=..&project=..      -> WebSocket proxied to the runtime
-// The runtime is OMNI_AGENT_RUNTIME_URL (e.g. ws://runtime:9410/ws, on the Docker network only). Each
-// proxied connection carries `Authorization: Bearer $OMNI_RUNTIME_SECRET`, the account and project ids
+// The runtime is PEAR_AGENT_RUNTIME_URL (e.g. ws://runtime:9410/ws, on the Docker network only). Each
+// proxied connection carries `Authorization: Bearer $PEAR_RUNTIME_SECRET`, the account and project ids
 // and, when the account stored one, its decrypted model key: the runtime uses only that key, so one
 // account's key never serves another account.
 use axum::extract::ws::{rejection::WebSocketUpgradeRejection, Message as AMsg, WebSocket, WebSocketUpgrade};
@@ -81,7 +81,7 @@ async fn delete_key(State(state): State<AppState>, headers: HeaderMap) -> Result
 }
 
 fn runtime_url() -> Option<String> {
-    std::env::var("OMNI_AGENT_RUNTIME_URL").ok().filter(|u| !u.trim().is_empty())
+    std::env::var("PEAR_AGENT_RUNTIME_URL").ok().filter(|u| !u.trim().is_empty())
 }
 
 async fn health() -> Response {
@@ -124,7 +124,7 @@ async fn proxy(State(state): State<AppState>, uri: Uri, headers: HeaderMap, ws: 
         None => None,
     };
     let Ok(mut req) = url.as_str().into_client_request() else {
-        return error(StatusCode::INTERNAL_SERVER_ERROR, "bad OMNI_AGENT_RUNTIME_URL").into_response();
+        return error(StatusCode::INTERNAL_SERVER_ERROR, "bad PEAR_AGENT_RUNTIME_URL").into_response();
     };
     let h = req.headers_mut();
     let mut set = |name: &'static str, value: &str| {
@@ -132,12 +132,12 @@ async fn proxy(State(state): State<AppState>, uri: Uri, headers: HeaderMap, ws: 
             h.insert(name, v);
         }
     };
-    set("authorization", &format!("Bearer {}", std::env::var("OMNI_RUNTIME_SECRET").unwrap_or_default()));
-    set("x-omni-account", &account.id);
-    set("x-omni-project", &project);
+    set("authorization", &format!("Bearer {}", std::env::var("PEAR_RUNTIME_SECRET").unwrap_or_default()));
+    set("x-pear-account", &account.id);
+    set("x-pear-project", &project);
     if let Some((provider, key)) = &key {
-        set("x-omni-model-provider", provider);
-        set("x-omni-model-key", key);
+        set("x-pear-model-provider", provider);
+        set("x-pear-model-key", key);
     }
     let upstream = match tokio_tungstenite::connect_async(req).await {
         Ok((s, _)) => s,

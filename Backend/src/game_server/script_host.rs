@@ -1,5 +1,5 @@
 // Embedded JS engine (rquickjs) running a game's server scripts. Implements `session::ScriptHost`
-// with the same `serverScript` API as Packages/OmniScript `ServerScriptEngine.swift`:
+// with the same `serverScript` API as Packages/PearScript `ServerScriptEngine.swift`:
 // `onPlayerJoin(ctx, player)`, `onPlayerLeave(ctx, player)`, `onRemote(ctx, player, name, data)`,
 // `ctx.state` (persists for the session), `ctx.remote.fire(playerId, name, data)` / `fireAll(name, data)`.
 // Scripts see only `ctx`: no file, network or input access (QuickJS has no host I/O by default).
@@ -24,7 +24,7 @@ use serde_json::{json, Value};
 use super::debug::bus;
 use super::session::{HostFactory, NoopHost, Outgoing, ScriptHost};
 
-const PRELUDE: &str = include_str!("../../../Packages/OmniScript/Sources/OmniScript/Resources/prelude.js");
+const PRELUDE: &str = include_str!("../../../Packages/PearScript/Sources/PearScript/Resources/prelude.js");
 const CALL_DEADLINE: Duration = Duration::from_secs(1);
 const MEMORY_LIMIT: usize = 32 * 1024 * 1024;
 const STACK_LIMIT: usize = 1024 * 1024;
@@ -67,7 +67,7 @@ const GLUE: &str = r#"
     },
     cancel: function (id) { cancel(Number(id)); }
   });
-  globalThis.__omniHost = {
+  globalThis.__pearHost = {
     add: function (definition) { scripts.push(definition); },
     setName: function (playerId, name) { names[playerId] = String(name); },
     stateJSON: function () { return encode(state); },
@@ -134,7 +134,7 @@ fn export_default_body_at(line: &str) -> Option<usize> {
     (after_ws.len() < after_export.len() && body.len() < after_default.len()).then(|| line.len() - body.len())
 }
 
-/// Turns the first line-leading `export default X;` into `__omniExportDefault(X);` (see prelude.js),
+/// Turns the first line-leading `export default X;` into `__pearExportDefault(X);` (see prelude.js),
 /// keeping what precedes it (comments). Same rule as the client engines' `^\s*export\s+default\s+`;
 /// shortcut: `export` and `default` must share a line, upgrade if a script splits them.
 fn rewrite_export_default(source: &str) -> String {
@@ -142,7 +142,7 @@ fn rewrite_export_default(source: &str) -> String {
     for line in source.split_inclusive('\n') {
         if let Some(at) = export_default_body_at(line) {
             let body = source[offset + at..].trim_end_matches(|c: char| c == ';' || c.is_whitespace());
-            return format!("{}__omniExportDefault({body}\n);", &source[..offset]);
+            return format!("{}__pearExportDefault({body}\n);", &source[..offset]);
         }
         offset += line.len();
     }
@@ -246,12 +246,12 @@ impl QuickJsHost {
             };
             ctx.eval::<(), _>(src).map_err(describe)?;
             let globals = ctx.globals();
-            let take: Function = globals.get("__omniTakeDefault").map_err(describe)?;
+            let take: Function = globals.get("__pearTakeDefault").map_err(describe)?;
             let def: rquickjs::Value = take.call(()).map_err(describe)?;
             if !def.is_object() {
                 return Err("script does not export default serverScript({...})".to_string());
             }
-            let host: Object = globals.get("__omniHost").map_err(describe)?;
+            let host: Object = globals.get("__pearHost").map_err(describe)?;
             let add: Function = host.get("add").map_err(describe)?;
             add.call::<_, ()>((def,)).map_err(describe)
         })
@@ -264,7 +264,7 @@ impl QuickJsHost {
         let pending = self.pending.clone();
         self.context.with(|ctx| {
             let res: rquickjs::Result<()> = (|| {
-                let host: Object = ctx.globals().get("__omniHost")?;
+                let host: Object = ctx.globals().get("__pearHost")?;
                 let f: Function = host.get("dispatch")?;
                 f.call((handler, player, name, data_json))
             })();
@@ -299,7 +299,7 @@ impl QuickJsHost {
     pub fn state_json(&self) -> String {
         self.arm();
         let s = self.context.with(|ctx| {
-            let host: Object = ctx.globals().get("__omniHost").ok()?;
+            let host: Object = ctx.globals().get("__pearHost").ok()?;
             let f: Function = host.get("stateJSON").ok()?;
             f.call::<_, String>(()).ok()
         });
@@ -329,7 +329,7 @@ impl ScriptHost for QuickJsHost {
     fn set_player_name(&mut self, player: &str, name: &str) {
         self.arm();
         self.context.with(|ctx| {
-            let host: Option<Object> = ctx.globals().get("__omniHost").ok();
+            let host: Option<Object> = ctx.globals().get("__pearHost").ok();
             let set: Option<Function> = host.and_then(|h| h.get("setName").ok());
             if let Some(set) = set {
                 let _ = set.call::<_, ()>((player, name));

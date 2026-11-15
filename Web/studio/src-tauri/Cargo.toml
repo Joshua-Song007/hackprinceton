@@ -1,8 +1,8 @@
-# Desktop shell for Omni Studio. Separate Cargo project: not part of Backend/. All Studio logic stays in the web build.
+# Desktop shell for Pear Studio. Separate Cargo project: not part of Backend/. All Studio logic stays in the web build.
 [package]
-name = "omni-studio"
+name = "pear-studio"
 version = "0.1.0"
-description = "Omni Studio desktop app"
+description = "Pear Studio desktop app"
 edition = "2021"
 
 [build-dependencies]

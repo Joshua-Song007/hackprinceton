@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Per-laptop overnight loop: one agent cycle at a time until a STOP file lands on origin/main.
-# usage: cd <clone> && env OMNI_LAPTOP=<name> [OMNI_ROLE=orch|integrator] .agents/scripts/loop.sh      (normally started by .agents/scripts/start.sh; start it from the primary clone, not a worktree)
-# OMNI_ROLE=orch (default) runs the orchestrator; OMNI_ROLE=integrator runs the tooling integrator (INTEGRATOR.md): fast cycles in the build phase, then slow ones in maintain.
+# usage: cd <clone> && env PEAR_LAPTOP=<name> [PEAR_ROLE=orch|integrator] .agents/scripts/loop.sh      (normally started by .agents/scripts/start.sh; start it from the primary clone, not a worktree)
+# PEAR_ROLE=orch (default) runs the orchestrator; PEAR_ROLE=integrator runs the tooling integrator (INTEGRATOR.md): fast cycles in the build phase, then slow ones in maintain.
 # Usage limit hit or warned: OUT + handoff, sleep until the reset + 60 s (LIMIT_WINDOW=18000 s fallback), resume, BACK.
 # Optional: NIGHT_BUDGET_USD=<n> stops the loop (after posting OUT + handoff) once this loop's own cycles spent NEAR_PCT (default 90) % of it today.
 # Orchestrator only: each tick writes <logs>/snapshot.md (snapshot.sh) and skips the model when it matches the last cycle's end state; FORCE_CYCLE=<s> (default 3600) forces a real cycle anyway, for time-based rules (dead claims, idle merges).
@@ -10,19 +10,19 @@
 set -uo pipefail
 self="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"   # absolute, for the self-update re-exec after the cd below
 cd "$(dirname "$0")/../.."
-laptop=${OMNI_LAPTOP:?set OMNI_LAPTOP}
-role=${OMNI_ROLE:-orch}
-case "$role" in orch) slug=orch; runflag=--orch;; integrator) slug=integrator; runflag=--integrator;; *) echo "loop.sh: OMNI_ROLE must be orch or integrator" >&2; exit 2;; esac
+laptop=${PEAR_LAPTOP:?set PEAR_LAPTOP}
+role=${PEAR_ROLE:-orch}
+case "$role" in orch) slug=orch; runflag=--orch;; integrator) slug=integrator; runflag=--integrator;; *) echo "loop.sh: PEAR_ROLE must be orch or integrator" >&2; exit 2;; esac
 logs="$(dirname "$PWD")/$(basename "$PWD").worktrees/logs"; flag="$logs/.loop-failing-$laptop-$slug"; pidfile="$logs/loop-$laptop-$slug.pid"; phasefile="$logs/integrator.phase"
 mkdir -p "$logs"
 if [ -s "$pidfile" ] && kill -0 "$(cat "$pidfile")" 2>/dev/null; then echo "loop.sh: a $slug loop for $laptop is already running (pid $(cat "$pidfile"))" >&2; exit 1; fi
 echo $$ > "$pidfile"; trap 'rm -f "$pidfile"' EXIT   # start.sh's Windows keep-awake helper watches this file
-[ "$role" = integrator ] && [ "${OMNI_FORCE_PHASE:-}" = maintain ] && echo maintain > "$phasefile"   # a fallback integrator started by an orchestrator must not redo the build
+[ "$role" = integrator ] && [ "${PEAR_FORCE_PHASE:-}" = maintain ] && echo maintain > "$phasefile"   # a fallback integrator started by an orchestrator must not redo the build
 phase() { cat "$phasefile" 2>/dev/null || echo build; }
 if [ "$role" = integrator ] && [ "$(phase)" = build ]; then base=${BUILD_DELAY:-60}; else base=${LOOP_DELAY:-300}; fi
 [ "$role" = integrator ] && [ "$(phase)" = maintain ] && base=${MAINT_DELAY:-1800}
 fails=0; delay=$base
-notify() { echo "NOTIFY: $1"; osascript -e 'on run a' -e 'display notification (item 1 of a) with title (item 2 of a)' -e 'end run' -- "$1" "Omni $slug loop $laptop" 2>/dev/null || true; }   # args, not string interpolation: $1 can hold model-written text
+notify() { echo "NOTIFY: $1"; osascript -e 'on run a' -e 'display notification (item 1 of a) with title (item 2 of a)' -e 'end run' -- "$1" "Pear $slug loop $laptop" 2>/dev/null || true; }   # args, not string interpolation: $1 can hold model-written text
 cap_fails=0; out_posted=0; window_start=""   # window_start: first good cycle of the current 5 h usage window
 takes() {   # who picks up this loop's duties while it is OUT (ORCHESTRATOR.md 1c)
   if [ "$role" = integrator ]; then echo "integrator duties -> 1c integrator fallback"; return; fi
@@ -80,7 +80,7 @@ while true; do
       if ! git diff --quiet "$old" HEAD -- .agents/; then
         bash -n "$self" || { notify "self-update: the new loop.sh has a syntax error; staying on the old one, fix forward"; continue; }   # a bad script on main must not kill every loop
         notify "scripts updated to $(git rev-parse --short HEAD); restarting the $slug loop"
-        rm -f "$pidfile"; exec "$self"   # same pid, same env (OMNI_LAPTOP, delays) and same tee; bash parsed this whole loop before running it, so the pull cannot corrupt it
+        rm -f "$pidfile"; exec "$self"   # same pid, same env (PEAR_LAPTOP, delays) and same tee; bash parsed this whole loop before running it, so the pull cannot corrupt it
       fi
     elif [ "${skipped_update:-}" != "$(git rev-parse origin/main)" ]; then
       skipped_update=$(git rev-parse origin/main); notify "self-update skipped: clone is not a clean main that fast-forwards to origin/main; update it by hand"
@@ -93,7 +93,7 @@ while true; do
     fi
   fi
   rm -f "$logs/$slug.json"   # a stale success from an earlier cycle must not mask a launch failure
-  if [ "$role" = integrator ]; then ph=$(phase); OMNI_PHASE=$ph .agents/scripts/run.sh --integrator integrator "Run one integrator cycle in $ph mode." || true
+  if [ "$role" = integrator ]; then ph=$(phase); PEAR_PHASE=$ph .agents/scripts/run.sh --integrator integrator "Run one integrator cycle in $ph mode." || true
   else .agents/scripts/run.sh --orch orch "Run one orchestrator cycle." || true; fi   # run.sh swallows claude's exit code; read the JSON result instead
   jq -r '.permission_denials[]? | select(.tool_name == "Bash") | .tool_input.command | gsub("\n"; " ")' "$logs/$slug.json" 2>/dev/null | sort -u | while IFS= read -r cmd; do   # silent dontAsk denials: tell Tien once per command
     f="$logs/.denied-$laptop-$slug-$(printf %s "$cmd" | cksum | cut -d' ' -f1)"; [ -e "$f" ] && continue

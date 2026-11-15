@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import gameSource from '../../../Games/HotPotato/scripts/game.js?raw';
 import playerSource from '../../../Games/HotPotato/scripts/player.js?raw';
-import prelude from '../../../Packages/OmniScript/Sources/OmniScript/Resources/prelude.js?raw';
-import { ScriptRuntime, rewriteExportDefault } from '../../packages/omni-script/src';
+import prelude from '../../../Packages/PearScript/Sources/PearScript/Resources/prelude.js?raw';
+import { ScriptRuntime, rewriteExportDefault } from '../../packages/pear-script/src';
 
 // Tiny fake of the server host: ctx.now() from a mutable clock, after/cancel store timers advance() fires.
 function harness() {
   const scope: Record<string, unknown> = { console: { log() {}, warn() {}, error() {} } };
-  const def = new Function(`with (this) {\n${prelude}\n${rewriteExportDefault(gameSource)}\n}\nreturn this.__omniTakeDefault();`).call(scope) as any;
+  const def = new Function(`with (this) {\n${prelude}\n${rewriteExportDefault(gameSource)}\n}\nreturn this.__pearTakeDefault();`).call(scope) as any;
   let clock = 1000;
   let next = 1;
   const timers = new Map<number, { at: number; tag: string; data: unknown }>();

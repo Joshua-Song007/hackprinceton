@@ -1,8 +1,8 @@
 // What a game needs from each player (scene `inputs`), what its scripts actually use, and which simulated devices
 // provide it. Pure, so the Test panel checklist and Play share one answer and tests cover it.
-import { GESTURE_TYPES, type GestureType } from '@omni/core';
-import type { CustomGesture, SceneInputs } from '@omni/runtime';
-import type { SimDeviceKind } from '@omni/sim';
+import { GESTURE_TYPES, type GestureType } from '@pear/core';
+import type { CustomGesture, SceneInputs } from '@pear/runtime';
+import type { SimDeviceKind } from '@pear/sim';
 
 /** Reads the client scripts: a quoted gesture name, `ctx.position`, heart rate and head handlers. Players stay 1 to 32. */
 export function inferInputs(clientScripts: Record<string, string>): SceneInputs {

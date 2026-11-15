@@ -1,10 +1,10 @@
-// Project files on disk: `*.omni.json` = a ProjectSnapshot in a small versioned envelope.
+// Project files on disk: `*.pear.json` = a ProjectSnapshot in a small versioned envelope.
 // File System Access API where the browser has it (Chromium, WebView2); download + <input type=file> elsewhere.
 import type { ProjectSnapshot } from './project';
 
-export const FILE_FORMAT = 'omni-project';
+export const FILE_FORMAT = 'pear-project';
 export const FILE_VERSION = 1;
-export const FILE_EXTENSION = '.omni.json';
+export const FILE_EXTENSION = '.pear.json';
 
 export function serializeProject(snapshot: ProjectSnapshot): string {
   return JSON.stringify({ format: FILE_FORMAT, v: FILE_VERSION, ...snapshot }, null, 2) + '\n';
@@ -19,9 +19,9 @@ export function parseProjectFile(text: string): ProjectSnapshot {
   try {
     raw = JSON.parse(text);
   } catch {
-    throw new Error('That file is not valid JSON, so it is not an Omni project.');
+    throw new Error('That file is not valid JSON, so it is not an Pear project.');
   }
-  if (!isRecord(raw) || raw.format !== FILE_FORMAT) throw new Error('That file is not an Omni project (missing "format": "omni-project").');
+  if (!isRecord(raw) || raw.format !== FILE_FORMAT) throw new Error('That file is not an Pear project (missing "format": "pear-project").');
   if (raw.v !== FILE_VERSION) throw new Error(`This project file is version ${String(raw.v)}; this Studio opens version ${FILE_VERSION}.`);
   if (!isRecord(raw.scene)) throw new Error('The project file has no scene.');
   if (!isSourceMap(raw.clientScripts) || !isSourceMap(raw.serverScripts)) throw new Error('The project file has script sources that are not text.');
@@ -42,7 +42,7 @@ interface PickerWindow {
   showOpenFilePicker?: (o: unknown) => Promise<FileHandleLike[]>;
 }
 const picker = (): PickerWindow => window as unknown as PickerWindow;
-const PICKER_TYPES = [{ description: 'Omni project', accept: { 'application/json': [FILE_EXTENSION, '.json'] } }];
+const PICKER_TYPES = [{ description: 'Pear project', accept: { 'application/json': [FILE_EXTENSION, '.json'] } }];
 const isAbort = (e: unknown) => e instanceof DOMException && e.name === 'AbortError';
 
 export const safeFileName = (projectName: string): string => (projectName.replace(/[^A-Za-z0-9._ -]+/g, '').trim() || 'project') + FILE_EXTENSION;

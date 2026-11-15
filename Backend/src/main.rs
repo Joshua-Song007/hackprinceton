@@ -1,7 +1,7 @@
 // Starts the HTTP API; the WebSocket game server (/play) and /api routes are added by later 4.2 items.
-use omni_backend::db::Db;
-use omni_backend::memstore::MemStore;
-use omni_backend::{app_with_studio, db as database};
+use pear_backend::db::Db;
+use pear_backend::memstore::MemStore;
+use pear_backend::{app_with_studio, db as database};
 use sqlx::postgres::PgPoolOptions;
 
 #[tokio::main]
@@ -27,24 +27,24 @@ async fn main() {
         }
     }
 
-    // `omni-backend seed <dir>`: the marketplace seed/publish job. Publishes every plugin dir under
+    // `pear-backend seed <dir>`: the marketplace seed/publish job. Publishes every plugin dir under
     // <dir> as approved, then exits (non-zero if any plugin failed). Safe to re-run.
     let args: Vec<String> = std::env::args().collect();
     if args.get(1).map(String::as_str) == Some("seed") {
         let (Some(dir), Some(db)) = (args.get(2), db.as_ref()) else {
-            eprintln!("usage: omni-backend seed <plugins dir> (needs a database)");
+            eprintln!("usage: pear-backend seed <plugins dir> (needs a database)");
             std::process::exit(2);
         };
-        if matches!(db, Db::Pg(_)) && matches!(omni_backend::blobs::blobs(), omni_backend::blobs::Blobs::Mem(_)) {
-            eprintln!("seed: DATABASE_URL is set but OMNI_S3_* is not: bundles would be lost when this job exits");
+        if matches!(db, Db::Pg(_)) && matches!(pear_backend::blobs::blobs(), pear_backend::blobs::Blobs::Mem(_)) {
+            eprintln!("seed: DATABASE_URL is set but PEAR_S3_* is not: bundles would be lost when this job exits");
             std::process::exit(2);
         }
-        let (new, unchanged, failed) = omni_backend::api::marketplace::seed(db, std::path::Path::new(dir)).await;
+        let (new, unchanged, failed) = pear_backend::api::marketplace::seed(db, std::path::Path::new(dir)).await;
         eprintln!("seed: {new} published, {unchanged} unchanged, {failed} failed");
         std::process::exit(if failed == 0 { 0 } else { 1 });
     }
 
-    let studio_dir = std::env::var("OMNI_STUDIO_DIR").ok().map(std::path::PathBuf::from);
+    let studio_dir = std::env::var("PEAR_STUDIO_DIR").ok().map(std::path::PathBuf::from);
     if let Some(dir) = &studio_dir {
         eprintln!("serving Studio from {}", dir.display());
     }
@@ -69,7 +69,7 @@ async fn main() {
 
 #[cfg(test)]
 mod tests {
-    use omni_backend::app;
+    use pear_backend::app;
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
     // tower is not a direct dependency, so /health is exercised over a loopback socket.

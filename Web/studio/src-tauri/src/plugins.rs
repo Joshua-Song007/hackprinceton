@@ -1,5 +1,5 @@
 //! Marketplace plugin commands: write a plugin bundle to disk and run its runtime process.
-//! Layout: <app data>/omni/projects/<projectId>/plugins/<id>/ ; OMNI_PROJECT_DIR is the project dir.
+//! Layout: <app data>/pear/projects/<projectId>/plugins/<id>/ ; PEAR_PROJECT_DIR is the project dir.
 //! A bundle arrives as the registry's gzip tarball; its SHA-256 and Ed25519 signature are checked
 //! before anything is read out of it or written to disk.
 use std::collections::HashMap;
@@ -38,7 +38,7 @@ fn validate_relative_path(path: &str) -> Result<(), String> {
 }
 
 fn project_dir(base: &Path, project_id: &str) -> PathBuf {
-    base.join("omni").join("projects").join(project_id)
+    base.join("pear").join("projects").join(project_id)
 }
 
 fn plugin_dir(base: &Path, project_id: &str, id: &str) -> PathBuf {
@@ -49,19 +49,19 @@ fn app_data(app: &AppHandle) -> Result<PathBuf, String> {
     app.path().app_data_dir().map_err(|e| e.to_string())
 }
 
-/// Reads and validates the plugin id from the bundle's omni-plugin.json.
+/// Reads and validates the plugin id from the bundle's pear-plugin.json.
 fn bundle_plugin_id(files: &HashMap<String, String>) -> Result<String, String> {
-    let manifest = files.get("omni-plugin.json").ok_or("bundle has no omni-plugin.json")?;
-    let manifest: serde_json::Value = serde_json::from_str(manifest).map_err(|e| format!("bad omni-plugin.json: {e}"))?;
-    let id = manifest.get("id").and_then(|v| v.as_str()).ok_or("omni-plugin.json has no id")?;
+    let manifest = files.get("pear-plugin.json").ok_or("bundle has no pear-plugin.json")?;
+    let manifest: serde_json::Value = serde_json::from_str(manifest).map_err(|e| format!("bad pear-plugin.json: {e}"))?;
+    let id = manifest.get("id").and_then(|v| v.as_str()).ok_or("pear-plugin.json has no id")?;
     validate_id("plugin id", id)?;
     Ok(id.to_string())
 }
 
 fn write_bundle(base: &Path, project_id: &str, files: &HashMap<String, Vec<u8>>) -> Result<PathBuf, String> {
     validate_id("projectId", project_id)?;
-    let manifest = files.get("omni-plugin.json").map(|m| String::from_utf8_lossy(m).into_owned());
-    let id = bundle_plugin_id(&manifest.into_iter().map(|m| ("omni-plugin.json".to_string(), m)).collect())?;
+    let manifest = files.get("pear-plugin.json").map(|m| String::from_utf8_lossy(m).into_owned());
+    let id = bundle_plugin_id(&manifest.into_iter().map(|m| ("pear-plugin.json".to_string(), m)).collect())?;
     // Validate everything before writing anything.
     files.keys().try_for_each(|p| validate_relative_path(p))?;
     let dir = plugin_dir(base, project_id, &id);
@@ -95,7 +95,7 @@ pub struct Release {
 
 /// The same text the backend signs (Backend/src/crypto.rs signed_message).
 fn signed_message(id: &str, version: &str, sha256: &str) -> String {
-    format!("omni-plugin-v1\n{id}\n{version}\n{sha256}")
+    format!("pear-plugin-v1\n{id}\n{version}\n{sha256}")
 }
 
 /// Checks hash and signature, then reads the tarball's regular files into memory (paths validated,
@@ -136,8 +136,8 @@ fn verify_and_read(tarball: &[u8], r: &Release) -> Result<HashMap<String, Vec<u8
         }
         files.insert(path, buf);
     }
-    let manifest: serde_json::Value = serde_json::from_slice(files.get("omni-plugin.json").ok_or("bundle has no omni-plugin.json")?)
-        .map_err(|e| format!("bad omni-plugin.json: {e}"))?;
+    let manifest: serde_json::Value = serde_json::from_slice(files.get("pear-plugin.json").ok_or("bundle has no pear-plugin.json")?)
+        .map_err(|e| format!("bad pear-plugin.json: {e}"))?;
     if manifest["id"] != r.id.as_str() || manifest["version"] != r.version.as_str() {
         return Err("bundle manifest does not match the signed id and version".into());
     }
@@ -166,10 +166,10 @@ pub fn uninstall_plugin(app: AppHandle, project_id: String, id: String) -> Resul
 /// Only these commands may be started as a plugin runtime.
 const ALLOWED_RUNTIME_COMMANDS: [&str; 1] = ["uv"];
 
-/// (command, args, port) from an omni-plugin.json; rejects any command outside the allow-list.
+/// (command, args, port) from an pear-plugin.json; rejects any command outside the allow-list.
 fn runtime_spec(manifest_json: &str) -> Result<(String, Vec<String>, u16), String> {
-    let manifest: serde_json::Value = serde_json::from_str(manifest_json).map_err(|e| format!("bad omni-plugin.json: {e}"))?;
-    let runtime = manifest.get("runtime").ok_or("omni-plugin.json has no runtime")?;
+    let manifest: serde_json::Value = serde_json::from_str(manifest_json).map_err(|e| format!("bad pear-plugin.json: {e}"))?;
+    let runtime = manifest.get("runtime").ok_or("pear-plugin.json has no runtime")?;
     let command = runtime.get("command").and_then(|v| v.as_str()).ok_or("runtime.command missing")?;
     if !ALLOWED_RUNTIME_COMMANDS.contains(&command) {
         return Err(format!("runtime command {command:?} is not allowed (allowed: {ALLOWED_RUNTIME_COMMANDS:?})"));
@@ -196,10 +196,10 @@ pub fn start_runtime(
     validate_id("projectId", &project_id)?;
     let id = manifest.get("id").and_then(|v| v.as_str()).ok_or("manifest has no id")?;
     validate_id("plugin id", id)?;
-    // The webview only names the plugin; the command comes from the omni-plugin.json that was written to disk.
+    // The webview only names the plugin; the command comes from the pear-plugin.json that was written to disk.
     let base = app_data(&app)?;
     let dir = plugin_dir(&base, &project_id, id);
-    let on_disk = std::fs::read_to_string(dir.join("omni-plugin.json")).map_err(|e| format!("plugin {id} is not installed: {e}"))?;
+    let on_disk = std::fs::read_to_string(dir.join("pear-plugin.json")).map_err(|e| format!("plugin {id} is not installed: {e}"))?;
     let (command, args, port) = runtime_spec(&on_disk)?;
 
     let key = (project_id.clone(), id.to_string());
@@ -212,8 +212,8 @@ pub fn start_runtime(
     let mut cmd = Command::new(&command);
     cmd.args(args)
         .current_dir(dir)
-        .env("OMNI_PLUGIN_PORT", port.to_string())
-        .env("OMNI_PROJECT_DIR", project_dir(&base, &project_id))
+        .env("PEAR_PLUGIN_PORT", port.to_string())
+        .env("PEAR_PROJECT_DIR", project_dir(&base, &project_id))
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null());
@@ -267,7 +267,7 @@ mod tests {
         for bad in ["/etc/passwd", "\\evil", "C:\\evil.txt", "C:/evil.txt", "../x", "a/../../x", "a\\..\\x", "", "a//b"] {
             assert!(validate_relative_path(bad).is_err(), "{bad} should be rejected");
         }
-        for good in ["omni-plugin.json", "runtime/server.py", "skills/omni-scripting/SKILL.md"] {
+        for good in ["pear-plugin.json", "runtime/server.py", "skills/pear-scripting/SKILL.md"] {
             assert!(validate_relative_path(good).is_ok(), "{good} should be accepted");
         }
     }
@@ -305,26 +305,26 @@ mod tests {
 
     #[test]
     fn writes_bundle_into_project_plugin_dir() {
-        let base = std::env::temp_dir().join(format!("omni-plugins-test-{}", std::process::id()));
-        let files = bundle(&[("omni-plugin.json", r#"{"id":"demo-plugin"}"#), ("runtime/server.py", "print(1)")]);
+        let base = std::env::temp_dir().join(format!("pear-plugins-test-{}", std::process::id()));
+        let files = bundle(&[("pear-plugin.json", r#"{"id":"demo-plugin"}"#), ("runtime/server.py", "print(1)")]);
         let dir = write_bundle(&base, "proj-1", &files).unwrap();
-        assert_eq!(dir, base.join("omni").join("projects").join("proj-1").join("plugins").join("demo-plugin"));
+        assert_eq!(dir, base.join("pear").join("projects").join("proj-1").join("plugins").join("demo-plugin"));
         assert_eq!(std::fs::read_to_string(dir.join("runtime").join("server.py")).unwrap(), "print(1)");
-        assert_eq!(project_dir(&base, "proj-1"), base.join("omni").join("projects").join("proj-1"));
+        assert_eq!(project_dir(&base, "proj-1"), base.join("pear").join("projects").join("proj-1"));
         // Reinstall without runtime/server.py: the stale file is gone.
-        write_bundle(&base, "proj-1", &bundle(&[("omni-plugin.json", r#"{"id":"demo-plugin"}"#)])).unwrap();
+        write_bundle(&base, "proj-1", &bundle(&[("pear-plugin.json", r#"{"id":"demo-plugin"}"#)])).unwrap();
         assert!(!dir.join("runtime").join("server.py").exists());
         std::fs::remove_dir_all(&base).unwrap();
     }
 
     #[test]
     fn write_bundle_rejects_bad_input_without_writing() {
-        let base = std::env::temp_dir().join(format!("omni-plugins-test-bad-{}", std::process::id()));
+        let base = std::env::temp_dir().join(format!("pear-plugins-test-bad-{}", std::process::id()));
         let manifest = r#"{"id":"demo-plugin"}"#;
-        assert!(write_bundle(&base, "proj-1", &bundle(&[("omni-plugin.json", manifest), ("../x", "")])).is_err());
+        assert!(write_bundle(&base, "proj-1", &bundle(&[("pear-plugin.json", manifest), ("../x", "")])).is_err());
         assert!(write_bundle(&base, "proj-1", &bundle(&[("a.txt", "")])).is_err());
-        assert!(write_bundle(&base, "proj-1", &bundle(&[("omni-plugin.json", r#"{"id":"../x"}"#)])).is_err());
-        assert!(write_bundle(&base, "../p", &bundle(&[("omni-plugin.json", manifest)])).is_err());
+        assert!(write_bundle(&base, "proj-1", &bundle(&[("pear-plugin.json", r#"{"id":"../x"}"#)])).is_err());
+        assert!(write_bundle(&base, "../p", &bundle(&[("pear-plugin.json", manifest)])).is_err());
         assert!(!base.exists());
     }
 
@@ -350,7 +350,7 @@ mod tests {
     #[test]
     fn verified_tarball_reads_and_any_tamper_is_refused() {
         let manifest = br#"{"id":"demo-plugin","version":"1.0.0"}"#;
-        let (bytes, release) = signed(&[("omni-plugin.json", manifest), ("uv.lock", b"lock"), (".python-version", b"3.12")], "demo-plugin", "1.0.0");
+        let (bytes, release) = signed(&[("pear-plugin.json", manifest), ("uv.lock", b"lock"), (".python-version", b"3.12")], "demo-plugin", "1.0.0");
         let files = verify_and_read(&bytes, &release).unwrap();
         assert_eq!(files["uv.lock"], b"lock");
         assert!(files.contains_key(".python-version"));
@@ -374,7 +374,7 @@ mod tests {
 
     #[test]
     fn signed_tarball_with_traversal_or_wrong_manifest_is_refused() {
-        let (bytes, release) = signed(&[("omni-plugin.json", br#"{"id":"other","version":"1.0.0"}"#)], "demo-plugin", "1.0.0");
+        let (bytes, release) = signed(&[("pear-plugin.json", br#"{"id":"other","version":"1.0.0"}"#)], "demo-plugin", "1.0.0");
         assert!(verify_and_read(&bytes, &release).unwrap_err().contains("does not match"));
         let mut tar = tar::Builder::new(flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::fast()));
         let mut h = tar::Header::new_gnu();

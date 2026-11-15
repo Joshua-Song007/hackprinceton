@@ -51,4 +51,4 @@ UI scale (90 to 200%), editor font size, theme (dark, light, high contrast), red
 
 ## Files
 
-Save writes a `*.omni.json` file (scene plus all scripts). The browser keeps an autosaved recovery copy, but a file is the durable copy.
+Save writes a `*.pear.json` file (scene plus all scripts). The browser keeps an autosaved recovery copy, but a file is the durable copy.

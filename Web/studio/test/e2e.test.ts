@@ -1,18 +1,18 @@
 // Headless end-to-end: Flagship template -> Run local (sim devices -> InputBus -> events -> sandbox worker) -> player.js runs.
-// The server part runs only against a live backend (OMNI_E2E_URL=http://localhost:8080, backend started with OMNI_DEV_SIGNIN=1).
+// The server part runs only against a live backend (PEAR_E2E_URL=http://localhost:8080, backend started with PEAR_DEV_SIGNIN=1).
 import { Worker } from 'node:worker_threads';
 import { afterEach, describe, expect, it } from 'vitest';
-import { CloudClient } from '@omni/cloud';
-import { ScriptSandbox, type WorkerLike } from '@omni/script';
+import { CloudClient } from '@pear/cloud';
+import { ScriptSandbox, type WorkerLike } from '@pear/script';
 import { DebugStore } from '../src/debug-panel';
 import { Project, templateSnapshot } from '../src/project';
 import { LocalRun, type EffectOutput } from '../src/run';
 
-// A real worker thread running the sandbox evaluator (same adapter shape as packages/omni-script/test).
+// A real worker thread running the sandbox evaluator (same adapter shape as packages/pear-script/test).
 class NodeWorkerLike implements WorkerLike {
   onmessage: WorkerLike['onmessage'] = null;
   onerror: WorkerLike['onerror'] = null;
-  private worker = new Worker(new URL('../../packages/omni-script/test/node-worker.ts', import.meta.url), { execArgv: ['--experimental-strip-types'] }); // Node < 22.18 does not strip TS types by default
+  private worker = new Worker(new URL('../../packages/pear-script/test/node-worker.ts', import.meta.url), { execArgv: ['--experimental-strip-types'] }); // Node < 22.18 does not strip TS types by default
   constructor() {
     this.worker.on('message', (data) => this.onmessage?.({ data }));
     this.worker.on('error', (e) => this.onerror?.({ message: e.message }));
@@ -103,7 +103,7 @@ describe('Run local against Games/Flagship', () => {
   });
 });
 
-const url = process.env.OMNI_E2E_URL;
+const url = process.env.PEAR_E2E_URL;
 
 describe.skipIf(!url)('Run on server against a live backend', () => {
   it('signs in, publishes, joins /play and banish x3 gives round: won in the debug state', async () => {

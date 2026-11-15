@@ -1,4 +1,4 @@
-"""Pure translation of Deep Agents stream chunks into Omni panel events (without the prompt id)."""
+"""Pure translation of Deep Agents stream chunks into Pear panel events (without the prompt id)."""
 from pathlib import Path
 
 SCRIPT_TOOLS = {"write_file", "edit_file"}

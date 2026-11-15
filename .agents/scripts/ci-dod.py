@@ -25,9 +25,9 @@ if not number:
     raise SystemExit('V2 PR has no exact Closes #<issue> marker')
 repo = event['repository']['full_name']
 issue = a.api(f'repos/{repo}/issues/{number[1]}')
-author = os.environ.get('OMNI_ORCHESTRATOR_LOGIN', '')
+author = os.environ.get('PEAR_ORCHESTRATOR_LOGIN', '')
 if not author or issue['user']['login'].lower() != author.lower():
-    raise SystemExit('Set repository variable OMNI_ORCHESTRATOR_LOGIN; brief must be authored by that identity')
+    raise SystemExit('Set repository variable PEAR_ORCHESTRATOR_LOGIN; brief must be authored by that identity')
 b = a.brief(issue['body'])
 if b['platform'] == 'macos' and sys.platform != 'darwin':
     raise SystemExit('macOS brief requires a macOS runner; restore PLATFORM: macos in the PR body')

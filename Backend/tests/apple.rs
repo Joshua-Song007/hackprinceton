@@ -11,18 +11,18 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use axum::Router;
 use jsonwebtoken::jwk::JwkSet;
 use jsonwebtoken::{encode, Algorithm, DecodingKey, EncodingKey, Header};
-use omni_backend::api::apple::{routes_with, AppleKeys, AppleVerifier, HttpAppleKeys, KeyError, KeyFuture};
-use omni_backend::api::{accounts, library};
-use omni_backend::db::Db;
-use omni_backend::memstore::MemStore;
-use omni_backend::AppState;
+use pear_backend::api::apple::{routes_with, AppleKeys, AppleVerifier, HttpAppleKeys, KeyError, KeyFuture};
+use pear_backend::api::{accounts, library};
+use pear_backend::db::Db;
+use pear_backend::memstore::MemStore;
+use pear_backend::AppState;
 use serde_json::{json, Value};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 const KID: &str = "test-key-1";
 const ISS: &str = "https://appleid.apple.com";
-const AUD: &str = "com.omni.player";
-const MAC_AUD: &str = "com.omni.mac";
+const AUD: &str = "com.pear.player";
+const MAC_AUD: &str = "com.pear.mac";
 /// Modulus of the test key, base64url (the JWK `n`); the exponent is 65537 ("AQAB").
 const MODULUS: &str = "0CqvGhV5N5vSQcuH1q17_KKdYYj2Skc8QTwtZ6t0DQH8NBXONZdshN8HJO-viQ10SJVYHtLpayp2fK76FeEXbLHCpzoy7lB51idjRaomFyqYUwHk07Xn4Iiz0ajO6oypDrStT9CyTfvTFjHJEoiaChuPkdlqbb8oKnyKHIDIP5wRWlJrQWOi24RWyU14XVGSYqEwne1pjZYzWL5NLMRjRbthvs_ByeP-Lv34wpkjdLG0xz8n6VD6gf0EadXuQNan6NVFQCsuGz4TNb-PPLGzCMgNlVGAEWhoniP1JTQ5k518v7McuU0TvTmtQ93T0VQJR4CDGhie4uv2cBtKoxyt7Q";
 /// PKCS#1 DER of the test key's private half, hex.

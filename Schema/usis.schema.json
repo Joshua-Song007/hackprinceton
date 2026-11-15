@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://omni.local/schema/usis.schema.json",
+  "$id": "https://pear.local/schema/usis.schema.json",
   "title": "USIS v1 packet",
   "description": "Universal Spatial Input Schema v1. One packet per device sample; only changed channels are present.",
   "type": "object",

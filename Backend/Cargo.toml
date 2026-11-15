@@ -1,5 +1,5 @@
 [package]
-name = "omni-backend"
+name = "pear-backend"
 version = "0.1.0"
 edition = "2021"
 publish = false

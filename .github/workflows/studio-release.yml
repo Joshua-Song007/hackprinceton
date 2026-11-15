@@ -1,4 +1,4 @@
-# Builds Omni Studio desktop installers on a `studio-v*` tag push (or manually) and
+# Builds Pear Studio desktop installers on a `studio-v*` tag push (or manually) and
 # attaches them plus the updater manifest (latest.json) to a GitHub Release.
 # Code-signing certificates are a human purchase: without the secrets the build still
 # runs and the artifacts are unsigned (flagged with a ::warning::).
@@ -69,7 +69,7 @@ jobs:
         with:
           projectPath: Web/studio
           tagName: ${{ github.ref_name }}
-          releaseName: Omni Studio __VERSION__
+          releaseName: Pear Studio __VERSION__
           releaseDraft: false
           includeUpdaterJson: true
           args: ${{ matrix.args }}

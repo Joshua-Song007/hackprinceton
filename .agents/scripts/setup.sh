@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Installs and checks everything the Omni agent loop needs on this laptop. Idempotent: run it again any time.
+# Installs and checks everything the Pear agent loop needs on this laptop. Idempotent: run it again any time.
 # usage: .agents/scripts/setup.sh <laptop-name> [--check]
 #   --check  report only, install nothing
 # macOS uses Homebrew (installed if missing, via Homebrew's official installer); Windows (Git Bash) uses winget.
@@ -22,7 +22,7 @@ need() {   # need <command> <brew package> <winget id>
 }
 pyok() { for c in $([ "$plat" = win ] && echo "python python3" || echo "python3 python"); do "$c" -c 'import json' >/dev/null 2>&1 && return 0; done; return 1; }   # on Windows python3 is often a Store stub, so try python first
 
-echo "Omni setup for '$laptop' on $plat ($mode)"
+echo "Pear setup for '$laptop' on $plat ($mode)"
 if [ "$plat" = mac ]; then
   echo "[toolchain]"
   if ! have brew; then
@@ -66,7 +66,7 @@ echo "[logins]"
 gh auth status >/dev/null 2>&1 && ok "gh logged in" || bad "gh not logged in: run  gh auth login  (scope: repo)"
 if have claude && have jq; then claude -p "reply ok" --model claude-haiku-5-5 --max-turns 1 --max-budget-usd 0.05 --output-format json 2>/dev/null | jq -e '.is_error == false' >/dev/null 2>&1 && ok "claude logged in" || bad "claude not logged in: start  claude  once and sign in"; fi
 echo "[repo]"
-case "$PWD" in *OneDrive*|*iCloud*|*Dropbox*|*Mobile\ Documents*) bad "repo is inside a synced folder ($PWD): clone it elsewhere, e.g. ~/hack/omni";; *) ok "repo location";; esac
+case "$PWD" in *OneDrive*|*iCloud*|*Dropbox*|*Mobile\ Documents*) bad "repo is inside a synced folder ($PWD): clone it elsewhere, e.g. ~/hack/pear";; *) ok "repo location";; esac
 echo
-if [ "${#miss[@]}" -eq 0 ]; then echo "READY. Add to your shell profile:  export OMNI_LAPTOP=$laptop"; echo "Start the loop (inside tmux on a Mac):  caffeinate -i env OMNI_LAPTOP=$laptop .agents/scripts/loop.sh"; exit 0
+if [ "${#miss[@]}" -eq 0 ]; then echo "READY. Add to your shell profile:  export PEAR_LAPTOP=$laptop"; echo "Start the loop (inside tmux on a Mac):  caffeinate -i env PEAR_LAPTOP=$laptop .agents/scripts/loop.sh"; exit 0
 else echo "NOT READY. ${#miss[@]} item(s) missing:"; printf '  - %s\n' "${miss[@]}"; exit 1; fi

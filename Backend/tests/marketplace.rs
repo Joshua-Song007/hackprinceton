@@ -1,16 +1,16 @@
 // Marketplace (Phase 10) end to end over HTTP: seed job, signed tarball bundles, authenticated publish
 // with review, per-account installs, model keys and the hosted agent proxy. Runs against the in-memory
 // store, then against Postgres when DATABASE_URL is set.
-// One test fn on purpose: it sets env vars (OMNI_DEV_SIGNIN, reviewers, runtime URL), and set_var must
+// One test fn on purpose: it sets env vars (PEAR_DEV_SIGNIN, reviewers, runtime URL), and set_var must
 // not race other test threads.
 use ed25519_dalek::{Signature, Verifier, VerifyingKey};
 use futures_util::{SinkExt, StreamExt};
-use omni_backend::api::marketplace::seed;
-use omni_backend::app_with_studio;
-use omni_backend::bundle::{build_tarball, read_tarball, Files};
-use omni_backend::crypto::{secret_box, signed_message};
-use omni_backend::db::{self, Db};
-use omni_backend::memstore::MemStore;
+use pear_backend::api::marketplace::seed;
+use pear_backend::app_with_studio;
+use pear_backend::bundle::{build_tarball, read_tarball, Files};
+use pear_backend::crypto::{secret_box, signed_message};
+use pear_backend::db::{self, Db};
+use pear_backend::memstore::MemStore;
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use tokio_tungstenite::tungstenite::Message;
@@ -57,7 +57,7 @@ fn nonce() -> u128 {
 
 fn plugin_files(id: &str, version: &str, extra: &str) -> Files {
     let manifest = json!({"id": id, "name": "Tool", "version": version, "author": "A", "category": "agents", "description": extra});
-    [("omni-plugin.json".to_string(), manifest.to_string().into_bytes()), ("main.py".to_string(), extra.as_bytes().to_vec())]
+    [("pear-plugin.json".to_string(), manifest.to_string().into_bytes()), ("main.py".to_string(), extra.as_bytes().to_vec())]
         .into_iter()
         .collect()
 }
@@ -102,10 +102,10 @@ async fn scenario(db: Db) {
 
     // 10.1 seed job: one plugin dir (with uv.lock-sized file, a dotfile and a skipped .venv); a second run changes nothing.
     let seeded = format!("seeded-{n}");
-    let seed_dir = std::env::temp_dir().join(format!("omni-seed-{n}"));
+    let seed_dir = std::env::temp_dir().join(format!("pear-seed-{n}"));
     let pdir = seed_dir.join(&seeded);
     for (rel, data) in [
-        ("omni-plugin.json", json!({"id": seeded, "name": "Seeded", "version": "0.1.0", "author": "Omni", "category": "agents", "description": "d"}).to_string().into_bytes()),
+        ("pear-plugin.json", json!({"id": seeded, "name": "Seeded", "version": "0.1.0", "author": "Pear", "category": "agents", "description": "d"}).to_string().into_bytes()),
         ("uv.lock", vec![b'l'; 500 * 1024]),
         (".python-version", b"3.12\n".to_vec()),
         (".venv/lib/x.py", b"skip".to_vec()),
@@ -115,7 +115,7 @@ async fn scenario(db: Db) {
         std::fs::write(p, data).unwrap();
     }
     std::fs::create_dir_all(seed_dir.join("bad-plugin")).unwrap();
-    std::fs::write(seed_dir.join("bad-plugin/omni-plugin.json"), json!({"id": "Bad_Id", "version": "1.0.0"}).to_string()).unwrap();
+    std::fs::write(seed_dir.join("bad-plugin/pear-plugin.json"), json!({"id": "Bad_Id", "version": "1.0.0"}).to_string()).unwrap();
     assert_eq!(seed(&db, &seed_dir).await, (1, 0, 1));
     let before = db::latest_plugin_version(&db, &seeded, false).await.unwrap().unwrap();
     assert_eq!(seed(&db, &seed_dir).await, (0, 1, 1));
@@ -138,7 +138,7 @@ async fn scenario(db: Db) {
     let sig = Signature::from_bytes(&hex::decode(rel["signature"].as_str().unwrap()).unwrap().try_into().unwrap());
     assert!(vk.verify(signed_message(&seeded, "0.1.0", &sha).as_bytes(), &sig).is_ok());
     let files = read_tarball(&tarball).unwrap();
-    assert_eq!(files.keys().map(String::as_str).collect::<Vec<_>>(), [".python-version", "omni-plugin.json", "uv.lock"]);
+    assert_eq!(files.keys().map(String::as_str).collect::<Vec<_>>(), [".python-version", "pear-plugin.json", "uv.lock"]);
     assert_eq!(files["uv.lock"].len(), 500 * 1024);
 
     // 10.4 installs per account: reinstall counts once, uninstall lowers the count; 10.5 /api/me/plugins.
@@ -189,7 +189,7 @@ async fn scenario(db: Db) {
         async move { api.json("POST", &path, Some(&tok), Some(body)).await.0 }
     };
     assert_eq!(review(bob.clone(), "1.0.0", "approved").await, 403);
-    std::env::set_var("OMNI_PLUGIN_REVIEWERS", format!("someone,{bob_id}"));
+    std::env::set_var("PEAR_PLUGIN_REVIEWERS", format!("someone,{bob_id}"));
     assert_eq!(review(bob.clone(), "1.0.0", "maybe").await, 400);
     assert_eq!(review(bob.clone(), "3.0.0", "approved").await, 404);
     assert_eq!(review(bob.clone(), "1.0.0", "approved").await, 200);
@@ -212,8 +212,8 @@ async fn scenario(db: Db) {
 
     // 10.6 hosted runtime proxy: auth required; the runtime sees the secret, account, project and only that account's key.
     let (runtime, mut seen) = fake_runtime().await;
-    std::env::set_var("OMNI_AGENT_RUNTIME_URL", &runtime);
-    std::env::set_var("OMNI_RUNTIME_SECRET", "runtime-secret");
+    std::env::set_var("PEAR_AGENT_RUNTIME_URL", &runtime);
+    std::env::set_var("PEAR_RUNTIME_SECRET", "runtime-secret");
     let ws_base = api.base.replacen("http", "ws", 1);
     assert!(tokio_tungstenite::connect_async(format!("{ws_base}/agent/ws?project=p1")).await.is_err(), "no token");
     for (tok, id, key) in [(&alice, &alice_id, Some("sk-ant-secret-1")), (&bob, &bob_id, None)] {
@@ -224,12 +224,12 @@ async fn scenario(db: Db) {
         let h = seen.recv().await.unwrap();
         let get = |k: &str| h.iter().find(|(n, _)| n == k).map(|(_, v)| v.as_str());
         assert_eq!(get("authorization"), Some("Bearer runtime-secret"));
-        assert_eq!(get("x-omni-account"), Some(id.as_str()));
-        assert_eq!(get("x-omni-project"), Some("p1"));
-        assert_eq!(get("x-omni-model-key"), key);
+        assert_eq!(get("x-pear-account"), Some(id.as_str()));
+        assert_eq!(get("x-pear-project"), Some("p1"));
+        assert_eq!(get("x-pear-model-key"), key);
     }
     assert_eq!(api.send("GET", "/agent/ws?token=x&project=..", Some(&alice), None).await.0, 400);
-    std::env::remove_var("OMNI_AGENT_RUNTIME_URL");
+    std::env::remove_var("PEAR_AGENT_RUNTIME_URL");
 
     for (method, path) in [("GET", "/api/plugins/nope"), ("GET", "/api/plugins/nope/bundle"), ("POST", "/api/plugins/nope/installs")] {
         let (st, body) = api.json(method, path, Some(&alice), None).await;
@@ -239,7 +239,7 @@ async fn scenario(db: Db) {
 
 #[tokio::test]
 async fn marketplace_against_memory_then_postgres() {
-    std::env::set_var("OMNI_DEV_SIGNIN", "1");
+    std::env::set_var("PEAR_DEV_SIGNIN", "1");
     scenario(Db::Mem(MemStore::default())).await;
     let Ok(url) = std::env::var("DATABASE_URL") else {
         eprintln!("DATABASE_URL unset: Postgres part skipped");

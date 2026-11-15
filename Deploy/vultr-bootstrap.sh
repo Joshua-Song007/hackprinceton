@@ -1,21 +1,21 @@
 #!/usr/bin/env bash
-# Deploys Omni (backend + Studio + Caddy) on a fresh Vultr Ubuntu 24.04 instance. Run as root:
+# Deploys Pear (backend + Studio + Caddy) on a fresh Vultr Ubuntu 24.04 instance. Run as root:
 #   ssh -t root@<ip> 'curl -fsSL https://raw.githubusercontent.com/Joshua-Song007/hackprinceton/main/Deploy/vultr-bootstrap.sh | bash'
 # or:  bash vultr-bootstrap.sh [repo-url]
 # Re-run = update: git pull, rebuild, restart. An existing Deploy/.env is kept as is
 # (delete it to be asked again).
-# Settings come from the environment or a prompt: OMNI_DOMAIN (DNS name, or empty for this
+# Settings come from the environment or a prompt: PEAR_DOMAIN (DNS name, or empty for this
 # server's IP), DATABASE_URL (empty = Postgres in Docker, the `localdb` profile),
-# OMNI_DEV_SIGNIN (1 lets anyone create an account; needed for demo.sh, keep 0 otherwise).
-# OMNI_APPLE_AUDIENCES (comma-separated app bundle ids for Sign in with Apple; empty = that route answers 503).
-# Marketplace: OMNI_PLUGIN_SIGNING_KEY, OMNI_SECRET_KEY and OMNI_RUNTIME_SECRET are generated once and
+# PEAR_DEV_SIGNIN (1 lets anyone create an account; needed for demo.sh, keep 0 otherwise).
+# PEAR_APPLE_AUDIENCES (comma-separated app bundle ids for Sign in with Apple; empty = that route answers 503).
+# Marketplace: PEAR_PLUGIN_SIGNING_KEY, PEAR_SECRET_KEY and PEAR_RUNTIME_SECRET are generated once and
 # appended to .env when missing (keep them: changing them breaks bundle signatures / stored model keys).
-# OMNI_S3_* (Vultr Object Storage) are added to .env by hand; with them set, each run ends with the
+# PEAR_S3_* (Vultr Object Storage) are added to .env by hand; with them set, each run ends with the
 # plugin seed job (publishes Plugins/*, a no-op when nothing changed).
 set -euo pipefail
 
-REPO_URL="${1:-${OMNI_REPO_URL:-https://github.com/Joshua-Song007/hackprinceton}}"
-DIR="${OMNI_DIR:-/opt/omni}"
+REPO_URL="${1:-${PEAR_REPO_URL:-https://github.com/Joshua-Song007/hackprinceton}}"
+DIR="${PEAR_DIR:-/opt/pear}"
 
 [ "$(id -u)" -eq 0 ] || { echo "Run as root (ssh root@<ip>)." >&2; exit 1; }
 
@@ -49,8 +49,8 @@ fi
 if [ -d "$DIR/.git" ]; then
   git -C "$DIR" pull --ff-only
   # The pull may have updated this script: run the new copy for the rest (once; the guard stops a loop).
-  if [ -z "${OMNI_BOOTSTRAP_REEXEC:-}" ]; then
-    OMNI_BOOTSTRAP_REEXEC=1 exec bash "$DIR/Deploy/vultr-bootstrap.sh" "$@"
+  if [ -z "${PEAR_BOOTSTRAP_REEXEC:-}" ]; then
+    PEAR_BOOTSTRAP_REEXEC=1 exec bash "$DIR/Deploy/vultr-bootstrap.sh" "$@"
   fi
 else
   command -v git >/dev/null 2>&1 || { apt-get update -qq && apt-get install -y -qq git; }
@@ -61,35 +61,35 @@ cd "$DIR/Deploy"
 if [ -f .env ]; then
   echo "Keeping existing $DIR/Deploy/.env"
   # Added after the first deploy: append it when given and not yet in .env.
-  if [ -n "${OMNI_APPLE_AUDIENCES:-}" ] && ! grep -q '^OMNI_APPLE_AUDIENCES=' .env; then
-    echo "OMNI_APPLE_AUDIENCES=$OMNI_APPLE_AUDIENCES" >> .env
+  if [ -n "${PEAR_APPLE_AUDIENCES:-}" ] && ! grep -q '^PEAR_APPLE_AUDIENCES=' .env; then
+    echo "PEAR_APPLE_AUDIENCES=$PEAR_APPLE_AUDIENCES" >> .env
   fi
 else
-  ask OMNI_DOMAIN "Domain pointing at this server (empty = use this server's IP, self-signed certificate)"
+  ask PEAR_DOMAIN "Domain pointing at this server (empty = use this server's IP, self-signed certificate)"
   ask DATABASE_URL "Postgres URL (empty = Postgres in Docker)" secret
-  ask OMNI_DEV_SIGNIN "Enable dev sign-in, 1 or 0 (1 lets anyone create an account) [0]"
-  OMNI_DEV_SIGNIN="${OMNI_DEV_SIGNIN:-0}"
-  ask OMNI_APPLE_AUDIENCES "Sign in with Apple bundle ids, comma-separated (empty = Apple sign-in off)"
-  if [ -z "${OMNI_DOMAIN:-}" ]; then
-    OMNI_DOMAIN="$(curl -fsS https://api.ipify.org 2>/dev/null || hostname -I | awk '{print $1}')"
+  ask PEAR_DEV_SIGNIN "Enable dev sign-in, 1 or 0 (1 lets anyone create an account) [0]"
+  PEAR_DEV_SIGNIN="${PEAR_DEV_SIGNIN:-0}"
+  ask PEAR_APPLE_AUDIENCES "Sign in with Apple bundle ids, comma-separated (empty = Apple sign-in off)"
+  if [ -z "${PEAR_DOMAIN:-}" ]; then
+    PEAR_DOMAIN="$(curl -fsS https://api.ipify.org 2>/dev/null || hostname -I | awk '{print $1}')"
   fi
 
   umask 077
   {
-    echo "OMNI_DOMAIN=$OMNI_DOMAIN"
-    echo "OMNI_DEV_SIGNIN=$OMNI_DEV_SIGNIN"
-    echo "OMNI_APPLE_AUDIENCES=${OMNI_APPLE_AUDIENCES:-}"
+    echo "PEAR_DOMAIN=$PEAR_DOMAIN"
+    echo "PEAR_DEV_SIGNIN=$PEAR_DEV_SIGNIN"
+    echo "PEAR_APPLE_AUDIENCES=${PEAR_APPLE_AUDIENCES:-}"
     # An IP cannot get a public certificate: Caddy's internal CA signs it instead.
-    case "$OMNI_DOMAIN" in
-      *[!0-9.]* ) case "$OMNI_DOMAIN" in *:*) echo "OMNI_CADDY_GLOBAL=local_certs" ;; esac ;;
-      * ) echo "OMNI_CADDY_GLOBAL=local_certs" ;;
+    case "$PEAR_DOMAIN" in
+      *[!0-9.]* ) case "$PEAR_DOMAIN" in *:*) echo "PEAR_CADDY_GLOBAL=local_certs" ;; esac ;;
+      * ) echo "PEAR_CADDY_GLOBAL=local_certs" ;;
     esac
     if [ -n "${DATABASE_URL:-}" ]; then
       echo "DATABASE_URL=$DATABASE_URL"
     else
       pw="$(head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n')"
       echo "POSTGRES_PASSWORD=$pw"
-      echo "DATABASE_URL=postgres://omni:$pw@postgres:5432/omni"
+      echo "DATABASE_URL=postgres://pear:$pw@postgres:5432/pear"
       echo "COMPOSE_PROFILES=localdb"
     fi
   } > .env
@@ -97,7 +97,7 @@ else
 fi
 
 # Server keys for the marketplace, generated on this box once.
-for key in OMNI_PLUGIN_SIGNING_KEY OMNI_SECRET_KEY OMNI_RUNTIME_SECRET; do
+for key in PEAR_PLUGIN_SIGNING_KEY PEAR_SECRET_KEY PEAR_RUNTIME_SECRET; do
   if ! grep -q "^$key=" .env; then
     echo "$key=$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')" >> .env
   fi
@@ -105,10 +105,10 @@ done
 
 docker compose up -d --build
 docker compose ps
-if grep -q '^OMNI_S3_BUCKET=.' .env; then
-  docker compose run --rm backend /app/omni-backend seed /app/Plugins
+if grep -q '^PEAR_S3_BUCKET=.' .env; then
+  docker compose run --rm backend /app/pear-backend seed /app/Plugins
 else
-  echo "OMNI_S3_* not in .env: plugin bundles are not seeded (see the marketplace notes at the top)"
+  echo "PEAR_S3_* not in .env: plugin bundles are not seeded (see the marketplace notes at the top)"
 fi
-domain="$(grep '^OMNI_DOMAIN=' .env | cut -d= -f2-)"
-echo "Omni is up: https://$domain  (Studio at /, downloads at /download, health at /health)"
+domain="$(grep '^PEAR_DOMAIN=' .env | cut -d= -f2-)"
+echo "Pear is up: https://$domain  (Studio at /, downloads at /download, health at /health)"

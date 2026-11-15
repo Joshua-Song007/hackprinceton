@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
     <key>CFBundleIdentifier</key>
-    <string>local.omni.airpodsprobe</string>
+    <string>local.pear.airpodsprobe</string>
     <key>CFBundleExecutable</key>
     <string>AirPodsProbe</string>
     <key>CFBundlePackageType</key>
@@ -13,6 +13,6 @@
     <key>CFBundleName</key>
     <string>AirPodsProbe</string>
     <key>NSMotionUsageDescription</key>
-    <string>Reads AirPods head motion to verify Omni input.</string>
+    <string>Reads AirPods head motion to verify Pear input.</string>
 </dict>
 </plist>

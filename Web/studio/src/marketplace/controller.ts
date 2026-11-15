@@ -142,7 +142,7 @@ export class MarketplaceController {
   }
 
   private get storageKey(): string {
-    return `omni.studio.plugins.${this.deps.projectId()}`;
+    return `pear.studio.plugins.${this.deps.projectId()}`;
   }
 
   private read(): Record<string, StoredPlugin> {
