@@ -2,7 +2,11 @@
 // Dragging a marker reports the new position; setPosition moves a marker when a frame carries lat/lng.
 import * as maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
+// v6 finds its worker next to the bundled module, which Vite moves (dev pre-bundle, build chunk): point it at the asset URL. The worker file is self-contained.
+import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url';
 import { el } from '../ui';
+
+maplibregl.setWorkerUrl(workerUrl);
 
 export interface LatLng { lat: number; lng: number }
 

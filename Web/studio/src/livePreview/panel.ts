@@ -136,7 +136,7 @@ export function createLivePreviewPanel(account: AccountController): PanelView {
       d.uiRef = ui.kind;
       d.screen.replaceChildren(ui.kind === 'loading'
         ? emptyState('Loading the game UI…')
-        : emptyState('No ui.json for this game yet', `${ui.reason} Publish a version that includes a ui.json asset (or let the agent build one), then press Connect.`));
+        : emptyState('No ui.json for this game yet', `${ui.reason} Publish a version with one and press Connect, or try a file with Local ui.json….`));
     }
     if (s.position) map.setPosition(d.spec.id, s.position);
     setStatus();
