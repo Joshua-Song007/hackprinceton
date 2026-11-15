@@ -207,6 +207,12 @@ Goal: updating a game from Studio never needs a Vultr refresh; one Publish uploa
 
 Not planned: a general UI description language beyond the Quick Draw and Hot Potato widget set; Studio-hosted agent runners in a live lobby; recorded audio pipeline (cues stay synthesized); collaborative editing (Phase 6).
 
+### Phase 13 dispatch (2026-11-15 04:45, remote Windows workers via assigned `ready` issues)
+- Jacob: #194 runtime members + per-player send → #208 13.7 publish gate → #209 session upgrade/ghost kick → #210 Flagship spec, smoke-game, preflight, /api/version → #215 Backend conformance.
+- Tien: #190 vibe-code run → #203 14.8 game media → #213 conformance fixtures + TS test + scripting-api.md → #211 Deep Agents write safety → #212 gen-skill + evals → #214 cues, check panel, lobby versions.
+- Merged so far: 13.2 pear-check (#205), 13.6 tools.py/translate/version (#201), 13.9 listing backend (#204, migration 0007, existing games stay listed, new games unlisted until published), lobbies panel (#199), publish view check gate (#200), MCP publish lists (#206).
+- Mac-only (this laptop, not dispatched): RaiseDetector.swift, ControllerView/ControllerSession, Cues.swift, PlayerModel manifest launch, ServerScriptEngine.swift members, ConformanceTests.swift, MotionReplay, app test target, DeviceProfile, Playability, GameDetailView.
+
 ### Deferred from Phase 13
 
 Not needed for the first publishable game; none of it is built. Original section numbers are kept so earlier references still hold.
