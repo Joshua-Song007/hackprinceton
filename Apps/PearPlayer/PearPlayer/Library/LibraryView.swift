@@ -441,7 +441,7 @@ private struct GameCard: View {
         VStack(alignment: .leading, spacing: 0) {
             Color.clear
                 .aspectRatio(16 / 10, contentMode: .fit)
-                .overlay { CoverArt(seed: entry.id) }
+                .overlay { CoverArt(seed: entry.id, url: entry.coverURL) }
                 .overlay(alignment: .topLeading) {
                     Text(entry.tierLabel ?? entry.runModeLabel)
                         .font(PearTheme.sans(12, .medium, relativeTo: .caption))
@@ -501,7 +501,7 @@ private struct FeaturedHero: View {
     var body: some View {
         ZStack(alignment: .leading) {
             PearTheme.bgPanel
-            CoverArt(seed: entry.id)
+            CoverArt(seed: entry.id, url: entry.coverURL)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .mask(LinearGradient(
                     stops: [.init(color: .clear, location: compact ? 0.1 : 0.3), .init(color: .black, location: 1)],

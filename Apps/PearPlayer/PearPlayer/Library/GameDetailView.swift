@@ -32,7 +32,7 @@ struct GameDetailView: View {
         let playability = model.playability(of: entry)
         ScrollView {
             VStack(alignment: .leading, spacing: PearTheme.Space.s6) {
-                CoverArt(seed: entry.id)
+                CoverArt(seed: entry.id, url: entry.coverURL)
                     .frame(height: wide ? 440 : 300)
                     .frame(maxWidth: .infinity)
                     .overlay(alignment: .bottomLeading) {
@@ -70,6 +70,7 @@ struct GameDetailView: View {
                     : AnyLayout(VStackLayout(alignment: .leading, spacing: PearTheme.Space.s6))
                 columns {
                 VStack(alignment: .leading, spacing: PearTheme.Space.s6) {
+                if !entry.description.isEmpty { descriptionBlock }
                 VStack(alignment: .leading, spacing: PearTheme.Space.s3) {
                     if playability.isPlayable, phoneOnly == true {
                         lobbyChoices
@@ -147,7 +148,7 @@ struct GameDetailView: View {
             .frame(maxWidth: 1100, alignment: .leading)
             .frame(maxWidth: .infinity)
         }
-        .background { PearBackdrop(seed: entry.id) }
+        .background { PearBackdrop(seed: entry.id, cover: entry.coverURL) }
         .task {
             phoneOnly = await model.isPhoneOnly(entry)
             if phoneOnly == true { await refreshLobbies() }
@@ -163,6 +164,42 @@ struct GameDetailView: View {
         #else
         .navigationBarTitleDisplayMode(.inline)
         #endif
+    }
+
+    @State private var descriptionExpanded = false
+    /// Whether the text runs past the collapsed line limit, measured against an unlimited copy.
+    @State private var descriptionTruncates = false
+    private let descriptionLines = 5
+
+    private var descriptionBlock: some View {
+        VStack(alignment: .leading, spacing: PearTheme.Space.s2) {
+            Text(entry.description)
+                .font(PearTheme.sans(17))
+                .foregroundStyle(PearTheme.text)
+                .lineLimit(descriptionExpanded ? nil : descriptionLines)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background {
+                    Text(entry.description)
+                        .font(PearTheme.sans(17))
+                        .fixedSize(horizontal: false, vertical: true)
+                        .hidden()
+                        .background(GeometryReader { full in
+                            Color.clear.preference(key: DescriptionHeightKey.self, value: full.size.height)
+                        })
+                }
+                .onPreferenceChange(DescriptionHeightKey.self) { full in
+                    descriptionTruncates = full > CGFloat(descriptionLines) * 24
+                }
+            if descriptionTruncates {
+                Button(descriptionExpanded ? "Less" : "More") { descriptionExpanded.toggle() }
+                    .buttonStyle(.plain)
+                    .font(PearTheme.sans(16, .semibold))
+                    .foregroundStyle(PearTheme.accent)
+                    .frame(minHeight: 44)
+                    .accessibilityLabel(descriptionExpanded ? "Show less description" : "Show full description")
+            }
+        }
+        .accessibilityElement(children: .contain)
     }
 
     private var isWorking: Bool {
@@ -276,4 +313,9 @@ private struct ColumnLabeledContentStyle: LabeledContentStyle {
                 .foregroundStyle(PearTheme.text)
         }
     }
+}
+
+private struct DescriptionHeightKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
 }
