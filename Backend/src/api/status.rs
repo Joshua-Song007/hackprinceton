@@ -2,6 +2,9 @@
 // With a developer bearer it adds storage_detail {description, probe: {ok, reason?, at} | null}, instances,
 // players, uptime_s and limits. A storage probe runs once at startup (main.rs) and its result is cached;
 // a developer can force a fresh one with ?probe=1. `version` is the crate version plus PEAR_BUILD (git short sha).
+// GET /api/version (public): {version, build, crate, database, migrations: {known, applied, pending}}; the deploy checks it
+// is not behind. `applied` probes the same table/column markers db::migrate uses (there is no migrations table), and is
+// null for the memory store, which has no schema.
 
 use std::sync::{Mutex, OnceLock};
 use std::time::Instant;
@@ -83,6 +86,70 @@ async fn status(State(state): State<AppState>, headers: HeaderMap, RawQuery(quer
     Json(out)
 }
 
+/// Migration files and the schema marker that shows each one ran: ("table", None) or ("table", Some("column")).
+/// Keep in step with Backend/migrations and db::migrate (a test checks the names against the directory).
+const MIGRATIONS: [(&str, &str, Option<&str>); 7] = [
+    ("0001_init", "accounts", None),
+    ("0002_plugins", "plugins", None),
+    ("0003_marketplace_cloud", "plugin_versions", None),
+    ("0004_friends", "friendships", None),
+    ("0005_developer", "accounts", Some("role")),
+    ("0006_sessions", "sessions", None),
+    ("0007_listing", "games", Some("listed")),
+];
+
+async fn applied_migrations(state: &AppState) -> Option<Vec<&'static str>> {
+    let Some(Db::Pg(pool)) = &state.db else { return None };
+    let mut applied = Vec::new();
+    for (name, table, column) in MIGRATIONS {
+        let ran: bool = match column {
+            None => sqlx::query_scalar("SELECT to_regclass($1) IS NOT NULL").bind(format!("public.{table}")).fetch_one(pool).await,
+            Some(c) => sqlx::query_scalar(
+                "SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = $1 AND column_name = $2)",
+            )
+            .bind(table)
+            .bind(c)
+            .fetch_one(pool)
+            .await,
+        }
+        .unwrap_or(false);
+        if ran {
+            applied.push(name);
+        }
+    }
+    Some(applied)
+}
+
+async fn version_info(State(state): State<AppState>) -> Json<Value> {
+    let known: Vec<&str> = MIGRATIONS.iter().map(|m| m.0).collect();
+    let applied = applied_migrations(&state).await;
+    let pending = applied.as_ref().map(|a| known.iter().filter(|k| !a.contains(k)).copied().collect::<Vec<_>>());
+    let database = match &state.db {
+        Some(Db::Pg(_)) => "postgres",
+        Some(Db::Mem(_)) => "memory",
+        None => "none",
+    };
+    let build = std::env::var("PEAR_BUILD").ok().filter(|b| !b.trim().is_empty()).unwrap_or_else(|| "dev".into());
+    Json(json!({
+        "version": version(), "build": build, "crate": env!("CARGO_PKG_VERSION"), "database": database,
+        "migrations": { "known": known, "applied": applied, "pending": pending },
+    }))
+}
+
 pub fn routes() -> Router<AppState> {
-    Router::new().route("/api/status", get(status))
+    Router::new().route("/api/status", get(status)).route("/api/version", get(version_info))
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn migration_list_matches_the_directory() {
+        let mut files: Vec<String> = std::fs::read_dir(concat!(env!("CARGO_MANIFEST_DIR"), "/migrations"))
+            .unwrap()
+            .map(|e| e.unwrap().file_name().to_string_lossy().trim_end_matches(".sql").to_string())
+            .collect();
+        files.sort();
+        let known: Vec<&str> = super::MIGRATIONS.iter().map(|m| m.0).collect();
+        assert_eq!(files, known);
+    }
 }
