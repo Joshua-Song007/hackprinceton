@@ -4,6 +4,7 @@
   "playerOrigin": [0, 1.6, 0],
   "runMode": "screen",
   "inputs": { "gestures": ["tap"], "players": [3, 3] },
+  "gestures": { "raise": { "angleDeg": 80, "hysteresisDeg": 10 } },
   "clientScripts": ["player"],
   "serverScripts": ["game"],
   "entities": [
