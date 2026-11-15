@@ -113,7 +113,7 @@ def test_scripts_mode_still_writes_the_scripts_brief_and_knows_the_instructions_
 
 def test_unknown_mode_is_an_error(tmp_path):
     events = author_events(ScriptedModel(replies=[say("x")]), {}, tmp_path, mode="poetry")
-    assert events == [{"type": "error", "message": "unknown mode 'poetry': use scripts or instructions"}]
+    assert events == [{"type": "error", "message": "unknown mode 'poetry': use scripts, instructions or game"}]
 
 
 def test_the_brief_asks_for_both_a_win_and_a_lose_condition_and_keeps_the_current_lose(tmp_path):

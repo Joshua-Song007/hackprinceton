@@ -5,6 +5,7 @@ requires-python = ">=3.11"
 dependencies = [
     "deepagents==0.7.38",
     "langchain-google-genai>=4.5.0",
+    "langchain-mcp-adapters>=0.3.2",
     "langchain-openai>=1.8.0",
     "websockets",
 ]
