@@ -116,7 +116,7 @@ fi
 
 docker compose up -d --build
 docker compose ps
-if grep -q '^PEAR_S3_BUCKET=.' .env; then
+if grep -qs '^PEAR_S3_BUCKET=.' .env /etc/pear/storage.env; then
   docker compose run --rm backend /app/pear-backend seed /app/Plugins
 else
   echo "PEAR_S3_* not in .env: plugin bundles are not seeded (see the marketplace notes at the top)"

@@ -1,5 +1,7 @@
 // Publishes Games/QuickDraw to a Pear backend and prints the two phone URLs.
-// Usage: node Deploy/publish-quickdraw.mjs [https://host] [gameId]   (needs PEAR_DEV_SIGNIN=1 on the server)
+// Usage: node Deploy/publish-quickdraw.mjs [https://host] [gameId]
+// Signs in with the developer login from env PEAR_DEV_USER / PEAR_DEV_PASSWORD (a developer may publish any game);
+// without them it falls back to the passwordless "quickdraw-owner" dev account (local servers with PEAR_DEV_SIGNIN=1).
 // With a gameId it publishes a new version of that game instead of creating one.
 import fs from "node:fs";
 import path from "node:path";
@@ -23,7 +25,9 @@ const read = (rel) => fs.readFileSync(path.join(dir, rel), "utf8");
 const scene = JSON.parse(read("scene.json"));
 const scripts = (names) => Object.fromEntries(names.map((n) => [n, read(`scripts/${n}.js`)]));
 
-const owner = await api("POST", "/api/accounts/signin", null, { provider: "dev", subject: "quickdraw-owner", display_name: "Quick Draw" });
+const owner = process.env.PEAR_DEV_USER && process.env.PEAR_DEV_PASSWORD
+  ? await api("POST", "/api/accounts/signin", null, { provider: "developer", subject: process.env.PEAR_DEV_USER, password: process.env.PEAR_DEV_PASSWORD })
+  : await api("POST", "/api/accounts/signin", null, { provider: "dev", subject: "quickdraw-owner", display_name: "Quick Draw" });
 const id = existing || (await api("POST", "/api/games", owner.token, { title: "Quick Draw" })).id;
 const v = await api("POST", `/api/games/${id}/versions`, owner.token, {
   scene,
