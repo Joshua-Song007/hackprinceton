@@ -72,13 +72,19 @@ fn parse_version(s: &str) -> Result<Option<i32>, ()> {
 }
 
 /// Run mode is `screen` or `device` (overview.md Module 7); every content part is a JSON object.
+/// A `metadata.manifest` (Phase 13.1) must pass `manifest::validate`; a version without one is still accepted.
 fn valid_version(v: &NewGameVersion) -> bool {
+    let manifest_ok = match v.metadata.get("manifest") {
+        None => true,
+        Some(m) => crate::manifest::validate(m).map_err(|e| eprintln!("games: manifest: {e}")).is_ok(),
+    };
     matches!(v.run_mode.as_str(), "screen" | "device")
         && v.scene.is_object()
         && v.client_scripts.is_object()
         && v.server_scripts.is_object()
         && v.assets.is_object()
         && v.metadata.is_object()
+        && manifest_ok
 }
 
 async fn create_game(
@@ -341,6 +347,19 @@ mod tests {
         let mut bad = nv("screen");
         bad.scene = json!([1]);
         assert!(!valid_version(&bad));
+    }
+
+    #[test]
+    fn manifest_is_optional_but_checked_when_present() {
+        let mut v = nv("device");
+        v.metadata = json!({ "name": "x", "manifest": { "format": "pear-game/1", "name": "Demo", "future": true } });
+        assert!(valid_version(&v));
+        v.metadata = json!({ "manifest": { "format": "pear-game/9", "name": "Demo" } });
+        assert!(!valid_version(&v));
+        v.metadata = json!({ "manifest": "not an object" });
+        assert!(!valid_version(&v));
+        v.metadata = json!({ "manifest": null });
+        assert!(!valid_version(&v));
     }
 
     fn token() -> String {

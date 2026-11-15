@@ -20,9 +20,10 @@ import { placeDevice, previewRig, readPeripheralState } from './peripherals';
 import { createInstructionsPanel } from './instructionsPanel';
 import { createPlaytestPanel } from './playtestPanel';
 import { createTestPanel } from './testPanel';
+import { playingText } from './testStatus';
 import { openPhoneSheet } from './phonePlay';
 import { openNewGameSheet } from './newGame';
-import { walkEntities, Project, TEMPLATES, attachAutosave, limitsText, templateSnapshot, type ProjectSnapshot, type TemplateId } from './project';
+import { walkEntities, Project, TEMPLATES, attachAutosave, templateSnapshot, type ProjectSnapshot, type TemplateId } from './project';
 import { RunController, ViewportHost, createViewportPanel } from './run';
 import { announce, button, el, openMenu, openSheet, promptSheet, rovingToolbar, type MenuItem } from './ui';
 import { installShortcuts, mod, mountMenuBar } from './menubar';
@@ -89,7 +90,7 @@ const panels: PanelSpec[] = [
   { id: 'inspector', title: 'Inspector', create: () => createInspectorPanel(project, selection) },
   { id: 'editor', title: 'Script editor', create: () => createEditorPanel(project, editor) },
   { id: 'console', title: 'Console', create: () => createConsolePanel(debug) },
-  { id: 'test', title: 'Test', create: () => createTestPanel(project, run, () => layout.show('playtest')) },
+  { id: 'test', title: 'Test', create: () => createTestPanel(project, run, () => layout.show('playtest'), () => startLocal()) },
   { id: 'playtest', title: 'Playtest', create: () => createPlaytestPanel(project, run, sendToChat, (id) => layout.show(id)) },
   { id: 'instructions', title: 'Instructions', create: () => createInstructionsPanel(project, run, sendToChat) },
 ];
@@ -311,7 +312,7 @@ const renderState = () => {
     el('span', {}, [`Rate ${s.rateHz} Hz`]),
     el('span', {}, [s.latencyMs === null ? 'Latency none yet' : `Latency ${s.latencyMs} ms`]),
     ...(s.serverLatencyMs === null ? [] : [el('span', {}, [`Server ${s.serverLatencyMs} ms`])]),
-    ...(s.players === null ? [] : [el('span', {}, [`Players ${s.players} (${limitsText(project.playerLimits())})`])]),
+    ...(s.players === null ? [] : [el('span', {}, [`Players: ${playingText(s.players, project.playerLimits())}`])]),
   );
 };
 const renderChrome = () => {

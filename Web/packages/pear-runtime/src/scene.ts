@@ -1,6 +1,7 @@
 // scene.json loader. Same shape, defaults and error messages as SceneDescription.swift + SceneLoader.swift for the fields Swift has;
 // `inputs`, `peripherals`, `ownership`, `gestures` and `raise` exist only here (the Swift decoder ignores them).
 import { GESTURE_TYPES, SLOTS, quat, vec3, type GestureType, type Quat, type Slot, type Vec3 } from '@pear/core';
+import { RAISE_DEFAULTS } from './manifest';
 
 export class SceneError extends Error {
   override name = 'SceneError';
@@ -266,8 +267,8 @@ export function parseGestures(raw: unknown): Record<string, CustomGesture> {
 export function parseRaise(raw: unknown): RaiseGesture | undefined {
   if (raw === undefined) return undefined;
   const g = obj(raw, 'gestures.raise');
-  const angleDeg = num(g.angleDeg, 'gestures.raise.angleDeg', 80);
-  const hysteresisDeg = num(g.hysteresisDeg, 'gestures.raise.hysteresisDeg', 10);
+  const angleDeg = num(g.angleDeg, 'gestures.raise.angleDeg', RAISE_DEFAULTS.angleDeg);
+  const hysteresisDeg = num(g.hysteresisDeg, 'gestures.raise.hysteresisDeg', RAISE_DEFAULTS.hysteresisDeg);
   if (!(angleDeg > 0 && angleDeg < 180)) throw new SceneError('gestures.raise.angleDeg must be between 0 and 180');
   if (!(hysteresisDeg >= 0 && hysteresisDeg < angleDeg)) throw new SceneError('gestures.raise.hysteresisDeg must be >= 0 and less than angleDeg');
   return { angleDeg, hysteresisDeg };

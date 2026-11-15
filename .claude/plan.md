@@ -60,7 +60,7 @@ Full text: planHistory/phase-05.md
 
 ## Phase 8: Pear Web Studio & Live Hosting (compressed)
 
-Built: backend live integration (CORS, static Studio, /debug, memstore, migrations); Web SDK packages (pear-core / runtime / script / sim / cloud); Web Studio app (dockview layout, editor, explorer, inspector, run, debug panel, account); Tauri 2 desktop shell + release workflow; Vultr deploy files; blank template and demo script.
+Built: backend live integration (CORS, static Studio, /debug, memstore, migrations); Web SDK packages (pear-core / runtime / script / sim / cloud); Web Studio app (dockview layout, editor, explorer, inspector, run, debug panel, account); Tauri 2 desktop shell + release workflow; Vultr deploy files; blank template and demo script. (Changed 2026-11-15: the Test panel gained a status header with Play and Playtest, a readable readiness summary and plain device captions; see planHistory/phase-08.md.)
 
 Still open: demo run on the Vultr box from the desktop executable; two people in one server session; brand-kit UI review; Vite watch ignore for src-tauri; macOS desktop untested. Web Studio is now acknowledged in overview.md (no longer a mismatch).
 
@@ -167,38 +167,71 @@ Start at the contract and the check command (13.1, 13.2); everything else consum
 
 Not in overview.md; added at user request 2026-11-15. Inspiration: the Quick Draw evidence log in `docs/agents/devkit-wishlist.md`. Decisions: a game is one versioned package; one headless check command is the only definition of "works" (Studio, CI, the agent and publish all call it); the player draws controller screens from data, not per-game Swift; unproven hardware behaviour is reported as untested, never as passing; keep the widget set to what Quick Draw and Hot Potato need.
 
+Scope (2026-11-15): trimmed to what a creator needs to build, check and publish a game: the package, the check command, the agent check tools and one Publish that lists the game. Everything else is kept under "Deferred from Phase 13" at the end of this phase with its checklist lines unchanged; moving a line back reinstates it.
+
 ### 13.1 Game package v1
 
-- [ ] `Schema/pear-game.schema.json` — package manifest: scene, scripts, `controller` (declarative phone screen: ready button, countdown, status, score, role, cue names), `cues`, `capabilities` (tier, sensors, gestures with thresholds), `players`, `instructions`, `checks`.
-- [ ] `Web/packages/pear-runtime/src/manifest.ts` — parse and lint the manifest; single home for gesture defaults, replacing the copies in `scene.ts`, `SKILL.md`, `scripting-api.md`.
-- [ ] `Backend/src/bundle.rs` — validate and store the manifest on publish (rejects bad packages; unknown fields kept).
-- [ ] `Web/packages/pear-cloud/src/client.ts` — package type for publish and fetch.
-- [ ] `Games/QuickDraw/pear-game.json` — Quick Draw as the first package (thresholds live here only).
+- [x] `Schema/pear-game.schema.json` — package manifest: scene, scripts, `controller` (declarative phone screen: ready button, countdown, status, score, role, cue names), `cues`, `capabilities` (tier, sensors, gestures with thresholds), `players`, `instructions`, `checks`. (Changed 2026-11-15: `controller` and `cues` stay optional fields until the data-driven controller, 13.5, is scheduled again.)
+- [x] `Web/packages/pear-runtime/src/manifest.ts` — parse and lint the manifest; single home for gesture defaults, replacing the copies in `scene.ts`, `SKILL.md`, `scripting-api.md`. (Changed 2026-11-15: `RAISE_DEFAULTS` replaces the literals in `scene.ts`; `scene-format.md` and `SKILL.md` keep the numbers in prose, the latter regenerated only if 13.6 `gen-skill.mjs` returns.)
+- [x] `Backend/src/bundle.rs` — validate and store the manifest on publish (rejects bad packages; unknown fields kept). (Changed 2026-11-15: `bundle.rs` is plugin tarballs only; the check is `Backend/src/manifest.rs`, called from `games.rs` `valid_version`, and the manifest is stored in `metadata.manifest`, a version without one still publishes.)
+- [x] `Web/packages/pear-cloud/src/client.ts` — package type for publish and fetch.
+- [x] `Games/QuickDraw/pear-game.json` — Quick Draw as the first package (thresholds live here only). (Changed 2026-11-15: thresholds also stay in `scene.json`, `QDRaiseDetector.swift` and `qd-phone.html` until 13.5; `lintManifest` reports drift with the scene. `Deploy/publish-quickdraw.mjs` now sends the manifest.)
 
 ### 13.2 Check command
 
-- [ ] `Tools/pear-check/check.mjs` — CLI: schema, fake-`ctx` self-check, N simulated phones in one lobby with an injected clock and scripted gestures; JSON report listing tested and untested items, with file-specific errors.
+- [ ] `Tools/pear-check/check.mjs` — CLI: schema, fake-`ctx` self-check, N simulated phones in one lobby with an injected clock and scripted gestures; JSON report listing tested and untested items, with file-specific errors. (Changed 2026-11-15: Studio and publish call this CLI directly; `checkPanel.ts` and `Deploy/smoke-game.mjs` are deferred.)
 - [ ] `Games/QuickDraw/check.json` — check spec from `selfcheck.mjs` and `Deploy/smoke-quickdraw.mjs` (offset clocks, delayed and duplicate `raised`, ghost player).
 - [ ] `Games/HotPotato/check.json` — second spec, proves the command is not Quick Draw shaped.
+
+### 13.6 Agent tools and knowledge
+
+- [ ] `Plugins/langchain-deepagents/runtime/tools.py` — `validate_game`, `simulate_game` (calls `pear-check`), bounded, structured failures with tested or untested status, no shell.
+- [ ] `Plugins/langchain-deepagents/tests/test_tools.py` — scripted model: validate, fix, re-run; stale write rejected; out-of-scope write denied.
+- [ ] `Plugins/langchain-deepagents/pear-plugin.json` — version bump; `pyproject.toml` and `uv.lock` kept equal.
+
+### 13.7 Publish and launch page
+
+- [ ] `Backend/src/api/games.rs` — publish gate: manifest valid and `metadata.check` present; receipt carries version, check status, join targets.
+- [ ] `Web/studio/src/publishView.ts` — shows the check result and join targets; blocks on a failing check.
+
+### 13.9 Seamless upgrade, publish and listing
+
+Goal: updating a game from Studio never needs a Vultr refresh; one Publish uploads the version, lists it for players and shows the join link. Decisions: the player's Discover catalog is the games marketplace (the Phase 10 marketplace stays plugins only); only games the owner lists appear in the catalog; Flagship and HotPotato stay in the repo as test fixtures (tests and `Deploy/demo.sh` use them) but never appear in a production catalog.
+
+- [ ] `Backend/src/api/library.rs` — catalog lists only `listed` games, with cover, description, tags and release notes; unlisted fixtures never show.
+- [ ] `Backend/src/db.rs` — `listed` and listing fields on `Game`; migration `Backend/migrations/0005_listing.sql`. (Changed 2026-11-15: renumber to `0006_listing.sql`; `0005` is taken by 13.10 `0005_developer.sql`.) (Changed 2026-11-15: 13.10 is deferred; keep the number 0006 so numbering is stable when it returns.)
+- [ ] `Backend/src/memstore.rs` — same fields, so the dev server matches Postgres.
+- [ ] `Backend/src/api/games.rs` — publish accepts listing fields and `listed`; one call creates the version and lists the game.
+- [ ] `Web/studio/src/publishView.ts` — one Publish: check (13.2), upload, list, receipt; "Update game" vs "New game" on the same game id; warns when `/api/version` shows a behind server. (Changed 2026-11-15: the behind-server warning is dropped with `/api/version`, deferred.) (Changed 2026-11-15: must carry `metadata.manifest` through; `Project.snapshot` in `project.ts` builds metadata from scratch and drops it today.)
+- [ ] Human, needs the Vultr URL and owner token: delete the placeholder games already on the hosted library (`DELETE /api/games/{id}` is owner-only); the repo seeds are gone.
+
+Not planned: a general UI description language beyond the Quick Draw and Hot Potato widget set; Studio-hosted agent runners in a live lobby; recorded audio pipeline (cues stay synthesized); collaborative editing (Phase 6).
+
+### Deferred from Phase 13
+
+Not needed for the first publishable game; none of it is built. Original section numbers are kept so earlier references still hold.
+
+#### 13.2 Check command (rest)
+
 - [ ] `Games/Flagship/check.json` — third spec (screen mode).
 - [ ] `Deploy/smoke-game.mjs` — generalizes `smoke-quickdraw.mjs`: any game, lobby-scoped, real sockets against local or hosted.
 - [ ] `Web/studio/src/checkPanel.ts` — Studio action "Run N simulated phones in a lobby" with scripted gestures and a fake clock that also drives page-side countdowns.
 
-### 13.3 Conformance across runtimes
+#### 13.3 Conformance across runtimes
 
 - [ ] `Web/packages/pear-runtime/test/conformance.test.ts` — runs the shared fixtures through the TypeScript runtime and `LocalServer`.
 - [ ] `Backend/tests/conformance.rs` — same fixtures through rquickjs `script_host`.
 - [ ] `Packages/PearScript/Tests/PearScriptTests/ConformanceTests.swift` — same fixtures through the Swift client and server engines.
 - [ ] `docs/creators/scripting-api.md` — every `ctx` member marked supported or unsupported per runtime (`ctx.spawn` etc.); the conformance run is the evidence.
 
-### 13.4 Script API gaps found by Quick Draw
+#### 13.4 Script API gaps found by Quick Draw
 
 - [ ] `Backend/src/game_server/script_host.rs` — `ctx.lobby`; per-player timers (`ctx.after(ms, tag, data, playerId?)`); `ctx.players()` with last-seen; `phaseEnteredAt` helper; defined `ctx.cancel` on a fired handle.
 - [ ] `Web/packages/pear-script/src/server-local.ts` — the same members in the local server.
 - [ ] `Packages/PearScript/Sources/PearScript/ServerScriptEngine.swift` — the same members (Swift server engine).
 - [ ] `Backend/src/game_server/session.rs` — connection quality to scripts; owner kick of a ghost player.
 
-### 13.5 Data-driven phone controller
+#### 13.5 Data-driven phone controller
 
 - [ ] `Packages/PearInput/Sources/PearInput/RaiseDetector.swift` — raise and lower from gravity with calibrated rest pose, thresholds from the package; replaces `QDRaiseDetector`.
 - [ ] `Apps/PearPlayer/PearPlayer/Play/Controller/ControllerView.swift` — draws the manifest's controller screen; server scripts drive it by events.
@@ -207,57 +240,44 @@ Not in overview.md; added at user request 2026-11-15. Inspiration: the Quick Dra
 - [ ] `Web/packages/pear-runtime/src/cues.ts` — the same cue names and sounds for the web phone page.
 - [ ] `Apps/PearPlayer/PearPlayer/PlayerModel.swift` — remove the `isPhoneOnly` / `QuickDrawSession` special case; launch from the manifest. (Gate: Quick Draw plays from data with no `Play/QuickDraw/*` code; then delete that folder and `Web/studio/public/qd-*`. (Changed 2026-11-15: the gate also needs the iPad referee screen at parity, see 13.12 `DisplayView.swift`; deleting `Play/QuickDraw/*` earlier removes the master screen.)
 
-### 13.6 Agent tools and knowledge
+#### 13.6 Agent tools and knowledge (rest)
 
-- [ ] `Plugins/langchain-deepagents/runtime/tools.py` — `validate_game`, `simulate_game` (calls `pear-check`), bounded, structured failures with tested or untested status, no shell.
 - [ ] `Plugins/langchain-deepagents/runtime/server.py` — expected-revision hashes on writes (stale writes rejected); declared scopes enforced; publish action with explicit approval and a receipt.
 - [ ] `Plugins/langchain-deepagents/runtime/translate.py` — forward controller, cues and assets, not only scripts and scene.
 - [ ] `Tools/pear-check/gen-skill.mjs` — generates `SKILL.md` and the API summary from `scripting-api.md` and the manifest schema (one source).
 - [ ] `Plugins/langchain-deepagents/skills/pear-scripting/SKILL.md` — generated output, plus scaffolds from Quick Draw and Hot Potato.
-- [ ] `Plugins/langchain-deepagents/tests/test_tools.py` — scripted model: validate, fix, re-run; stale write rejected; out-of-scope write denied.
 - [ ] `Plugins/langchain-deepagents/evals/cases.json` — five prompt-to-game cases scored by `pear-check` (opt-in, live model; not in default tests).
-- [ ] `Plugins/langchain-deepagents/pear-plugin.json` — version bump; `pyproject.toml` and `uv.lock` kept equal.
 
-### 13.7 Publish and launch page
+#### 13.7 Publish and launch page (rest)
 
-- [ ] `Backend/src/api/games.rs` — publish gate: manifest valid and `metadata.check` present; receipt carries version, check status, join targets.
-- [ ] `Web/studio/src/publishView.ts` — shows the check result and join targets; blocks on a failing check.
 - [ ] `Web/studio/src/lobbiesPanel.ts` — live lobbies per game, players, kick.
 - [ ] `Packages/PearLibrary/Sources/PearLibrary/Playability.swift` — playability from the manifest's capabilities, not scene guesses.
 - [ ] `Apps/PearPlayer/PearPlayer/Library/GameDetailView.swift` — instructions, live lobbies to join, device readiness.
 
-### 13.8 Hardware realism and environment
+#### 13.8 Hardware realism and environment
 
 - [ ] `Apps/PearPlayer/PearPlayer/Play/Controller/MotionReplay.swift` — DEBUG replayable gravity script for the simulator (the simulator has no motion).
 - [ ] `Apps/PearPlayer/PearPlayer.xcodeproj/project.pbxproj` — a unit-test target for the app (detector, controller, protocol).
 - [ ] `Packages/PearLibrary/Sources/PearLibrary/DeviceProfile.swift` — readiness diagnostics: permissions, calibration, connection, distinguishing denied, unsupported and unknown.
 - [ ] `Deploy/preflight.sh` — checks service and database names (`omni` vs `pear`) and required env, without printing secrets.
 
-### 13.9 Seamless upgrade, publish and listing
-
-Goal: updating a game from Studio never needs a Vultr refresh; one Publish uploads the version, lists it for players and shows the join link. Decisions: the player's Discover catalog is the games marketplace (the Phase 10 marketplace stays plugins only); only games the owner lists appear in the catalog; Flagship and HotPotato stay in the repo as test fixtures (tests and `Deploy/demo.sh` use them) but never appear in a production catalog.
+#### 13.9 Seamless upgrade, publish and listing (rest)
 
 - [ ] `Backend/src/api/library.rs` — catalog lists only `listed` games, with cover, description, tags and release notes; unlisted fixtures never show.
-- [ ] `Backend/src/db.rs` — `listed` and listing fields on `Game`; migration `Backend/migrations/0005_listing.sql`. (Changed 2026-11-15: renumber to `0006_listing.sql`; `0005` is taken by 13.10 `0005_developer.sql`.) (Changed 2026-11-15: renumber again to `0007_listing.sql`; `0006` is taken by `0006_sessions.sql`, persistent sign-in sessions.)
+- [ ] `Backend/src/db.rs` — `listed` and listing fields on `Game`; migration `Backend/migrations/0005_listing.sql`. (Changed 2026-11-15: renumber to `0006_listing.sql`; `0005` is taken by 13.10 `0005_developer.sql`.)
 - [ ] `Backend/src/memstore.rs` — same fields, so the dev server matches Postgres.
 - [ ] `Backend/src/api/games.rs` — publish accepts listing fields and `listed`; one call creates the version and lists the game.
 - [ ] `Backend/src/game_server/session.rs` — upgrade policy for live lobbies: finish the current match, then move to the new version, instead of restarting mid-match (`session::reload` today).
 - [ ] `Backend/src/api/mod.rs` — `GET /api/version` (build, applied migrations) so Studio and the player can tell the server is behind.
 - [ ] `Deploy/deploy.sh` — one command (or CI on merge to `main`) that builds, migrates and restarts the Vultr box, so a backend change never needs manual steps; static phone pages ship inside the published version (13.1), not the server image.
-- [ ] `Web/studio/src/publishView.ts` — one Publish: check (13.2), upload, list, receipt; "Update game" vs "New game" on the same game id; warns when `/api/version` shows a behind server.
 - [ ] `Web/studio/src/lobbiesPanel.ts` — shows which live lobbies the new version has reached.
 - [ ] `Apps/PearPlayer/PearPlayer/Library/GameDetailView.swift` — "Updated" badge and release notes; the newest version is fetched at launch.
-- [ ] Human, needs the Vultr URL and owner token: delete the placeholder games already on the hosted library (`DELETE /api/games/{id}` is owner-only); the repo seeds are gone.
 
-Not planned: a general UI description language beyond the Quick Draw and Hot Potato widget set; Studio-hosted agent runners in a live lobby; recorded audio pipeline (cues stay synthesized); collaborative editing (Phase 6).
-
----
-
-## Phase 13 Part II: Developer access, Quick Draw in Studio, and the gaps
+#### Part II: Developer access, Quick Draw in Studio, and the gaps
 
 Not in overview.md; added at user request 2026-11-15. Phase 13 (above) makes games data; this part covers what it left out: an in-house developer login that can edit every hosted game, Quick Draw ported into Studio as an ordinary project, and Studio grown ("reverse engineered" from what Quick Draw needed) to author everything Quick Draw does without hand-written Swift or HTML. Decisions: developer accounts use a password checked by the server (argon2id), never passwordless dev sign-in; a developer may publish, delete and edit the listing of any game; covers and descriptions live in Postgres (durable across redeploys); the iPad is the referee/master screen for phone-only games and must be drawn from data like the phone controller. Success test: a developer signs in to Studio, opens Quick Draw, changes a setting, a text and a cue, previews it with simulated phones and the referee screen, publishes, and the iPad and phones show the change with no Xcode build and no Vultr refresh.
 
-### 13.10 Developer accounts and game listing basics
+#### 13.10 Developer accounts and game listing basics
 
 - [ ] `Backend/migrations/0005_developer.sql` — `accounts.role` (player | developer), `accounts.password_hash`; `games.description`, `games.cover`, `games.cover_type`.
 - [ ] `Backend/src/api/accounts.rs` — developer sign-in (`provider: "developer"`, username + password, argon2id, identical 401 for wrong password and unknown user); the passwordless dev path accepts only `provider: "dev"` (closes signing in as another provider's subject); `role` on every account response.
@@ -274,7 +294,7 @@ Not in overview.md; added at user request 2026-11-15. Phase 13 (above) makes gam
 - [ ] `Apps/PearPlayer/PearPlayer/Library/GameDetailView.swift` — real cover and description, generated art as fallback.
 - [ ] Human: create the developer account on the Vultr database (`docker compose run --rm -e PEAR_DEVELOPER_PASSWORD backend /app/pear-backend create-developer ...`) and share the login privately.
 
-### 13.11 Port Quick Draw into Studio
+#### 13.11 Port Quick Draw into Studio
 
 Quick Draw stops being a repo folder published by script and becomes a Studio project like any other.
 
@@ -284,7 +304,7 @@ Quick Draw stops being a repo folder published by script and becomes a Studio pr
 - [ ] `Deploy/publish-quickdraw.mjs` — retired once Studio Publish (13.9) is the only path; until then it signs in with the developer login, not a dev subject.
 - [ ] `Deploy/smoke-quickdraw.mjs` — developer login instead of dev sign-in, so the hosted box can turn dev sign-in off.
 
-### 13.12 Studio parity with Quick Draw (gaps in Phase 13)
+#### 13.12 Studio parity with Quick Draw (gaps in Phase 13)
 
 Each item is something Quick Draw needed that Phase 13 does not schedule.
 

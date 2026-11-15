@@ -6,7 +6,16 @@ import { readLastPublished } from './account';
 import { describeInputs, inferInputs, missingInputs } from './needs';
 
 /** `fix` is a one-click repair: `Project.setSceneSetting(setting, value)`. */
-export interface Check { ok: boolean; label: string; hint?: string; fix?: { label: string; setting: string; value: unknown } }
+export interface Check {
+  ok: boolean;
+  label: string;
+  hint?: string;
+  fix?: { label: string; setting: string; value: unknown };
+  /** `run` is the last run's state and `publish` the publish state: neither is something to fix before testing. */
+  kind?: 'run' | 'publish';
+  /** Not needed for a game to work; shown as optional rather than as something to fix. */
+  optional?: boolean;
+}
 
 /** Declared needs vs what the scripts use, and the location permission position needs. */
 function inputChecks(scene: SceneJson, clientScripts: Record<string, string>): Check[] {
@@ -52,11 +61,11 @@ export function checkGame(p: { scene: SceneJson; clientScripts: Record<string, s
     { ok: entities > 0, label: `Scene has ${entities} entit${entities === 1 ? 'y' : 'ies'}`, hint: 'Explorer > Add entity' },
     { ok: clientNames.length > 0 && unattached.length === 0 && missing.length === 0, label: `${attached.length} script attachment${attached.length === 1 ? '' : 's'}`,
       hint: missing.length ? `Missing script: ${missing[0]}` : unattached.length ? `Not attached to an entity: ${unattached.join(', ')}` : 'Create a client script and attach it in the Inspector' },
-    { ok: Object.keys(p.serverScripts).length > 0, label: `${Object.keys(p.serverScripts).length} server script${Object.keys(p.serverScripts).length === 1 ? '' : 's'}`, hint: 'Optional; needed for shared state and multiplayer' },
+    { ok: Object.keys(p.serverScripts).length > 0, label: `${Object.keys(p.serverScripts).length} server script${Object.keys(p.serverScripts).length === 1 ? '' : 's'}`, hint: 'Optional; needed for shared state and multiplayer', optional: true },
     ...inputChecks(p.scene, p.clientScripts),
-    { ok: /^Playing|^Running/.test(runText), label: `Last run: ${runText}`, hint: 'Press F5 to Play' },
-    { ok: p.version !== null, label: p.version === null ? 'Not published' : `Published as version ${p.version}`, hint: 'File > Publish' },
-    ...(lastPublishedAt === null ? [] : [{ ok: true, label: `Last published: ${new Date(lastPublishedAt).toLocaleString()}` }]),
+    { ok: /^Playing|^Running/.test(runText), label: `Last run: ${runText}`, hint: 'Press F5 to Play', kind: 'run' },
+    { ok: p.version !== null, label: p.version === null ? 'Not published' : `Published as version ${p.version}`, hint: 'File > Publish', kind: 'publish' },
+    ...(lastPublishedAt === null ? [] : [{ ok: true, label: `Last published: ${new Date(lastPublishedAt).toLocaleString()}`, kind: 'publish' as const }]),
   ];
   return { checks, attached };
 }

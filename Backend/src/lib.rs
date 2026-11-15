@@ -5,6 +5,7 @@ pub mod bundle;
 pub mod crypto;
 pub mod db;
 pub mod game_server;
+pub mod manifest;
 pub mod memstore;
 
 use std::path::PathBuf;

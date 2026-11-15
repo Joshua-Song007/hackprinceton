@@ -32,13 +32,34 @@ export interface Game {
   has_cover?: boolean;
 }
 export type RunModeName = 'screen' | 'device';
+/** `pear-game.json` as stored in a version's `metadata.manifest`. Declared here without a dependency on pear-runtime; its parser and lint live in manifest.ts there. */
+export interface GameManifest {
+  format: 'pear-game/1';
+  name: string;
+  scene?: string;
+  scripts?: { client?: string[]; server?: string[] };
+  players?: { min: number; max: number };
+  capabilities?: {
+    tier?: number;
+    sensors?: string[];
+    gestures?: { builtin?: string[]; raise?: { angleDeg?: number; hysteresisDeg?: number } };
+  };
+  controller?: Record<string, unknown>;
+  cues?: Record<string, unknown>;
+  instructions?: Record<string, unknown>;
+  checks?: string;
+  [key: string]: unknown;
+}
+export interface GameMetadata extends Record<string, unknown> {
+  manifest?: GameManifest;
+}
 export interface NewGameVersion {
   scene: Record<string, unknown>;
   /** Script name -> source. */
   client_scripts: Record<string, string>;
   server_scripts: Record<string, string>;
   assets: Record<string, unknown>;
-  metadata: Record<string, unknown>;
+  metadata: GameMetadata;
   run_mode: RunModeName;
 }
 export interface GameVersion extends NewGameVersion {

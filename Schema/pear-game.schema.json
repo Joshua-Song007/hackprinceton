@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://pear.invalid/schema/pear-game.schema.json",
+  "title": "Pear game package manifest (pear-game.json)",
+  "description": "What a game declares beside its scene and scripts. Documentation and editor support only: Web/packages/pear-runtime/src/manifest.ts and Backend/src/manifest.rs are the validators and apply these same rules. Unknown fields are kept, never rejected.",
+  "type": "object",
+  "required": ["format", "name"],
+  "additionalProperties": true,
+  "properties": {
+    "format": { "const": "pear-game/1" },
+    "name": { "type": "string", "minLength": 1, "maxLength": 256 },
+    "scene": {
+      "description": "Path of the scene file inside the package; relative, no '..'. Default scene.json.",
+      "type": "string",
+      "minLength": 1
+    },
+    "scripts": {
+      "description": "Script names the package ships; each must also be listed in the scene. Default: the scene's own lists.",
+      "type": "object",
+      "properties": {
+        "client": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "server": { "type": "array", "items": { "type": "string", "minLength": 1 } }
+      }
+    },
+    "players": {
+      "type": "object",
+      "required": ["min", "max"],
+      "properties": {
+        "min": { "type": "integer", "minimum": 1, "maximum": 32 },
+        "max": { "type": "integer", "minimum": 1, "maximum": 32 }
+      }
+    },
+    "capabilities": {
+      "type": "object",
+      "properties": {
+        "tier": { "type": "integer", "minimum": 1, "maximum": 3 },
+        "sensors": { "type": "array", "uniqueItems": true, "items": { "enum": ["head", "position", "heartRate", "motion"] } },
+        "gestures": {
+          "type": "object",
+          "properties": {
+            "builtin": { "type": "array", "uniqueItems": true, "items": { "enum": ["tap", "doubleTap", "flick", "squeeze", "pinch"] } },
+            "raise": {
+              "description": "Raise when the gravity direction is angleDeg away from rest; lower again at angleDeg - hysteresisDeg.",
+              "type": "object",
+              "properties": {
+                "angleDeg": { "type": "number", "exclusiveMinimum": 0, "exclusiveMaximum": 180, "default": 80 },
+                "hysteresisDeg": { "type": "number", "minimum": 0, "default": 10, "description": "Less than angleDeg." }
+              }
+            }
+          }
+        }
+      }
+    },
+    "controller": { "description": "Reserved for the data-driven phone controller; kept as written.", "type": "object", "additionalProperties": true },
+    "cues": { "description": "Reserved for named sound and haptic cues; kept as written.", "type": "object", "additionalProperties": true },
+    "instructions": { "description": "Game instructions in the shape the Studio Instructions panel saves.", "type": "object", "additionalProperties": true },
+    "checks": { "description": "Path of the check spec inside the package; relative, no '..'.", "type": "string", "minLength": 1 }
+  }
+}

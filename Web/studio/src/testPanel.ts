@@ -4,9 +4,10 @@ import { SIM_DEVICE_KINDS, accelPulse, parseUsisJsonl, type SimDeviceKind } from
 import { slotDevice } from './needs';
 import { button, el, icon, openMenu } from './ui';
 import type { PanelView } from './layout';
-import { limitsText, type Project } from './project';
+import type { Project } from './project';
 import { SIM_DEVICE_NAMES, TIME_SCALES, rigWarning, type BotMode, type PlayerSource, type RunController, type TestPlayer } from './run';
-import { checkGame, gestureControls, type Check } from './gamePanel';
+import { checkGame, gestureControls } from './gamePanel';
+import { deviceCaption, devicesSubtitle, emptyPlayersText, playingText, readinessRows, readinessSummary, runLine, type ReadinessRow } from './testStatus';
 
 export const MAP_SIZE = 216;
 const MIN_HALF = 8;
@@ -42,9 +43,9 @@ const GESTURES = [['Tap (T)', 'tap'], ['Double tap (G)', 'doubleTap'], ['Flick (
 const DEVICE_INFO: Record<SimDeviceKind, [string, string]> = { airpods: ['airpods', 'head'], phone: ['phone', 'hand'], watch: ['watch', 'leftWrist'] };
 const DEVICE_LABEL: Record<SimDeviceKind, string> = { airpods: 'Virtual AirPods', phone: 'Virtual phone', watch: 'Virtual watch' };
 
-export function createTestPanel(project: Project, run: RunController, openPlaytest: () => void = () => {}): PanelView {
+export function createTestPanel(project: Project, run: RunController, openPlaytest: () => void = () => {}, play: () => void = () => {}): PanelView {
   const root = el('div', { class: 'pn', role: 'region', 'aria-label': 'Test', tabindex: -1 });
-  const group = (t: string) => el('div', { class: 'pn-group' }, [t]);
+  const group = (t: string, aside?: string) => el('div', { class: 'pn-group pn-group--h' }, aside === undefined ? [t] : [t, el('span', {}, [aside])]);
   const css = (name: string) => getComputedStyle(document.documentElement).getPropertyValue(name).trim() || 'currentColor';
   const fmt = (p: readonly number[]) => `x ${p[0]!.toFixed(1)} z ${p[2]!.toFixed(1)}`;
 
@@ -60,33 +61,56 @@ export function createTestPanel(project: Project, run: RunController, openPlayte
   let moved = 0;
   let start: [number, number] = [0, 0];
   const msg = el('p', { class: 'pn-empty', role: 'status' });
-  const structureKey = () => [run.running, run.driven, run.players.map((p) => `${p.id}:${p.wander}:${p.run.recording}:${p.run.replaying}:${p.run.clip?.length ?? 0}:${p.source}:${p.botMode}:${p.run.role}:${p.run.phoneUp}:${[...p.liveDevices]}:${p.agent ? 'agent' : ''}`).join(), run.rig.join(), [...run.rooms.keys()].map((k) => `${k}=${run.holderOf(k)}`).join(), run.relay.status, run.relay.devices.map((d) => d.id).join(), run.timeScale, run.status.kind].join('|');
+  const structureKey = () => [run.running, run.driven, run.players.map((p) => `${p.id}:${p.wander}:${p.run.recording}:${p.run.replaying}:${p.run.clip?.length ?? 0}:${p.source}:${p.botMode}:${p.run.role}:${p.run.phoneUp}:${[...p.liveDevices]}:${p.agent ? 'agent' : ''}`).join(), run.rig.join(), [...run.rooms.keys()].map((k) => `${k}=${run.holderOf(k)}`).join(), run.relay.status, run.relay.devices.map((d) => d.id).join(), run.timeScale, run.status.kind, run.status.text].join('|');
 
   const slider = (label: string, input: HTMLElement, out: HTMLElement) =>
     el('div', { style: 'display:grid;grid-template-columns:72px minmax(0,1fr) 52px;align-items:center;gap:8px;font-size:11px;color:var(--text-secondary);min-height:var(--row-height)' }, [label, input, out]);
 
-  const checklist = (): Node => {
-    const checks = checkGame(project, run.status.text).checks;
-    const todo = checks.filter((c) => !c.ok);
-    // The game's declared needs stay visible when met: they answer "what does my game need".
-    const needs = checks.find((c) => c.ok && c.label.startsWith('Needs '));
-    const fix = (c: Check) => {
-      if (!c.fix) return [];
-      const f = c.fix;
-      return [button(f.label, () => {
+  // The header answers three questions in order: what is happening, how do I start (or stop) it, and is the game ready to test.
+  let readyOpen: boolean | null = null; // the creator's own open/closed choice survives a rebuild; until then it opens when something needs fixing
+  const readinessItem = (r: ReadinessRow): Node => {
+    const f = r.fix;
+    const mark = el('span', {
+      class: r.level === 'fix' ? 'om-state om-state--error' : r.level === 'optional' ? 'om-state om-state--stale' : 'om-state',
+      role: 'img', 'aria-label': r.level === 'fix' ? 'Needs fixing' : r.level === 'optional' ? 'Optional' : 'Done',
+    });
+    return el('li', { class: 'tv-row' }, [
+      mark,
+      el('span', { class: 'tv-label' }, [r.label, ...(r.hint ? [el('span', { class: 'om-sub' }, [r.hint])] : [])]),
+      ...(f ? [button(f.label, () => {
         const err = project.setSceneSetting(f.setting, f.value);
         if (err) msg.textContent = err;
-      }, { variant: 'small', ariaLabel: `${f.label}: ${c.label}` })];
-    };
-    const published = checks.find((c) => c.ok && c.label.startsWith('Last published: '));
-    const items = [
-      ...(needs ? [el('li', {}, [needs.label])] : []),
-      ...(published ? [el('li', {}, [published.label])] : []),
-      ...todo.map((c) => el('li', { style: 'display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px' }, [
-        `To do: ${c.label}`, ...(c.hint ? [el('span', { class: 'om-sub' }, [c.hint])] : []), ...fix(c),
-      ])),
-    ];
-    return items.length ? el('ul', { class: 'pn-list' }, items) : el('p', { class: 'pn-empty' }, ['Ready']);
+      }, { variant: 'small', ariaLabel: `${f.label}: ${r.label}` })] : []),
+    ]);
+  };
+
+  const header = (): Node => {
+    const running = run.running;
+    const runBtn = button(running ? 'Stop' : 'Play', () => (running ? run.stop() : play()), { icon: running ? 'stop' : 'play', ariaLabel: running ? 'Stop (Shift+F5)' : 'Play (F5)' });
+    runBtn.setAttribute('data-tv', 'run');
+    const playtest = button('Playtest with agents...', openPlaytest, { ariaLabel: 'Playtest with agents: open the Playtest panel' });
+    const sel = el('select', { 'aria-label': 'Time scale' }, TIME_SCALES.map((n) => el('option', { value: String(n) }, [`${n}x`])));
+    sel.value = String(run.timeScale);
+    sel.addEventListener('change', () => run.setTimeScale(Number(sel.value)));
+    const blocked = run.status.kind === 'server' || run.status.kind === 'join';
+    sel.disabled = blocked;
+    if (blocked) sel.title = 'Local Play only: the server keeps its own time.';
+    const ready = readinessRows(checkGame(project, run.status.text).checks);
+    const details = el('details', { class: 'tv-ready' }, [
+      el('summary', {}, [readinessSummary(ready.fixes), ...(ready.needs ? [el('span', { class: 'om-sub' }, [` · ${ready.needs}`])] : [])]),
+      ready.rows.length ? el('ul', { class: 'tv-rows' }, ready.rows.map(readinessItem)) : el('p', { class: 'om-sub' }, ['Nothing left to fix.']),
+    ]) as HTMLDetailsElement;
+    details.open = readyOpen ?? ready.fixes > 0;
+    details.addEventListener('toggle', () => { readyOpen = details.open; });
+    return el('div', { class: 'tv-head' }, [
+      el('div', { class: 'tv-status' }, [
+        el('span', { class: running ? 'om-state' : 'om-state om-state--stale' }, [runLine(run.status.text, running)]),
+        el('label', { class: 'om-sub' }, ['Speed ', sel]),
+      ]),
+      ...(blocked ? [el('p', { class: 'om-sub' }, ['Local Play only: the server keeps its own time.'])] : []),
+      el('div', { class: 'tv-actions' }, [runBtn, playtest]),
+      details,
+    ]);
   };
 
   // shortcut: clips live in memory and in downloaded files, not in the project file; store them there when scenarios need to travel with a game.
@@ -113,17 +137,6 @@ export function createTestPanel(project: Project, run: RunController, openPlayte
       box.addEventListener('change', () => run.setLiveDevice(p.id, d.id, box.checked));
       return el('label', { style: 'display:flex;align-items:center;gap:4px' }, [box, `${d.name} (${d.kind})`]);
     }));
-  };
-
-  const timeScaleSection = (): Node[] => {
-    const sel = el('select', { 'aria-label': 'Time scale' }, TIME_SCALES.map((n) => el('option', { value: String(n) }, [`${n}x`])));
-    sel.value = String(run.timeScale);
-    sel.addEventListener('change', () => run.setTimeScale(Number(sel.value)));
-    const blocked = run.status.kind === 'server' || run.status.kind === 'join';
-    sel.disabled = blocked;
-    return [group('Time scale'), el('div', { style: 'padding:4px 12px;display:flex;align-items:center;gap:8px' }, [
-      sel, ...(blocked ? [el('span', { class: 'om-sub' }, ['Local Play only: the server keeps its own time.'])] : []),
-    ])];
   };
 
   const clipRow = (p: TestPlayer): Node => {
@@ -160,7 +173,7 @@ export function createTestPanel(project: Project, run: RunController, openPlayte
 
   const playersSection = (): Node[] => {
     rows = new Map();
-    if (!run.running) return [el('p', { class: 'pn-empty' }, ['Press Play (F5). Your player and any you add appear here.'])];
+    if (!run.running) return [el('p', { class: 'pn-empty' }, [emptyPlayersText(project.playerLimits().min)])];
     const list = el('ul', { class: 'om-list', 'aria-label': 'Players' }, run.players.map((p, i) => {
       const sub = el('span', { class: 'om-sub' });
       const dot = el('span', { class: 'om-haptic', role: 'img', 'aria-label': 'Haptic output' }, [icon('phone')]);
@@ -189,9 +202,8 @@ export function createTestPanel(project: Project, run: RunController, openPlayte
     const limits = project.playerLimits();
     add.disabled = run.players.length >= limits.max;
     const note = run.players.length >= limits.max ? `The game allows at most ${limits.max} players.` : run.players.length < limits.min ? `The game needs at least ${limits.min} players.` : '';
-    const playtest = run.status.kind === 'local' ? [el('div', { style: 'padding:4px 12px' }, [button('Playtest with agents...', openPlaytest, { variant: 'small', ariaLabel: 'Playtest with agents: open the Playtest panel' })])] : [];
     const nobody = run.status.kind === 'local' && !run.driven ? [el('p', { class: 'om-sub', role: 'status', style: 'padding:0 12px' }, ['Nobody is driven. Press Drive on a player to play it yourself.'])] : [];
-    return [list, ...nobody, ...playtest, el('div', { style: 'padding:4px 12px;display:flex;gap:8px;align-items:center' }, [addRole, add]), ...(note ? [el('p', { class: 'om-sub', role: 'status', style: 'padding:0 12px' }, [note])] : []), msg];
+    return [list, ...nobody, el('div', { style: 'padding:4px 12px;display:flex;gap:8px;align-items:center' }, [addRole, add]), ...(note ? [el('p', { class: 'om-sub', role: 'status', style: 'padding:0 12px' }, [note])] : []), msg];
   };
 
   const mapSection = (): Node[] => {
@@ -342,10 +354,11 @@ export function createTestPanel(project: Project, run: RunController, openPlayte
     const rig = run.rig;
     const addable = SIM_DEVICE_KINDS.filter((k) => !rig.includes(k));
     const addBtn = button('Add device', () => openMenu(addBtn, addable.map((k) => ({ label: DEVICE_LABEL[k], run: () => run.setRig([...rig, k]) }))), { variant: 'small' });
-    addBtn.disabled = addable.length === 0;
+    const needs = readinessRows(checkGame(project, run.status.text).checks).needs;
     const warning = rigWarning(run.sceneTier(), rig);
     return [
       group('Devices'),
+      el('p', { class: 'om-sub', style: 'padding:0 12px' }, [devicesSubtitle(project.description().peripherals.length > 0, !(needs ?? '').startsWith('Needs no input'))]),
       el('ul', { class: 'om-list', 'aria-label': 'Virtual devices' }, rig.length ? rig.map((k) => {
         // A free or passed device belongs to the room, so it follows the scene: no Remove, and a passed one can be given away.
         const shared = run.rooms.has(k);
@@ -360,27 +373,28 @@ export function createTestPanel(project: Project, run: RunController, openPlayte
                 return give;
               })()
             : el('span')
-          : button('Remove', () => run.setRig(rig.filter((x) => x !== k)), { variant: 'small', ariaLabel: `Remove ${SIM_DEVICE_NAMES[k]}` });
+          : button('Remove', () => run.setRig(rig.filter((x) => x !== k)), { variant: 'borderless', ariaLabel: `Remove ${SIM_DEVICE_NAMES[k]}` });
         return el('li', { style: 'grid-template-columns:18px minmax(0,1fr) auto auto' }, [
-          icon(DEVICE_INFO[k][0]), el('span', { class: 'om-name' }, [DEVICE_LABEL[k], el('span', { class: 'om-sub' }, [`${DEVICE_INFO[k][1]}. ${holdingText(mode, holderName)}`])]),
-          el('span', { class: on ? 'om-state' : 'om-state om-state--stale' }, [on ? '50 Hz' : 'Stopped']),
+          icon(DEVICE_INFO[k][0]), el('span', { class: 'om-name' }, [DEVICE_LABEL[k], el('span', { class: 'om-sub' }, [deviceCaption(DEVICE_INFO[k][1], holdingText(mode, holderName))])]),
+          on ? el('span', { class: 'om-state' }, ['50 Hz']) : el('span'),
           act,
         ]);
       }) : [el('li', { class: 'om-sub' }, ['No devices: the game receives no input.'])]),
-      el('div', { style: 'padding:4px 12px' }, [addBtn]),
-      el('p', { class: 'om-sub', style: 'padding:0 12px' }, ['A game that lists peripherals gets exactly those; otherwise this list is remembered in this browser.']),
+      addable.length ? el('div', { style: 'padding:4px 12px' }, [addBtn]) : el('p', { class: 'om-sub', style: 'padding:0 12px' }, ['All three devices are added.']),
       ...(warning ? [el('p', { class: 'pn-empty', role: 'status' }, [warning])] : []),
     ];
   };
 
   const render = () => {
     key = structureKey();
+    // Rebuilding replaces the focused button (Play becomes Stop), so remember which marked control had focus and give it back.
+    const focused = root.contains(document.activeElement) ? document.activeElement?.getAttribute('data-tv') : null;
     root.replaceChildren(
-      group('Checklist'), checklist(),
-      ...timeScaleSection(),
-      group(`Players (${run.players.length} of ${limitsText(project.playerLimits())})`), ...playersSection(),
+      header(),
+      group('Players', playingText(run.players.length, project.playerLimits())), ...playersSection(),
       ...mapSection(), ...controlsSection(), ...devicesSection(),
     );
+    if (focused) root.querySelector<HTMLElement>(`[data-tv="${focused}"]`)?.focus();
     update();
   };
 

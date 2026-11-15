@@ -6,3 +6,4 @@ export * from './orbit';
 export * from './rig';
 export * from './instructions';
 export * from './observation';
+export * from './manifest';

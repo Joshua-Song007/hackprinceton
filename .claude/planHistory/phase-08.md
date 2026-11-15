@@ -266,3 +266,11 @@ Instructions gain a lose condition (a missing win or lose is a lint warning). A 
 - [x] `Web/studio/src/project.ts`, `Web/studio/src/inspector.ts`, `Web/studio/src/instructionsPanel.ts`
 - [x] `Web/studio/src/run.ts`, `Web/studio/src/testPanel.ts`
 - [x] `Web/studio/test/instructions.test.ts`, `Web/studio/test/newGame.test.ts`, `Web/studio/test/agentRun.test.ts`
+
+### 2026-11-15 — Test view: status header, readable checklist, plain devices
+Paths: `Web/studio/src/testPanel.ts`, `Web/studio/src/testStatus.ts`, `Web/studio/src/gamePanel.ts`, `Web/studio/src/main.ts`, `Web/studio/src/theme.css`
+
+The Test panel opens with a header: the run state, one Play / Stop button, "Playtest with agents..." (now always shown, not only during a local run), a Speed select (the old Time scale section), and a collapsible readiness summary ("Ready to play" or "N things to fix" plus the game's declared needs). Readiness is one row per item with a state mark (done, needs fixing, optional), a label, a hint and the one-click fix. Server scripts and publishing are optional, and the last run's state moved to the header, so neither counts against readiness. `Check` gains optional `kind` (`run` / `publish`) and `optional`. The player count reads "N playing · allows A to B" in the panel and the status bar (one function, `playingText`). Players show what Play will do before it runs. Devices carry a subtitle (set by the game, or remembered in this browser), plain captions ("Held in hand · each player has their own"), no per-row "Stopped", a quiet Remove, and a sentence in place of the disabled Add device when all three devices are present. Section headings are bolder in this panel only. The panel remembers which marked control had focus across a rebuild, so Play becomes Stop without losing keyboard focus. Not unit-tested: the DOM (the helpers are, in `testStatus.test.ts`).
+- [x] `Web/studio/src/testStatus.ts`, `Web/studio/test/testStatus.test.ts`
+- [x] `Web/studio/src/gamePanel.ts`, `Web/studio/src/testPanel.ts`
+- [x] `Web/studio/src/main.ts`, `Web/studio/src/theme.css`

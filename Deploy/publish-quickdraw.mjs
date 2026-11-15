@@ -23,6 +23,7 @@ async function api(method, p, token, body) {
 
 const read = (rel) => fs.readFileSync(path.join(dir, rel), "utf8");
 const scene = JSON.parse(read("scene.json"));
+const manifest = JSON.parse(read("pear-game.json")); // the package manifest (Phase 13.1), stored as metadata.manifest
 const scripts = (names) => Object.fromEntries(names.map((n) => [n, read(`scripts/${n}.js`)]));
 
 const owner = process.env.PEAR_DEV_USER && process.env.PEAR_DEV_PASSWORD
@@ -34,7 +35,7 @@ const v = await api("POST", `/api/games/${id}/versions`, owner.token, {
   client_scripts: scripts(scene.clientScripts),
   server_scripts: scripts(scene.serverScripts),
   assets: {},
-  metadata: {},
+  metadata: { manifest },
   run_mode: scene.runMode,
 });
 console.log(`game ${id} version ${v.version}`);
