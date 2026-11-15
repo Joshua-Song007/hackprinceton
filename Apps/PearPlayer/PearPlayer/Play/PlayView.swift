@@ -35,12 +35,6 @@ struct PlayView: View {
                 .onEnded { _ in lastDrag = .zero }
         )
         .overlay(alignment: .topLeading) { hud }
-        .overlay(alignment: .topTrailing) {
-            Button("Leave", action: onLeave)
-                .buttonStyle(PearSecondaryButtonStyle())
-                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: PearTheme.radiusControl))
-                .padding()
-        }
         .overlay(alignment: .bottom) { gestureBar }
         .ignoresSafeArea(edges: .bottom)
         #if os(macOS)
@@ -67,6 +61,7 @@ struct PlayView: View {
         .padding(PearTheme.Space.s3)
         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: PearTheme.radiusControl))
         .padding()
+        .padding(.top, 44) // below the shared game menu (GameChrome)
         .accessibilityElement(children: .combine)
     }
 

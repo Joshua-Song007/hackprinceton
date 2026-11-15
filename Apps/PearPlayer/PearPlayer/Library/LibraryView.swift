@@ -649,10 +649,10 @@ private struct PlaySurface: ViewModifier {
     func body(content: Content) -> some View {
         #if os(iOS)
         content
-            .fullScreenCover(item: session) { PlayView(session: $0, onLeave: model.leaveGame) }
-            .fullScreenCover(item: quickDraw) { QuickDrawView(session: $0, onLeave: model.leaveGame) }
+            .fullScreenCover(item: session) { PlayView(session: $0, onLeave: model.leaveGame).gameChrome(title: $0.gameName, onLeave: model.leaveGame) }
+            .fullScreenCover(item: quickDraw) { QuickDrawView(session: $0, onLeave: model.leaveGame).gameChrome(title: $0.title, onLeave: model.leaveGame) }
         #else
-        content.sheet(item: session) { PlayView(session: $0, onLeave: model.leaveGame) }
+        content.sheet(item: session) { PlayView(session: $0, onLeave: model.leaveGame).gameChrome(title: $0.gameName, onLeave: model.leaveGame) }
         #endif
     }
 }

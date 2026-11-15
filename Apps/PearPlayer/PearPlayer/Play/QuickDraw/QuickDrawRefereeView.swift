@@ -38,11 +38,7 @@ struct QuickDrawRefereeView: View {
 
     private var topBar: some View {
         HStack {
-            Button(role: .cancel, action: onLeave) {
-                Label("Leave", systemImage: "chevron.left").font(PearTheme.sans(17, .semibold))
-            }
-            .buttonStyle(PearSecondaryButtonStyle())
-            .accessibilityHint("Closes this referee screen")
+            Color.clear.frame(width: 96, height: 36) // room for the shared game menu (GameChrome)
             Spacer()
             if session.link != .connected {
                 Label(session.link == .connecting ? "Connecting" : "Reconnecting", systemImage: "wifi.exclamationmark")
