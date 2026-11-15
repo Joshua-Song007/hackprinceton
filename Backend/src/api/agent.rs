@@ -80,7 +80,7 @@ async fn delete_key(State(state): State<AppState>, headers: HeaderMap) -> Result
     Ok(StatusCode::NO_CONTENT)
 }
 
-fn runtime_url() -> Option<String> {
+pub fn runtime_url() -> Option<String> {
     std::env::var("PEAR_AGENT_RUNTIME_URL").ok().filter(|u| !u.trim().is_empty())
 }
 

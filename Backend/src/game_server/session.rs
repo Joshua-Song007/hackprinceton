@@ -74,6 +74,10 @@ pub trait ScriptHost: Send {
     fn on_timer(&mut self, _tag: &str, _data: &Value) -> Vec<Outgoing> {
         Vec::new()
     }
+    /// Called on every tick: finished async work (`ctx.agent.run`) settles and its sends come out.
+    fn poll(&mut self) -> Vec<Outgoing> {
+        Vec::new()
+    }
     /// Display name for a player id, called before that player's `on_player_join`.
     fn set_player_name(&mut self, _player: &str, _name: &str) {}
 }
@@ -309,6 +313,8 @@ impl Registry {
             let out = session.host.on_timer(&t.tag, &t.data);
             session.deliver(game_id, out);
         }
+        let out = session.host.poll();
+        session.deliver(game_id, out);
     }
 
     #[cfg(test)]

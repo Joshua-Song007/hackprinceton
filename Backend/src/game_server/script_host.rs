@@ -11,6 +11,9 @@
 // - Each call has a 1 s CPU deadline and the runtime has a 32 MiB heap / 1 MiB stack cap.
 // - Server-script sources are not stored anywhere reachable yet (publish/fetch is a later item), so
 //   `factory()` currently yields `NoopHost` for every game; `factory_with` takes a source lookup.
+// - `ctx.agent.run(prompt)` returns a Promise<string> (agent_run.rs). The call runs in a spawned task; the
+//   session tick calls `poll()`, which settles finished calls and runs the promise jobs (so `await` works
+//   in handlers). Needs a tokio runtime: without one the call rejects.
 // - 8.1: that is superseded. `factory()` now builds the host from the sources session.rs fetched from
 //   the game's published version. `console.log/warn/error` in scripts and handler errors are captured
 //   (capped, truncated) and published to the debug bus (debug.rs) with `ctx.state` after each handler.
@@ -21,6 +24,7 @@ use std::time::{Duration, Instant};
 use rquickjs::{Context, Function, Object, Runtime};
 use serde_json::{json, Value};
 
+use super::agent_run::{self, AgentConfig, AgentTarget};
 use super::debug::bus;
 use super::session::{HostFactory, NoopHost, Outgoing, ScriptHost};
 
@@ -31,9 +35,11 @@ const STACK_LIMIT: usize = 1024 * 1024;
 const MAX_ERRORS: usize = 100;
 const MAX_PENDING: usize = 100; // console/error events kept between two debug publishes
 const MAX_LOG_CHARS: usize = 2000;
+type AgentOutcome = (u64, Result<String, String>);
+const MAX_JOBS: usize = 10_000; // promise jobs run after one handler or poll
 
 const GLUE: &str = r#"
-(function (fire, fireAll, report, log, after, cancel) {
+(function (fire, fireAll, report, log, after, cancel, agentRun) {
   "use strict";
   var scripts = [];
   var state = {};
@@ -56,8 +62,20 @@ const GLUE: &str = r#"
   });
   var names = {};
   var nextTimer = 1;
+  var agentCalls = {};
+  var nextAgentCall = 1;
+  var agent = Object.freeze({
+    run: function (prompt) {
+      return new Promise(function (resolve, reject) {
+        var id = nextAgentCall++;
+        agentCalls[id] = { resolve: resolve, reject: reject };
+        agentRun(id, String(prompt));
+      });
+    }
+  });
   var ctx = Object.freeze({
     state: state,
+    agent: agent,
     remote: remote,
     now: function () { return Date.now(); },
     after: function (ms, tag, data) {
@@ -71,6 +89,12 @@ const GLUE: &str = r#"
     add: function (definition) { scripts.push(definition); },
     setName: function (playerId, name) { names[playerId] = String(name); },
     stateJSON: function () { return encode(state); },
+    agentDone: function (id, error, text) {
+      var call = agentCalls[id];
+      delete agentCalls[id];
+      if (!call) { return; }
+      if (error) { call.reject(new Error(error)); } else { call.resolve(text); }
+    },
     dispatch: function (handler, playerId, name, dataJson) {
       var args = [ctx, Object.freeze({ id: playerId, name: names[playerId] || "" })];
       var data = null;
@@ -81,8 +105,12 @@ const GLUE: &str = r#"
       else if (handler === "onTimer") { args = [ctx, name, data]; }
       scripts.forEach(function (script) {
         if (typeof script[handler] !== "function") { return; }
-        try { script[handler].apply(script, args); }
-        catch (e) { report(handler + ": " + String(e)); }
+        try {
+          var result = script[handler].apply(script, args);
+          if (result && typeof result.then === "function") {
+            result.then(null, function (e) { report(handler + ": " + String(e)); });
+          }
+        } catch (e) { report(handler + ": " + String(e)); }
       });
     }
   };
@@ -101,6 +129,9 @@ pub struct QuickJsHost {
     /// Debug events (kind, fields) captured since the last publish.
     pending: Arc<Mutex<Vec<(&'static str, Value)>>>,
     last_state: String,
+    agent: Arc<Mutex<AgentConfig>>,
+    /// Finished `ctx.agent.run` calls (call id, reply or error) waiting for `poll`.
+    agent_done: Arc<Mutex<Vec<AgentOutcome>>>,
 }
 
 fn push_error(errors: &Mutex<Vec<String>>, pending: &Mutex<Vec<(&'static str, Value)>>, msg: String) {
@@ -175,6 +206,8 @@ impl QuickJsHost {
             game_id: game_id.to_string(),
             pending: Arc::new(Mutex::new(Vec::new())),
             last_state: "{}".to_string(),
+            agent: Arc::new(Mutex::new(AgentConfig::from_env())),
+            agent_done: Arc::new(Mutex::new(Vec::new())),
         };
         host.bootstrap()?;
         for s in sources {
@@ -196,6 +229,9 @@ impl QuickJsHost {
         let errors = self.errors.clone();
         let pending = self.pending.clone();
         let pending2 = self.pending.clone();
+        let agent = self.agent.clone();
+        let agent_done = self.agent_done.clone();
+        let game_id = self.game_id.clone();
         self.context.with(|ctx| {
             let fail = |e: rquickjs::Error| format!("{e}");
             ctx.eval::<(), _>(PRELUDE).map_err(fail)?;
@@ -230,8 +266,25 @@ impl QuickJsHost {
                 out4.lock().unwrap_or_else(|p| p.into_inner()).push(Outgoing::Cancel { id: id as u64 });
             })
             .map_err(fail)?;
+            let agent_run = Function::new(ctx.clone(), move |id: f64, prompt: String| {
+                let id = id as u64;
+                let config = agent.lock().unwrap_or_else(|p| p.into_inner()).clone();
+                let finish = {
+                    let agent_done = agent_done.clone();
+                    move |result: Result<String, String>| agent_done.lock().unwrap_or_else(|p| p.into_inner()).push((id, result))
+                };
+                match (agent_run::admit(&config, &game_id, &prompt), tokio::runtime::Handle::try_current()) {
+                    (Err(e), _) => finish(Err(e)),
+                    (Ok(_), Err(_)) => finish(Err("agent runtime unavailable (no async runtime)".to_string())),
+                    (Ok(target), Ok(rt)) => {
+                        let game_id = game_id.clone();
+                        rt.spawn(async move { finish(agent_run::run(&target, &game_id, &prompt, config.timeout).await) });
+                    }
+                }
+            })
+            .map_err(fail)?;
             let glue: Function = ctx.eval(GLUE).map_err(fail)?;
-            glue.call::<_, ()>((fire, fire_all, report, log, after, cancel)).map_err(fail)?;
+            glue.call::<_, ()>((fire, fire_all, report, log, after, cancel, agent_run)).map_err(fail)?;
             Ok(())
         })
     }
@@ -276,9 +329,30 @@ impl QuickJsHost {
                 push_error(&errors, &pending, msg);
             }
         });
+        self.finish()
+    }
+
+    /// Runs promise jobs (async handler continuations), publishes debug events, disarms the deadline
+    /// and returns what the scripts sent out.
+    fn finish(&mut self) -> Vec<Outgoing> {
+        for _ in 0..MAX_JOBS {
+            match self._runtime.execute_pending_job() {
+                Ok(true) => {}
+                Ok(false) => break,
+                Err(_) => {
+                    let msg = self.context.with(|ctx| format!("{:?}", ctx.catch()));
+                    push_error(&self.errors, &self.pending, format!("job: {msg}"));
+                }
+            }
+        }
         self.publish_debug();
         *self.deadline.lock().unwrap_or_else(|p| p.into_inner()) = None;
         std::mem::take(&mut *self.out.lock().unwrap_or_else(|p| p.into_inner()))
+    }
+
+    /// Test hook: where `ctx.agent.run` calls go (None = not configured) and its time cap.
+    pub fn set_agent_runtime(&self, target: Option<AgentTarget>, timeout: Duration) {
+        *self.agent.lock().unwrap_or_else(|p| p.into_inner()) = AgentConfig { target, timeout };
     }
 
     /// Sends captured logs/errors and, when it changed, `ctx.state` to the game's debug stream.
@@ -325,6 +399,32 @@ impl ScriptHost for QuickJsHost {
     }
     fn on_timer(&mut self, tag: &str, data: &Value) -> Vec<Outgoing> {
         self.dispatch("onTimer", "", tag, data)
+    }
+    fn poll(&mut self) -> Vec<Outgoing> {
+        let done = std::mem::take(&mut *self.agent_done.lock().unwrap_or_else(|p| p.into_inner()));
+        if done.is_empty() {
+            return Vec::new();
+        }
+        self.arm();
+        let errors = self.errors.clone();
+        let pending = self.pending.clone();
+        self.context.with(|ctx| {
+            for (id, result) in done {
+                let (error, text) = match result {
+                    Ok(text) => (String::new(), text),
+                    Err(error) => (error, String::new()),
+                };
+                let res: rquickjs::Result<()> = (|| {
+                    let host: Object = ctx.globals().get("__pearHost")?;
+                    let f: Function = host.get("agentDone")?;
+                    f.call((id as f64, error, text))
+                })();
+                if let Err(e) = res {
+                    push_error(&errors, &pending, format!("agent: {e}"));
+                }
+            }
+        });
+        self.finish()
     }
     fn set_player_name(&mut self, player: &str, name: &str) {
         self.arm();
@@ -436,7 +536,7 @@ mod tests {
         let out = h.on_remote("a", "x", &Value::Null);
         let Outgoing::FireAll { data, .. } = &out[0] else { panic!("expected FireAll") };
         assert_eq!(data["io"], json!(vec!["undefined"; 6]));
-        assert_eq!(data["keys"], json!(["after", "cancel", "now", "remote", "state"]));
+        assert_eq!(data["keys"], json!(["after", "agent", "cancel", "now", "remote", "state"]));
         assert_eq!(data["frozen"], json!(true));
     }
 
