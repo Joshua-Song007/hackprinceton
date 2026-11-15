@@ -309,6 +309,23 @@ private struct MediaImageCard: View {
             .clipShape(RoundedRectangle(cornerRadius: PearTheme.radiusControl))
             .accessibilityLabel("\(current.label) crop. Drag to move, pinch to zoom.")
 
+            Text("Drag the image to reposition it. Pinch or use the slider to zoom.")
+                .font(PearTheme.sans(14))
+                .foregroundStyle(PearTheme.textSecondary)
+            HStack(spacing: PearTheme.Space.s3) {
+                Image(systemName: "minus.magnifyingglass").foregroundStyle(PearTheme.textSecondary)
+                Slider(value: zoomBinding, in: 1...MediaRules.maxZoom)
+                    .accessibilityLabel("Zoom")
+                Image(systemName: "plus.magnifyingglass").foregroundStyle(PearTheme.textSecondary)
+                Button("Reset") {
+                    let item = draft.item
+                    draft.item.crops[current.rawValue] = Crop.auto(
+                        imgW: Double(item.width), imgH: Double(item.height), aspect: current.aspect)
+                }
+                .buttonStyle(PearSecondaryButtonStyle())
+                .accessibilityLabel("Reset \(current.label) crop")
+            }
+
             if showCaption {
                 TextField("Caption", text: $draft.item.caption)
                     .textFieldStyle(.roundedBorder)
@@ -318,6 +335,20 @@ private struct MediaImageCard: View {
         }
         .padding(PearTheme.Space.s4)
         .background(PearTheme.bgPanel, in: RoundedRectangle(cornerRadius: PearTheme.radiusWindow))
+    }
+
+    /// Zoom of the current surface's crop, so a slider can drive it the same way pinch does.
+    private var zoomBinding: Binding<Double> {
+        Binding(
+            get: {
+                let item = draft.item
+                return crop.zoom(imgW: Double(item.width), imgH: Double(item.height), aspect: current.aspect)
+            },
+            set: { z in
+                let item = draft.item
+                draft.item.crops[current.rawValue] = crop.zoomed(
+                    imgW: Double(item.width), imgH: Double(item.height), aspect: current.aspect, to: z)
+            })
     }
 
     @ViewBuilder private var cropped: some View {
