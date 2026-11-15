@@ -34,7 +34,8 @@
         "dashed": { "type": "boolean", "description": "Dashed rounded outline (empty slot), full width, min height 52." },
         "mono": { "type": "boolean", "description": "Monospace bold (codes, readings)." },
         "caps": { "type": "boolean", "description": "Section label: semibold, letter-spaced, secondary ink." },
-        "fit": { "type": "boolean", "description": "One line that shrinks instead of wrapping (huge text always does)." }
+        "fit": { "type": "boolean", "description": "One line that shrinks instead of wrapping (huge text always does)." },
+        "fill": { "type": "string", "description": "Screen root only: whole-screen background, edge to edge. bad|accent|neutral|black, or a {{expr}} yielding one." }
       }
     },
     "action": {
@@ -59,6 +60,7 @@
         "until": { "$ref": "#/$defs/expr" },
         "items": { "$ref": "#/$defs/expr" },
         "item": { "$ref": "#/$defs/node" },
+        "direction": { "enum": ["row", "column"], "description": "list: row = items side by side, equal widths." },
         "markers": { "$ref": "#/$defs/expr" },
         "follow": { "const": "me" },
         "kind": { "enum": ["motion", "location"] },

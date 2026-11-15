@@ -168,9 +168,10 @@ struct PearUIView: View {
 
     var body: some View {
         let state = session.state
+        let screen = session.doc.screen(state)
         ZStack {
-            PearTheme.bgWindow.ignoresSafeArea()
-            if let screen = session.doc.screen(state) {
+            Self.fill(screen?["style"]?["fill"].map { PearUIExpr.resolve($0, state).text }).ignoresSafeArea()
+            if let screen {
                 PearUINode(node: screen, state: state, session: session)
                     .padding(PearTheme.Space.s4)
                     .padding(.top, 44) // below the shared game menu (GameChrome)
@@ -179,6 +180,18 @@ struct PearUIView: View {
         }
         .foregroundStyle(PearTheme.text)
         .task { session.start() }
+    }
+}
+
+extension PearUIView {
+    /// Screen-root `style.fill`: the whole screen's background (same names as the web renderer's FILL).
+    static func fill(_ name: String?) -> Color {
+        switch name {
+        case "bad": Color(red: 0.92, green: 0.1, blue: 0.1)
+        case "black": .black
+        case "accent": PearTheme.accent
+        default: PearTheme.bgWindow
+        }
     }
 }
 
@@ -239,12 +252,16 @@ struct PearUINode: View {
             }
         case "list":
             let items = value("items").array ?? []
-            VStack(alignment: hAlign, spacing: PearTheme.Space.s2) {
-                ForEach(items.indices, id: \.self) { i in
-                    if let item = node["item"] {
-                        PearUINode(node: item, state: with(item: items[i]), session: session)
-                    }
+            let rows = ForEach(items.indices, id: \.self) { i in
+                if let item = node["item"] {
+                    PearUINode(node: item, state: with(item: items[i]), session: session)
                 }
+            }
+            if node["direction"]?.string == "row" {
+                // Side by side, equal widths (scoreboards, slots).
+                HStack(alignment: .top, spacing: PearTheme.Space.s3) { rows.frame(maxWidth: .infinity) }
+            } else {
+                VStack(alignment: hAlign, spacing: PearTheme.Space.s2) { rows }
             }
         case "gauge":
             ProgressView(value: min(max(value("value").number ?? 0, 0), 1)).tint(tone ?? PearTheme.accent)

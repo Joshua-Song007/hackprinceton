@@ -5,7 +5,9 @@ export type Tone = 'neutral' | 'accent' | 'good' | 'bad' | 'warn';
 export type Size = 's' | 'm' | 'l' | 'xl' | 'huge';
 export interface Style { tone?: Tone; size?: Size; align?: 'start' | 'center' | 'end'; pad?: number; grow?: boolean;
   /** Rounded panel fill / dashed outline (full width, min 52pt), monospace, tracked caps label, one shrinking line. */
-  card?: boolean; dashed?: boolean; mono?: boolean; caps?: boolean; fit?: boolean }
+  card?: boolean; dashed?: boolean; mono?: boolean; caps?: boolean; fit?: boolean;
+  /** Screen root only: whole-screen background, a fill name or `{{expr}}` yielding one. */
+  fill?: 'bad' | 'accent' | 'neutral' | 'black' | string }
 
 export type Action = { send: string; data?: Record<string, unknown> } | { set: string; value?: unknown };
 
@@ -18,6 +20,8 @@ export interface Node extends BaseNode {
   src?: string;
   until?: string;
   items?: string;
+  /** list: `row` lays items side by side with equal widths (default column). */
+  direction?: 'row' | 'column';
   item?: Node;
   markers?: string;
   follow?: string;
