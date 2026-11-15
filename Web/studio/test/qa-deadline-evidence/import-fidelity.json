@@ -1,0 +1,29 @@
+{
+  "scenePreserved": true,
+  "clientScriptsPreserved": true,
+  "serverScriptsPreserved": true,
+  "publishedAssetKeys": [
+    "ui.json",
+    "qa-image.png"
+  ],
+  "reconstructedAssetKeys": [
+    "ui.json",
+    "qa-image.png"
+  ],
+  "assetsPreserved": true,
+  "publishedMetadata": {
+    "name": "Tap counter",
+    "source": "pear-studio",
+    "qaPublishedSentinel": "must survive"
+  },
+  "reconstructedMetadata": {
+    "name": "QA imported scene sentinel",
+    "source": "pear-studio",
+    "qaPublishedSentinel": "must survive"
+  },
+  "expectedMetadata": {
+    "name": "QA imported scene sentinel",
+    "source": "pear-studio",
+    "qaPublishedSentinel": "must survive"
+  }
+}

@@ -40,3 +40,10 @@ export function companionMotion(deviceId: string, input: unknown): { pitch: numb
 
 /** A reserved browser slot must not sign in a hidden simulated player. */
 export const needsPreviewSession = (source: PreviewSource): boolean => source !== 'browser';
+
+/** Native Companion squeeze only; browser pointer events are not Pencil Pro squeeze. */
+export function companionSqueeze(deviceId: string, input: unknown): { deviceId: string; seq: number } | null {
+  const valid = validateUsis(input);
+  if (!valid.ok || valid.packet.deviceId !== deviceId || valid.packet.source !== 'live' || valid.packet.ch?.gesture?.type !== 'squeeze') return null;
+  return { deviceId, seq: valid.packet.seq };
+}

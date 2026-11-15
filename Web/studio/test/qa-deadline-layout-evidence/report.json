@@ -1,0 +1,46 @@
+{
+  "evidence": "Current-source browser, mocked hosted APIs; no credentials, physical hardware or native executable evidence",
+  "results": [
+    {
+      "name": "01-hosted-tile-matching-selection",
+      "passed": true
+    },
+    {
+      "name": "02-explorer-activates-editor",
+      "passed": true
+    },
+    {
+      "name": "03-window-close-reopen-reset",
+      "passed": true
+    },
+    {
+      "name": "04-pointer-tab-reorder",
+      "passed": true
+    },
+    {
+      "name": "05-pointer-split",
+      "passed": true
+    },
+    {
+      "name": "06-pointer-resize",
+      "passed": true
+    },
+    {
+      "name": "07-persist-restore-close-reopen",
+      "passed": true
+    },
+    {
+      "name": "08-old-serialized-constraints",
+      "passed": true
+    },
+    {
+      "name": "09-minimum-and-scaled-window",
+      "passed": true
+    },
+    {
+      "name": "10-scaled-sash-distance",
+      "passed": true
+    }
+  ],
+  "errors": []
+}

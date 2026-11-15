@@ -1,0 +1,15 @@
+{
+  "format": "pear-game/1",
+  "name": "Quick Draw Pencil Squeeze",
+  "scene": "scene.json",
+  "scripts": { "client": ["player"], "server": ["game"] },
+  "players": { "min": 2, "max": 2 },
+  "capabilities": {
+    "tier": 1,
+    "sensors": ["motion"],
+    "gestures": {
+      "builtin": ["tap"],
+      "raise": { "angleDeg": 60, "hysteresisDeg": 15 }
+    }
+  }
+}

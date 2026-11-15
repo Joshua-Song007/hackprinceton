@@ -1,0 +1,1370 @@
+{
+  "pearui": 1,
+  "route": [
+    {
+      "when": "device.kind == 'ipad'",
+      "screen": "referee"
+    },
+    {
+      "screen": "gun"
+    }
+  ],
+  "screens": {
+    "referee": {
+      "type": "column",
+      "children": [
+        {
+          "type": "effect",
+          "id": "fire-haptic",
+          "on": "ev.fire.round",
+          "haptic": "heavy"
+        },
+        {
+          "type": "text",
+          "value": "Lobby {{me.lobby}}",
+          "style": {
+            "size": "s",
+            "align": "end",
+            "mono": true
+          },
+          "if": "ev.state.phase == 'countdown' || ev.state.phase == 'arming' || ev.state.phase == 'fire' || ev.state.phase == 'roundOver' || ev.state.phase == 'matchOver'"
+        },
+        {
+          "type": "column",
+          "children": [
+            {
+              "type": "list",
+              "items": "ev.view.players",
+              "item": {
+                "type": "column",
+                "children": [
+                  {
+                    "type": "row",
+                    "children": [
+                      {
+                        "type": "text",
+                        "value": "{{item.name}}",
+                        "style": {
+                          "size": "l",
+                          "fit": true
+                        }
+                      },
+                      {
+                        "type": "spacer"
+                      },
+                      {
+                        "type": "text",
+                        "value": "{{item.score}}",
+                        "style": {
+                          "size": "xl",
+                          "tone": "accent"
+                        }
+                      }
+                    ]
+                  }
+                ],
+                "if": "item.role == 'phone'",
+                "style": {
+                  "card": true,
+                  "pad": 2
+                }
+              },
+              "direction": "row"
+            }
+          ],
+          "if": "ev.state.phase == 'countdown' || ev.state.phase == 'arming' || ev.state.phase == 'roundOver' || ev.state.phase == 'matchOver'"
+        },
+        {
+          "type": "column",
+          "children": [
+            {
+              "type": "text",
+              "value": "LOBBY CODE",
+              "style": {
+                "size": "l",
+                "caps": true
+              }
+            },
+            {
+              "type": "text",
+              "value": "{{me.lobby}}",
+              "style": {
+                "size": "huge",
+                "tone": "accent",
+                "mono": true
+              }
+            },
+            {
+              "type": "text",
+              "value": "On your iPhone: open Pear → Quick Draw → Join → enter {{me.lobby}}",
+              "style": {
+                "size": "l",
+                "align": "center"
+              }
+            },
+            {
+              "type": "text",
+              "value": "{{ev.state.needs}}",
+              "style": {
+                "size": "xl",
+                "align": "center"
+              }
+            },
+            {
+              "type": "row",
+              "children": [
+                {
+                  "type": "list",
+                  "items": "ev.view.players",
+                  "item": {
+                    "type": "column",
+                    "children": [
+                      {
+                        "type": "text",
+                        "value": "GUN",
+                        "style": {
+                          "caps": true
+                        }
+                      },
+                      {
+                        "type": "text",
+                        "value": "{{item.name}}",
+                        "style": {
+                          "size": "xl",
+                          "fit": true
+                        }
+                      },
+                      {
+                        "type": "text",
+                        "value": "Ready ✓",
+                        "style": {
+                          "size": "l",
+                          "tone": "good"
+                        },
+                        "if": "item.ready"
+                      },
+                      {
+                        "type": "text",
+                        "value": "Not ready",
+                        "style": {
+                          "size": "l",
+                          "tone": "warn"
+                        },
+                        "if": "!item.ready"
+                      },
+                      {
+                        "type": "text",
+                        "value": "Connected",
+                        "style": {
+                          "size": "s"
+                        },
+                        "if": "item.ready"
+                      },
+                      {
+                        "type": "text",
+                        "value": "Connected · hold phone down, tap Ready",
+                        "style": {
+                          "size": "s"
+                        },
+                        "if": "!item.ready"
+                      },
+                      {
+                        "type": "row",
+                        "children": [
+                          {
+                            "type": "text",
+                            "value": "Removed in"
+                          },
+                          {
+                            "type": "timer",
+                            "until": "item.idleKickAt"
+                          },
+                          {
+                            "type": "text",
+                            "value": "s unless Ready"
+                          }
+                        ],
+                        "if": "item.idleKickAt"
+                      }
+                    ],
+                    "if": "item.role == 'phone'",
+                    "style": {
+                      "card": true,
+                      "pad": 3,
+                      "align": "center"
+                    }
+                  },
+                  "direction": "row",
+                  "if": "ev.state.phones.length != 0",
+                  "style": {
+                    "grow": true
+                  }
+                },
+                {
+                  "type": "text",
+                  "value": "Waiting for a phone...",
+                  "style": {
+                    "size": "l",
+                    "tone": "neutral",
+                    "dashed": true,
+                    "pad": 6,
+                    "align": "center"
+                  },
+                  "if": "ev.state.phones.length == 0"
+                },
+                {
+                  "type": "text",
+                  "value": "Waiting for a phone...",
+                  "style": {
+                    "size": "l",
+                    "tone": "neutral",
+                    "dashed": true,
+                    "pad": 6,
+                    "align": "center"
+                  },
+                  "if": "ev.state.phones.length != 2"
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "value": "Next up: {{ev.view.queueNames}}",
+              "style": {
+                "size": "l",
+                "tone": "warn"
+              },
+              "if": "ev.view.queueNames"
+            },
+            {
+              "type": "column",
+              "style": {
+                "card": true,
+                "pad": 3,
+                "align": "start"
+              },
+              "children": [
+                {
+                  "type": "text",
+                  "value": "HOW TO PLAY",
+                  "style": {
+                    "size": "s",
+                    "caps": true
+                  }
+                },
+                {
+                  "type": "text",
+                  "value": "1. Hold your phone down at your side",
+                  "style": {
+                    "size": "l",
+                    "align": "start"
+                  }
+                },
+                {
+                  "type": "text",
+                  "value": "2. Tap Ready to calibrate",
+                  "style": {
+                    "size": "l",
+                    "align": "start"
+                  }
+                },
+                {
+                  "type": "text",
+                  "value": "3. Wait for DRAW!",
+                  "style": {
+                    "size": "l",
+                    "align": "start"
+                  }
+                },
+                {
+                  "type": "text",
+                  "value": "4. Raise and aim: fastest wins, best of 3. Moving early is a foul.",
+                  "style": {
+                    "size": "l",
+                    "align": "start"
+                  }
+                }
+              ]
+            },
+            {
+              "type": "spacer"
+            }
+          ],
+          "style": {
+            "align": "center",
+            "grow": true
+          },
+          "if": "ev.state.phase == 'lobby' || !ev.state"
+        },
+        {
+          "type": "column",
+          "children": [
+            {
+              "type": "spacer"
+            },
+            {
+              "type": "text",
+              "value": "GET READY",
+              "style": {
+                "size": "l",
+                "caps": true
+              }
+            },
+            {
+              "type": "timer",
+              "until": "ev.view.countdownEndsAt",
+              "style": {
+                "size": "huge",
+                "tone": "accent"
+              }
+            },
+            {
+              "type": "text",
+              "value": "Round {{ev.state.matchRound}}: phones down at your sides",
+              "style": {
+                "size": "l",
+                "tone": "neutral"
+              }
+            },
+            {
+              "type": "spacer"
+            }
+          ],
+          "style": {
+            "align": "center",
+            "grow": true
+          },
+          "if": "ev.state.phase == 'countdown'"
+        },
+        {
+          "type": "column",
+          "children": [
+            {
+              "type": "spacer"
+            },
+            {
+              "type": "text",
+              "value": "HOLD STILL...",
+              "style": {
+                "size": "huge",
+                "tone": "neutral"
+              }
+            },
+            {
+              "type": "list",
+              "items": "ev.view.players",
+              "item": {
+                "type": "column",
+                "children": [
+                  {
+                    "type": "text",
+                    "value": "{{item.name}}",
+                    "style": {
+                      "size": "xl",
+                      "tone": "neutral"
+                    }
+                  }
+                ],
+                "if": "item.role == 'phone'"
+              }
+            },
+            {
+              "type": "text",
+              "value": "Do not move until you see DRAW",
+              "style": {
+                "tone": "neutral"
+              }
+            },
+            {
+              "type": "spacer"
+            }
+          ],
+          "style": {
+            "align": "center",
+            "grow": true
+          },
+          "if": "ev.state.phase == 'arming'"
+        },
+        {
+          "type": "column",
+          "children": [
+            {
+              "type": "spacer"
+            },
+            {
+              "type": "text",
+              "value": "DRAW!",
+              "style": {
+                "size": "huge"
+              }
+            },
+            {
+              "type": "spacer"
+            }
+          ],
+          "style": {
+            "align": "center",
+            "grow": true
+          },
+          "if": "ev.state.phase == 'fire'"
+        },
+        {
+          "type": "column",
+          "children": [
+            {
+              "type": "spacer"
+            },
+            {
+              "type": "text",
+              "value": "ROUND {{ev.view.last.matchRound}}",
+              "style": {
+                "size": "l",
+                "caps": true
+              }
+            },
+            {
+              "type": "text",
+              "value": "Tie. Nobody scores.",
+              "style": {
+                "size": "xl"
+              },
+              "if": "ev.view.last.reason == 'tie'"
+            },
+            {
+              "type": "text",
+              "value": "{{ev.view.last.loserName}} moved early! {{ev.view.last.winnerName}} wins the round",
+              "style": {
+                "size": "xl",
+                "tone": "accent"
+              },
+              "if": "ev.view.last.reason == 'foul'"
+            },
+            {
+              "type": "text",
+              "value": "{{ev.view.last.winnerName}} wins the round",
+              "style": {
+                "size": "xl",
+                "tone": "accent"
+              },
+              "if": "ev.view.last.reason == 'fast'"
+            },
+            {
+              "type": "column",
+              "style": {
+                "card": true,
+                "pad": 3
+              },
+              "children": [
+                {
+                  "type": "list",
+                  "items": "ev.view.last.results",
+                  "item": {
+                    "type": "row",
+                    "children": [
+                      {
+                        "type": "text",
+                        "value": "{{item.name}}",
+                        "style": {
+                          "size": "l",
+                          "fit": true
+                        }
+                      },
+                      {
+                        "type": "gauge",
+                        "value": "item.bar",
+                        "style": {
+                          "grow": true
+                        }
+                      },
+                      {
+                        "type": "text",
+                        "value": "{{item.tag}}",
+                        "style": {
+                          "size": "s",
+                          "tone": "warn"
+                        },
+                        "if": "item.tag"
+                      },
+                      {
+                        "type": "text",
+                        "value": "{{item.msText}}",
+                        "style": {
+                          "size": "l",
+                          "mono": true
+                        }
+                      }
+                    ],
+                    "style": {
+                      "card": true
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "value": "Next round starts when both phones are lowered",
+              "style": {
+                "size": "l",
+                "tone": "neutral"
+              }
+            },
+            {
+              "type": "list",
+              "items": "ev.view.players",
+              "item": {
+                "type": "column",
+                "children": [
+                  {
+                    "type": "text",
+                    "value": "Waiting for {{item.name}} to lower",
+                    "style": {
+                      "size": "l",
+                      "tone": "warn"
+                    }
+                  }
+                ],
+                "if": "item.raised"
+              }
+            },
+            {
+              "type": "spacer"
+            }
+          ],
+          "style": {
+            "align": "center",
+            "grow": true
+          },
+          "if": "ev.state.phase == 'roundOver'"
+        },
+        {
+          "type": "column",
+          "children": [
+            {
+              "type": "spacer"
+            },
+            {
+              "type": "text",
+              "value": "{{ev.view.match.winnerName}} wins the match!",
+              "style": {
+                "size": "xl",
+                "tone": "accent",
+                "align": "center"
+              }
+            },
+            {
+              "type": "text",
+              "value": "{{ev.view.match.scoreText}}",
+              "style": {
+                "size": "huge"
+              }
+            },
+            {
+              "type": "text",
+              "value": "Tap Ready on both phones to play again",
+              "style": {
+                "size": "l",
+                "tone": "neutral"
+              }
+            },
+            {
+              "type": "list",
+              "items": "ev.view.players",
+              "item": {
+                "type": "column",
+                "children": [
+                  {
+                    "type": "text",
+                    "value": "{{item.name}}: Ready",
+                    "style": {
+                      "size": "l",
+                      "tone": "good"
+                    },
+                    "if": "item.ready"
+                  },
+                  {
+                    "type": "text",
+                    "value": "{{item.name}}: Not ready",
+                    "style": {
+                      "size": "l"
+                    },
+                    "if": "!item.ready"
+                  }
+                ],
+                "if": "item.role == 'phone'"
+              }
+            },
+            {
+              "type": "spacer"
+            }
+          ],
+          "style": {
+            "align": "center",
+            "grow": true
+          },
+          "if": "ev.state.phase == 'matchOver'"
+        }
+      ],
+      "style": {
+        "align": "center",
+        "pad": 1,
+        "grow": true,
+        "fill": "{{ev.state.phase == 'fire' && 'bad' || ev.state.phase == 'arming' && 'black'}}"
+      }
+    },
+    "gun": {
+      "type": "column",
+      "children": [
+        {
+          "type": "sensor",
+          "kind": "motion",
+          "event": "aim",
+          "hz": 20,
+          "id": "aim"
+        },
+        {
+          "type": "effect",
+          "id": "fire-haptic",
+          "on": "ev.fire.round",
+          "haptic": "heavy"
+        },
+        {
+          "type": "list",
+          "items": "ev.view.players",
+          "item": {
+            "type": "column",
+            "children": [
+              {
+                "type": "effect",
+                "id": "win-haptic",
+                "on": "item.lastWin",
+                "haptic": "success"
+              }
+            ],
+            "if": "item.id == me.id"
+          }
+        },
+        {
+          "type": "text",
+          "value": "Lobby {{me.lobby}}",
+          "style": {
+            "size": "s",
+            "align": "end",
+            "mono": true
+          }
+        },
+        {
+          "type": "column",
+          "children": [
+            {
+              "type": "spacer"
+            },
+            {
+              "type": "text",
+              "value": "LOBBY CODE",
+              "style": {
+                "size": "s",
+                "caps": true
+              }
+            },
+            {
+              "type": "text",
+              "value": "{{me.lobby}}",
+              "style": {
+                "size": "huge",
+                "tone": "accent",
+                "mono": true
+              }
+            },
+            {
+              "type": "list",
+              "items": "ev.view.players",
+              "item": {
+                "type": "column",
+                "children": [
+                  {
+                    "type": "row",
+                    "children": [
+                      {
+                        "type": "text",
+                        "value": "✓",
+                        "style": {
+                          "size": "l",
+                          "tone": "good"
+                        },
+                        "if": "item.ready"
+                      },
+                      {
+                        "type": "text",
+                        "value": "○",
+                        "style": {
+                          "size": "l",
+                          "tone": "neutral"
+                        },
+                        "if": "!item.ready"
+                      },
+                      {
+                        "type": "text",
+                        "value": "{{item.name}} (You)",
+                        "style": {
+                          "size": "l",
+                          "fit": true
+                        },
+                        "if": "item.id == me.id"
+                      },
+                      {
+                        "type": "text",
+                        "value": "{{item.name}}",
+                        "style": {
+                          "size": "l",
+                          "fit": true
+                        },
+                        "if": "item.id != me.id"
+                      },
+                      {
+                        "type": "spacer"
+                      },
+                      {
+                        "type": "text",
+                        "value": "Ready",
+                        "style": {
+                          "size": "s"
+                        },
+                        "if": "item.ready"
+                      },
+                      {
+                        "type": "text",
+                        "value": "Not ready",
+                        "style": {
+                          "size": "s"
+                        },
+                        "if": "!item.ready"
+                      }
+                    ]
+                  }
+                ],
+                "if": "item.role == 'phone'",
+                "style": {
+                  "card": true
+                }
+              }
+            },
+            {
+              "type": "text",
+              "value": "Waiting for a player...",
+              "if": "ev.state.phones.length == 0",
+              "style": {
+                "dashed": true,
+                "align": "start",
+                "tone": "neutral"
+              }
+            },
+            {
+              "type": "text",
+              "value": "Waiting for a player...",
+              "if": "ev.state.phones.length != 2",
+              "style": {
+                "dashed": true,
+                "align": "start",
+                "tone": "neutral"
+              }
+            },
+            {
+              "type": "text",
+              "value": "{{ev.state.needs}}",
+              "style": {
+                "align": "center",
+                "tone": "neutral"
+              }
+            },
+            {
+              "type": "list",
+              "items": "ev.view.players",
+              "item": {
+                "type": "column",
+                "children": [
+                  {
+                    "type": "text",
+                    "value": "A match is on. You are number {{item.queuePos}} in line.",
+                    "style": {
+                      "size": "l",
+                      "tone": "warn"
+                    },
+                    "if": "item.role == 'queued'"
+                  },
+                  {
+                    "type": "row",
+                    "children": [
+                      {
+                        "type": "text",
+                        "value": "Tap Ready within"
+                      },
+                      {
+                        "type": "timer",
+                        "until": "item.idleKickAt"
+                      },
+                      {
+                        "type": "text",
+                        "value": "s or you will be removed"
+                      }
+                    ],
+                    "if": "item.idleKickAt"
+                  }
+                ],
+                "if": "item.id == me.id"
+              }
+            },
+            {
+              "type": "list",
+              "items": "ev.view.players",
+              "item": {
+                "type": "column",
+                "children": [
+                  {
+                    "type": "column",
+                    "children": [
+                      {
+                        "type": "button",
+                        "label": "Ready",
+                        "action": {
+                          "send": "ready",
+                          "data": {
+                            "round": "{{ev.state.round}}"
+                          }
+                        },
+                        "if": "!item.ready",
+                        "style": {
+                          "tone": "accent"
+                        }
+                      },
+                      {
+                        "type": "text",
+                        "value": "Waiting for the other player",
+                        "style": {
+                          "size": "l"
+                        },
+                        "if": "item.ready"
+                      }
+                    ],
+                    "if": "item.role == 'phone'"
+                  }
+                ],
+                "if": "item.id == me.id"
+              }
+            },
+            {
+              "type": "spacer"
+            },
+            {
+              "type": "list",
+              "items": "ev.view.players",
+              "item": {
+                "type": "column",
+                "if": "item.id == me.id",
+                "children": [
+                  {
+                    "type": "column",
+                    "if": "item.role == 'phone'",
+                    "children": [
+                      {
+                        "type": "text",
+                        "value": "Hold your phone down at your side and tap Ready",
+                        "if": "!item.ready",
+                        "style": {
+                          "size": "l",
+                          "align": "center"
+                        }
+                      },
+                      {
+                        "type": "text",
+                        "value": "Ready. Waiting for the other player",
+                        "if": "item.ready",
+                        "style": {
+                          "size": "l",
+                          "align": "center"
+                        }
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+          ],
+          "style": {
+            "align": "center",
+            "grow": true
+          },
+          "if": "ev.state.phase == 'lobby' || !ev.state"
+        },
+        {
+          "type": "column",
+          "children": [
+            {
+              "type": "spacer"
+            },
+            {
+              "type": "text",
+              "value": "GET READY",
+              "style": {
+                "size": "s",
+                "caps": true
+              }
+            },
+            {
+              "type": "timer",
+              "until": "ev.view.countdownEndsAt",
+              "style": {
+                "size": "huge",
+                "tone": "accent"
+              }
+            },
+            {
+              "type": "list",
+              "items": "ev.view.players",
+              "item": {
+                "type": "column",
+                "children": [
+                  {
+                    "type": "column",
+                    "style": {
+                      "align": "center"
+                    },
+                    "children": [
+                      {
+                        "type": "text",
+                        "value": "{{item.score}}",
+                        "style": {
+                          "size": "xl"
+                        }
+                      },
+                      {
+                        "type": "text",
+                        "value": "{{item.name}}",
+                        "style": {
+                          "size": "s",
+                          "fit": true
+                        }
+                      }
+                    ]
+                  }
+                ],
+                "if": "item.role == 'phone'"
+              },
+              "direction": "row"
+            },
+            {
+              "type": "spacer"
+            },
+            {
+              "type": "text",
+              "value": "Get ready. Phone down at your side.",
+              "style": {
+                "size": "l",
+                "align": "center"
+              }
+            }
+          ],
+          "style": {
+            "align": "center",
+            "grow": true
+          },
+          "if": "ev.state.phase == 'countdown'"
+        },
+        {
+          "type": "column",
+          "children": [
+            {
+              "type": "spacer"
+            },
+            {
+              "type": "text",
+              "value": "HOLD STILL",
+              "style": {
+                "size": "huge",
+                "align": "center",
+                "tone": "neutral"
+              }
+            },
+            {
+              "type": "text",
+              "value": "Do not move until you see DRAW",
+              "style": {
+                "tone": "neutral"
+              }
+            },
+            {
+              "type": "spacer"
+            },
+            {
+              "type": "text",
+              "value": "Hold still...",
+              "style": {
+                "size": "l",
+                "align": "center"
+              }
+            }
+          ],
+          "style": {
+            "align": "center",
+            "grow": true
+          },
+          "if": "ev.state.phase == 'arming'"
+        },
+        {
+          "type": "column",
+          "children": [
+            {
+              "type": "spacer"
+            },
+            {
+              "type": "text",
+              "value": "DRAW!",
+              "style": {
+                "size": "huge",
+                "align": "center"
+              }
+            },
+            {
+              "type": "spacer"
+            },
+            {
+              "type": "text",
+              "value": "Raise your phone now",
+              "style": {
+                "size": "l",
+                "align": "center"
+              }
+            }
+          ],
+          "style": {
+            "align": "center",
+            "grow": true
+          },
+          "if": "ev.state.phase == 'fire'"
+        },
+        {
+          "type": "column",
+          "children": [
+            {
+              "type": "spacer"
+            },
+            {
+              "type": "text",
+              "value": "ROUND {{ev.view.last.matchRound}}",
+              "style": {
+                "size": "s",
+                "caps": true
+              }
+            },
+            {
+              "type": "text",
+              "value": "Tie. Nobody scores.",
+              "style": {
+                "size": "xl",
+                "align": "center"
+              },
+              "if": "ev.view.last.reason == 'tie'"
+            },
+            {
+              "type": "column",
+              "children": [
+                {
+                  "type": "column",
+                  "children": [
+                    {
+                      "type": "text",
+                      "value": "You win: the other player moved early",
+                      "style": {
+                        "size": "xl",
+                        "tone": "good",
+                        "align": "center"
+                      },
+                      "if": "ev.view.last.reason == 'foul'"
+                    },
+                    {
+                      "type": "text",
+                      "value": "You win the round",
+                      "style": {
+                        "size": "xl",
+                        "tone": "good",
+                        "align": "center"
+                      },
+                      "if": "ev.view.last.reason != 'foul'"
+                    }
+                  ],
+                  "if": "ev.view.last.winnerId == me.id"
+                },
+                {
+                  "type": "column",
+                  "children": [
+                    {
+                      "type": "text",
+                      "value": "Foul: you moved early",
+                      "style": {
+                        "size": "xl",
+                        "tone": "bad",
+                        "align": "center"
+                      },
+                      "if": "ev.view.last.reason == 'foul'"
+                    },
+                    {
+                      "type": "text",
+                      "value": "{{ev.view.last.winnerName}} wins the round",
+                      "style": {
+                        "size": "xl",
+                        "tone": "bad",
+                        "align": "center"
+                      },
+                      "if": "ev.view.last.reason != 'foul'"
+                    }
+                  ],
+                  "if": "ev.view.last.winnerId != me.id"
+                }
+              ],
+              "if": "ev.view.last.winnerId"
+            },
+            {
+              "type": "list",
+              "items": "ev.view.last.results",
+              "item": {
+                "type": "row",
+                "children": [
+                  {
+                    "type": "text",
+                    "value": "{{item.name}}",
+                    "style": {
+                      "size": "l",
+                      "fit": true
+                    }
+                  },
+                  {
+                    "type": "text",
+                    "value": "WIN",
+                    "style": {
+                      "size": "s",
+                      "tone": "good"
+                    },
+                    "if": "item.won"
+                  },
+                  {
+                    "type": "text",
+                    "value": "{{item.tag}}",
+                    "style": {
+                      "size": "s",
+                      "tone": "warn"
+                    },
+                    "if": "item.tag"
+                  },
+                  {
+                    "type": "spacer"
+                  },
+                  {
+                    "type": "text",
+                    "value": "{{item.msText}}",
+                    "style": {
+                      "size": "l",
+                      "mono": true
+                    }
+                  }
+                ],
+                "style": {
+                  "card": true
+                }
+              }
+            },
+            {
+              "type": "list",
+              "items": "ev.view.players",
+              "item": {
+                "type": "column",
+                "children": [
+                  {
+                    "type": "column",
+                    "style": {
+                      "align": "center"
+                    },
+                    "children": [
+                      {
+                        "type": "text",
+                        "value": "{{item.score}}",
+                        "style": {
+                          "size": "xl"
+                        }
+                      },
+                      {
+                        "type": "text",
+                        "value": "{{item.name}}",
+                        "style": {
+                          "size": "s",
+                          "fit": true
+                        }
+                      }
+                    ]
+                  }
+                ],
+                "if": "item.role == 'phone'"
+              },
+              "direction": "row"
+            },
+            {
+              "type": "spacer"
+            },
+            {
+              "type": "list",
+              "items": "ev.view.players",
+              "item": {
+                "type": "column",
+                "children": [
+                  {
+                    "type": "text",
+                    "value": "Lower your phone for the next round",
+                    "style": {
+                      "size": "l",
+                      "align": "center"
+                    },
+                    "if": "item.raised"
+                  },
+                  {
+                    "type": "text",
+                    "value": "Waiting for the other phone to lower",
+                    "style": {
+                      "size": "l",
+                      "align": "center"
+                    },
+                    "if": "!item.raised"
+                  }
+                ],
+                "if": "item.id == me.id"
+              }
+            }
+          ],
+          "style": {
+            "align": "center",
+            "grow": true
+          },
+          "if": "ev.state.phase == 'roundOver'"
+        },
+        {
+          "type": "column",
+          "children": [
+            {
+              "type": "spacer"
+            },
+            {
+              "type": "text",
+              "value": "YOU WON THE MATCH",
+              "style": {
+                "size": "xl",
+                "tone": "accent",
+                "align": "center"
+              },
+              "if": "ev.matchOver.winnerId == me.id"
+            },
+            {
+              "type": "text",
+              "value": "{{ev.view.match.winnerName}} won the match",
+              "style": {
+                "size": "xl",
+                "align": "center"
+              },
+              "if": "ev.matchOver.winnerId != me.id"
+            },
+            {
+              "type": "list",
+              "items": "ev.view.players",
+              "item": {
+                "type": "column",
+                "children": [
+                  {
+                    "type": "column",
+                    "style": {
+                      "align": "center"
+                    },
+                    "children": [
+                      {
+                        "type": "text",
+                        "value": "{{item.score}}",
+                        "style": {
+                          "size": "xl"
+                        }
+                      },
+                      {
+                        "type": "text",
+                        "value": "{{item.name}}",
+                        "style": {
+                          "size": "s",
+                          "fit": true
+                        }
+                      }
+                    ]
+                  }
+                ],
+                "if": "item.role == 'phone'"
+              },
+              "direction": "row"
+            },
+            {
+              "type": "list",
+              "items": "ev.view.players",
+              "item": {
+                "type": "column",
+                "children": [
+                  {
+                    "type": "column",
+                    "children": [
+                      {
+                        "type": "button",
+                        "label": "Play again",
+                        "action": {
+                          "send": "ready",
+                          "data": {
+                            "round": "{{ev.state.round}}"
+                          }
+                        },
+                        "if": "!item.ready",
+                        "style": {
+                          "tone": "accent"
+                        }
+                      },
+                      {
+                        "type": "text",
+                        "value": "Waiting for the other player",
+                        "style": {
+                          "size": "l"
+                        },
+                        "if": "item.ready"
+                      }
+                    ],
+                    "if": "item.role == 'phone'"
+                  }
+                ],
+                "if": "item.id == me.id"
+              }
+            },
+            {
+              "type": "spacer"
+            },
+            {
+              "type": "text",
+              "value": "Tap Play again when you are both ready",
+              "style": {
+                "size": "l",
+                "align": "center"
+              }
+            }
+          ],
+          "style": {
+            "align": "center",
+            "grow": true
+          },
+          "if": "ev.state.phase == 'matchOver'"
+        }
+      ],
+      "style": {
+        "align": "center",
+        "pad": 1,
+        "grow": true,
+        "fill": "{{ev.state.phase == 'fire' && 'bad' || ev.state.phase == 'arming' && 'black'}}"
+      }
+    }
+  }
+}

@@ -7,7 +7,7 @@ import type { PanelSpec, PanelView } from '../layout';
 import { button, el } from '../ui';
 import { RelayClient } from '../relay';
 import { qrDataUrl } from '../publishView';
-import { companionMotion, needsPreviewSession, phoneReachable, physicalPlayerUrl, type PreviewSource } from './physical';
+import { companionSqueeze, companionMotion, needsPreviewSession, phoneReachable, physicalPlayerUrl, type PreviewSource } from './physical';
 import { debugRow, normalizeLobby, randomLobby, sensorHz, sysRow, type LogRow, type PreviewKind } from './helpers';
 import { DEFAULT_CENTER, PreviewMap, type LatLng } from './map';
 import { DeviceSession } from './session';
@@ -177,17 +177,26 @@ export function createLivePreviewPanel(account: AccountController, openHostedGam
     el('p', {}, ['The game server must deploy this Studio build, including player.html, and allow preview sign-in (PEAR_DEV_SIGNIN=1). A missing player page may open Studio instead; ask the host to deploy the player entry. Local ui.json previews are not shared with browsers: publish the UI first. Map markers are Studio simulator positions, not paired-browser tracking.']),
     el('p', {}, ['On the device, tap Join lobby, then enable only the inputs you want to share. Touch and Pencil taps work on game buttons. The optional Touch / Pencil pad sends pointer events only to games scripted for them; pressure/tilt vary by browser and hardware. No native Pencil hover, roll, squeeze or double-tap is claimed. For two phone players, open the phone link on two different phones.']),
     el('details', { class: 'lp-companion' }, [el('summary', {}, ['Optional: companion motion bridge']),
-      el('p', {}, ['For an already running local relay: choose Companion motion bridge for a slot, connect, opt in below, then assign a device. Companion motion is converted from USIS orientation to pitch/roll/yaw in degrees for the game’s active motion nodes. Native touch/Pencil, watch and AirPods channels are not forwarded; USIS positions are metres, not GPS.']),
+      el('p', {}, ['For an already running local relay: choose Companion motion bridge for a slot, connect, opt in below, then assign a device. Companion motion is converted from USIS orientation to pitch/roll/yaw in degrees for the game’s active motion nodes. Native Pencil Pro squeeze is forwarded as a squeeze game event; other touch/Pencil, watch and AirPods channels are not forwarded; USIS positions are metres, not GPS.']),
       el('p', {}, ['Relay setup is separate and currently not included in packaged Studio. Developers can run npm run relay in Web/studio; the Pear companion discovers “Pear relay” on the same Wi-Fi (Bonjour _pear._tcp, TCP 7777). Allow Local Network access. Browser pairing above needs no relay or terminal.']),
-      relayConnect, relayDisconnect, relayStatus, el('label', { class: 'lp-relay-consent' }, [consent, ' I allow assigned local companion motion to be sent to this game’s cloud server.']), relayDevices,
+      relayConnect, relayDisconnect, relayStatus, el('label', { class: 'lp-relay-consent' }, [consent, ' I allow assigned local companion motion and Pencil Pro squeeze to be sent to this game’s cloud server.']), relayDevices,
     ]),
   ]);
+  const squeezeSeq = new Map<string, number>();
   relay.onPacket = (id, packet) => {
     if (!consent.checked || relay.status !== 'open') return;
     const data = companionMotion(id, packet);
-    if (!data) return;
+    const squeeze = companionSqueeze(id, packet);
+    const freshSqueeze = squeeze && squeeze.seq > (squeezeSeq.get(id) ?? -1);
+    if (squeeze) squeezeSeq.set(id, Math.max(squeeze.seq, squeezeSeq.get(id) ?? -1));
+    if (!data && !freshSqueeze) return;
     for (const d of devices) {
       if (sources[d.spec.id] !== 'companion' || assignments.get(d.spec.id) !== id || d.session.status !== 'open') continue;
+      if (freshSqueeze) {
+        const state = d.session.state.ev.state as { round?: number } | undefined;
+        d.session.send('squeeze', { ...squeeze, round: state?.round });
+      }
+      if (!data) continue;
       const now = performance.now();
       for (const sensor of d.sensors) {
         if (sensor.node.kind !== 'motion' || now - sensor.last < 1000 / sensorHz(sensor.node)) continue;
