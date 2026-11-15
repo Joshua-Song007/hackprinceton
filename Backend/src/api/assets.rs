@@ -87,7 +87,7 @@ async fn put_asset(
     Path((game_id, name)): Path<(String, String)>,
     body: Bytes,
 ) -> Result<Json<Stored>, StatusCode> {
-    let account = authenticate(&headers).ok_or(StatusCode::UNAUTHORIZED)?;
+    let account = authenticate(&headers).await.ok_or(StatusCode::UNAUTHORIZED)?;
     if !valid_uuid(&game_id) || !valid_name(&name) || body.is_empty() {
         return Err(StatusCode::BAD_REQUEST);
     }

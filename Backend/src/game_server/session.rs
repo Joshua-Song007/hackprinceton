@@ -533,7 +533,7 @@ async fn play(
     headers: HeaderMap,
     ws: Result<WebSocketUpgrade, WebSocketUpgradeRejection>,
 ) -> Response {
-    let Some(account) = accounts::authenticate_request(&headers, uri.query()) else {
+    let Some(account) = accounts::authenticate_request(&headers, uri.query()).await else {
         return StatusCode::UNAUTHORIZED.into_response();
     };
     if game_id.is_empty() || game_id.len() > MAX_GAME_ID_LEN {

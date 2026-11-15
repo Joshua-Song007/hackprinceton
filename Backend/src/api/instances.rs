@@ -18,8 +18,8 @@ use crate::db;
 use crate::game_server::session::{self, normalize_lobby};
 use crate::AppState;
 
-fn require_developer(headers: &HeaderMap) -> Result<(), StatusCode> {
-    match authenticate(headers) {
+async fn require_developer(headers: &HeaderMap) -> Result<(), StatusCode> {
+    match authenticate(headers).await {
         None => Err(StatusCode::UNAUTHORIZED),
         Some(a) if a.is_developer() => Ok(()),
         Some(_) => Err(StatusCode::FORBIDDEN),
@@ -45,7 +45,7 @@ struct InstanceOut {
 }
 
 async fn list(State(state): State<AppState>, headers: HeaderMap) -> Result<Json<Vec<InstanceOut>>, StatusCode> {
-    require_developer(&headers)?;
+    require_developer(&headers).await?;
     let mut out = Vec::new();
     for i in session::instances() {
         let title = match (&state.db, valid_uuid(&i.game_id)) {
@@ -66,13 +66,13 @@ async fn list(State(state): State<AppState>, headers: HeaderMap) -> Result<Json<
 }
 
 async fn close(headers: HeaderMap, Path((game_id, lobby)): Path<(String, String)>) -> Result<StatusCode, StatusCode> {
-    require_developer(&headers)?;
+    require_developer(&headers).await?;
     let lobby = normalize_lobby(&lobby).ok_or(StatusCode::BAD_REQUEST)?;
     if session::close_lobby(&game_id, &lobby) { Ok(StatusCode::NO_CONTENT) } else { Err(StatusCode::NOT_FOUND) }
 }
 
 async fn kick(headers: HeaderMap, Path((game_id, lobby, player)): Path<(String, String, String)>) -> Result<StatusCode, StatusCode> {
-    require_developer(&headers)?;
+    require_developer(&headers).await?;
     let lobby = normalize_lobby(&lobby).ok_or(StatusCode::BAD_REQUEST)?;
     if session::kick(&game_id, &lobby, &player) { Ok(StatusCode::NO_CONTENT) } else { Err(StatusCode::NOT_FOUND) }
 }

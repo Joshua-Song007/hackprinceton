@@ -62,7 +62,7 @@ async fn status(State(state): State<AppState>, headers: HeaderMap, RawQuery(quer
         None => "none",
     };
     let mut out = json!({ "ok": true, "version": version(), "storage": blobs().kind(), "database": database });
-    if authenticate(&headers).is_some_and(|a| a.is_developer()) {
+    if authenticate(&headers).await.is_some_and(|a| a.is_developer()) {
         let probe = if query_param(query.as_deref(), "probe") == Some("1") {
             Some(run_probe().await)
         } else {

@@ -44,6 +44,7 @@ async fn main() {
         if let Err(e) = database::migrate(pool).await {
             eprintln!("migration failed, continuing: {e}");
         }
+        pear_backend::api::accounts::init_session_pool(pool.clone());
     }
 
     // `pear-backend seed <dir>`: the marketplace seed/publish job. Publishes every plugin dir under
@@ -94,6 +95,10 @@ async fn main() {
         let r = pear_backend::api::status::run_probe().await;
         eprintln!("storage probe: {}", r.reason.as_deref().unwrap_or("ok"));
     });
+
+    if let Some(Db::Pg(pool)) = &db {
+        pear_backend::api::accounts::spawn_session_cleanup(pool.clone());
+    }
 
     let studio_dir = std::env::var("PEAR_STUDIO_DIR").ok().map(std::path::PathBuf::from);
     if let Some(dir) = &studio_dir {

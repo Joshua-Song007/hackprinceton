@@ -41,8 +41,8 @@ fn db_err(e: sqlx::Error) -> ApiError {
     error(StatusCode::INTERNAL_SERVER_ERROR, "database error")
 }
 
-fn parts(state: &AppState, headers: &HeaderMap) -> Result<(Db, String), ApiError> {
-    let me = authenticate(headers).ok_or_else(|| error(StatusCode::UNAUTHORIZED, "sign in first"))?;
+async fn parts(state: &AppState, headers: &HeaderMap) -> Result<(Db, String), ApiError> {
+    let me = authenticate(headers).await.ok_or_else(|| error(StatusCode::UNAUTHORIZED, "sign in first"))?;
     let db = state.db.clone().ok_or_else(|| error(StatusCode::SERVICE_UNAVAILABLE, "database unavailable"))?;
     Ok((db, me.id))
 }
@@ -54,7 +54,7 @@ struct KeyRequest {
 }
 
 async fn put_key(State(state): State<AppState>, headers: HeaderMap, Json(req): Json<KeyRequest>) -> Result<Json<Value>, ApiError> {
-    let (db, me) = parts(&state, &headers)?;
+    let (db, me) = parts(&state, &headers).await?;
     let key = req.key.trim();
     if !PROVIDERS.contains(&req.provider.as_str()) {
         return Err(error(StatusCode::BAD_REQUEST, "provider must be anthropic, openai or google"));
@@ -67,7 +67,7 @@ async fn put_key(State(state): State<AppState>, headers: HeaderMap, Json(req): J
 }
 
 async fn get_key(State(state): State<AppState>, headers: HeaderMap) -> Result<Json<Value>, ApiError> {
-    let (db, me) = parts(&state, &headers)?;
+    let (db, me) = parts(&state, &headers).await?;
     Ok(Json(match db::get_model_key(&db, &me).await.map_err(db_err)? {
         Some((provider, _)) => json!({ "provider": provider, "set": true }),
         None => json!({ "provider": null, "set": false }),
@@ -75,7 +75,7 @@ async fn get_key(State(state): State<AppState>, headers: HeaderMap) -> Result<Js
 }
 
 async fn delete_key(State(state): State<AppState>, headers: HeaderMap) -> Result<StatusCode, ApiError> {
-    let (db, me) = parts(&state, &headers)?;
+    let (db, me) = parts(&state, &headers).await?;
     db::delete_model_key(&db, &me).await.map_err(db_err)?;
     Ok(StatusCode::NO_CONTENT)
 }
@@ -103,7 +103,7 @@ fn valid_project(p: &str) -> bool {
 }
 
 async fn proxy(State(state): State<AppState>, uri: Uri, headers: HeaderMap, ws: Result<WebSocketUpgrade, WebSocketUpgradeRejection>) -> Response {
-    let Some(account) = authenticate_request(&headers, uri.query()) else {
+    let Some(account) = authenticate_request(&headers, uri.query()).await else {
         return StatusCode::UNAUTHORIZED.into_response();
     };
     let project = query_param(uri.query(), "project").unwrap_or("local").to_string();
