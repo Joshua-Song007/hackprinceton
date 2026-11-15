@@ -31,6 +31,18 @@ PEARUI v1 (ui.json): server-driven native UI; the same JSON renders on iOS and w
   Action: {"send":"<event>","data":{...bindings}} or {"set":"<local key>","value":...}. Unknown node types render nothing.
   A PearUI client sends {"name":"role","data":{"role":"referee"|"phone","kind":"ipad"|"phone"}} on socket open. Scripts that ignore role are unaffected.
   Clients have no logic: a motion sensor streams "aim" {pitch,roll,yaw}; the server script does any thresholding/hysteresis.
+  Aim pattern: put a sensor(kind:motion,event:"aim") on the phone screen; the server script reads "aim" and fires when pitch/roll cross its threshold, then fireAll("fire",{round}).
+  Worked example (trimmed from Games/QuickDraw/ui.json):
+    {"pearui":1,"route":[{"when":"device.kind == 'ipad'","screen":"referee"},{"screen":"gun"}],
+     "screens":{
+      "referee":{"type":"column","children":[
+        {"type":"list","items":"ev.view.players","item":{"type":"row","children":[
+          {"type":"text","value":"{{item.name}}"},{"type":"spacer"},{"type":"text","value":"{{item.score}}","style":{"size":"xl","tone":"accent"}}]}}]},
+      "gun":{"type":"column","children":[
+        {"type":"sensor","kind":"motion","event":"aim","hz":20,"id":"aim"},
+        {"type":"effect","id":"fire-haptic","on":"ev.fire.round","haptic":"heavy"},
+        {"type":"text","value":"{{ev.state.needs}}","if":"ev.view.players.length"},
+        {"type":"button","label":"Ready","action":{"send":"ready","data":{"round":"{{ev.state.round}}"}},"if":"!ev.state.ready","style":{"tone":"accent"}}]}}}
 
 SCENARIO (run_scenario: headless, real sockets against the hosted server)
   {"game":"<id>","version"?:n,"lobby"?:"CODE","durationMs":n,
