@@ -386,6 +386,75 @@ final class PlayerModel {
         return Self.describe(error)
     }
 
+    // MARK: Media
+
+    /// Ids of the games this account owns; fetched once per sign-in.
+    private var ownedIds: Set<String>?
+    /// Per game id and latest version: the game's media. Cleared when this account saves media.
+    private var mediaCache: [String: GameMedia] = [:]
+
+    func canEditMedia(_ entry: CatalogEntry) async -> Bool {
+        guard case .signedIn(let account) = phase else { return false }
+        if account.isDeveloper { return true }
+        if ownedIds == nil { ownedIds = try? await client.ownedGameIds() }
+        return ownedIds?.contains(entry.id) ?? false
+    }
+
+    /// nil when it could not be fetched.
+    func media(for entry: CatalogEntry) async -> GameMedia? {
+        let key = "\(entry.id)@\(entry.latestVersion)"
+        if let known = mediaCache[key] { return known }
+        guard let media = try? await client.fetchMedia(gameId: entry.id) else { return nil }
+        mediaCache[key] = media
+        return media
+    }
+
+    nonisolated func mediaAssetURL(_ item: MediaItem) -> URL {
+        client.assetURL(sha256: item.sha256)
+    }
+
+    /// Uploads the pending images, sets the cover from the thumbnail's card crop, publishes the media and refreshes the
+    /// library; returns text to show when it failed, nil on success.
+    func saveMedia(entry: CatalogEntry, thumbnail: MediaDraftItem?, carousel: [MediaDraftItem]) async -> String? {
+        do {
+            let thumb = try await uploaded(thumbnail, gameId: entry.id)
+            var items: [MediaItem] = []
+            for draft in carousel { if let item = try await uploaded(draft, gameId: entry.id) { items.append(item) } }
+            if let thumbnail, let thumb {
+                let data: Data
+                if let pending = thumbnail.pending { data = pending } else { data = try await client.assetData(sha256: thumb.sha256) }
+                guard let cover = MediaImage.coverJPEG(from: data, crop: thumb.crop(.card)) else {
+                    return "That thumbnail could not be used."
+                }
+                try await client.setCover(gameId: entry.id, data: cover)
+            }
+            _ = try await client.publishMedia(gameId: entry.id, media: GameMedia(thumbnail: thumb, carousel: items))
+            mediaCache.removeAll()
+            await library.refresh()
+            return nil
+        } catch {
+            if let cloud = error as? CloudError {
+                if cloud == .unauthorized { await sessionExpired() }
+                if cloud == .forbidden { return "You can't edit this game." }
+                if case .server(let status, _) = cloud {
+                    if status == 403 { return "You can't edit this game." }
+                    if status == 413 { return "An image is too large." }
+                }
+            }
+            return Self.describe(error)
+        }
+    }
+
+    private func uploaded(_ draft: MediaDraftItem?, gameId: String) async throws -> MediaItem? {
+        guard let draft else { return nil }
+        guard let data = draft.pending else { return draft.item }
+        let stored = try await client.uploadAsset(gameId: gameId, name: draft.item.name, data: data, contentType: "image/jpeg")
+        var item = draft.item
+        item.sha256 = stored.sha256
+        item.size = stored.size
+        return item
+    }
+
     // MARK: Helpers
 
     private func signIn(notFoundMessage: String?, _ perform: () async throws -> Account) async {
@@ -429,6 +498,8 @@ final class PlayerModel {
         try? store.clear()
         hasSavedSession = false
         library.reset()
+        ownedIds = nil
+        mediaCache = [:]
         friends = []
         requests = FriendRequests()
         friendCode = ""

@@ -21,6 +21,9 @@ struct GameDetailView: View {
     @State private var phoneOnly: Bool?
     @State private var openLobbies: [LobbyInfo] = []
     @State private var typedCode = ""
+    @State private var media: GameMedia?
+    @State private var canEdit = false
+    @State private var editingMedia = false
     #if os(iOS)
     @Environment(\.horizontalSizeClass) private var sizeClass
     private var wide: Bool { sizeClass == .regular }
@@ -64,6 +67,10 @@ struct GameDetailView: View {
                         }
                         .padding(PearTheme.Space.s4)
                     }
+
+                if let carousel = media?.carousel, !carousel.isEmpty {
+                    MediaCarousel(items: carousel, model: model)
+                }
 
                 let columns = wide
                     ? AnyLayout(HStackLayout(alignment: .top, spacing: 40))
@@ -156,6 +163,18 @@ struct GameDetailView: View {
             if autoplay, case .idle = play, model.playability(of: entry).isPlayable, phoneOnly != true || lobby != nil {
                 await playTapped(lobby: lobby)
             }
+        }
+        .task {
+            canEdit = await model.canEditMedia(entry)
+            media = await model.media(for: entry)
+        }
+        .toolbar {
+            if canEdit {
+                ToolbarItem(placement: .primaryAction) { Button("Edit media") { editingMedia = true } }
+            }
+        }
+        .sheet(isPresented: $editingMedia, onDismiss: { Task { media = await model.media(for: entry) } }) {
+            MediaEditorView(entry: entry, model: model, initial: media ?? GameMedia())
         }
         .navigationTitle(entry.title.isEmpty ? "Game" : entry.title)
         #if os(macOS)
@@ -299,6 +318,33 @@ struct GameDetailView: View {
             }
             play = .failed(PlayerModel.describe(error))
         }
+    }
+}
+
+/// The game's carousel images at 16:9 with their captions, one page at a time.
+private struct MediaCarousel: View {
+    let items: [MediaItem]
+    let model: PlayerModel
+
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            LazyHStack(alignment: .top, spacing: PearTheme.Space.s4) {
+                ForEach(items) { item in
+                    VStack(alignment: .leading, spacing: PearTheme.Space.s2) {
+                        CroppedImage(url: model.mediaAssetURL(item), crop: item.crop(.carousel))
+                            .aspectRatio(MediaSurface.carousel.aspect, contentMode: .fit)
+                            .background(PearTheme.bgPanel)
+                            .clipShape(RoundedRectangle(cornerRadius: PearTheme.radiusWindow))
+                        if !item.caption.isEmpty {
+                            Text(item.caption).font(PearTheme.sans(15)).foregroundStyle(PearTheme.textSecondary)
+                        }
+                    }
+                    .containerRelativeFrame(.horizontal)
+                }
+            }
+            .scrollTargetLayout()
+        }
+        .scrollTargetBehavior(.viewAligned)
     }
 }
 

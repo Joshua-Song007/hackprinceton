@@ -39,6 +39,8 @@ struct CoverArt: View {
     let seed: String
     /// The game's real cover picture; the generated art below shows while it loads, fails, or when nil.
     var url: URL?
+    /// A developer-cropped thumbnail; replaces `url` when set.
+    var cropped: CroppedImage?
 
     var body: some View {
         let h = PearArt.hash(seed)
@@ -59,7 +61,9 @@ struct CoverArt: View {
         )
         .overlay { PosterMotif(hash: h, colors: c) }
         .overlay {
-            if let url {
+            if let cropped {
+                cropped
+            } else if let url {
                 AsyncImage(url: url) { phase in
                     if let image = phase.image { image.resizable().scaledToFill() }
                 }
