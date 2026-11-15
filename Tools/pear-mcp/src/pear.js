@@ -16,8 +16,22 @@ export async function authToken() {
     ? { provider: 'developer', subject: user, password }
     : { provider: 'dev', subject: `sim-mcp-${process.pid}`, display_name: 'Pear MCP' };
   const r = await fetch(`${cloudUrl()}/api/accounts/signin`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
-  if (!r.ok) throw new Error(`sign-in failed: HTTP ${r.status}`);
+  if (!r.ok) throw new Error(`sign-in failed: HTTP ${r.status}. ${SIGNIN_HINT[r.status] ?? 'check PEAR_CLOUD_URL'}${user && password ? '' : ' (no PEAR_TOKEN or PEAR_DEV_USER/PEAR_DEV_PASSWORD set, so passwordless dev sign-in was tried)'}`);
   return (token = (await r.json()).token);
+}
+
+const SIGNIN_HINT = {
+  401: 'wrong PEAR_DEV_USER / PEAR_DEV_PASSWORD',
+  403: 'passwordless dev sign-in is off on this server (needs PEAR_DEV_SIGNIN=1): set PEAR_TOKEN or PEAR_DEV_USER + PEAR_DEV_PASSWORD instead',
+  503: 'the server has no database',
+};
+const HINT = { 401: 'token missing or expired: check PEAR_TOKEN or sign in again', 403: 'not allowed: only the game owner or a developer can do this', 404: 'not found: check the game id and version' };
+
+/** "HTTP n METHOD path: <server's JSON `error` or text, else a hint for the status>". */
+function httpError(status, method, path, text) {
+  let msg = text.slice(0, 500);
+  try { msg = JSON.parse(text).error ?? msg; } catch { /* plain text body */ }
+  return new Error(`HTTP ${status} ${method} ${path}: ${msg || HINT[status] || '(empty body)'}`);
 }
 
 /** Authenticated request; returns parsed JSON (or text), throws "HTTP n ..." on failure. */
@@ -29,7 +43,7 @@ export async function api(method, path, body, headers = {}) {
     body: body === undefined ? undefined : raw ? body : JSON.stringify(body),
   });
   const text = await r.text();
-  if (!r.ok) throw new Error(`HTTP ${r.status} ${method} ${path}: ${text.slice(0, 300)}`);
+  if (!r.ok) throw httpError(r.status, method, path, text);
   try { return JSON.parse(text); } catch { return text; }
 }
 

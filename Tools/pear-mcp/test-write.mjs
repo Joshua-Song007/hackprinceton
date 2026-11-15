@@ -17,7 +17,9 @@ const srv = createServer(async (req, res) => {
   if (req.method === 'POST' && req.url === `/api/games/${GID}/versions`) {
     const v = { ...JSON.parse(body), version: versions.length + 1 };
     // Mirrors the backend publish gate (13.7): listing needs metadata.manifest and a passing metadata.check.
-    if (v.listed && !(v.metadata?.manifest && v.metadata?.check?.ok)) return json(422, {});
+    if (v.listed && !(v.metadata?.manifest && v.metadata?.check?.ok)) return json(422, { error: 'publish refused: metadata.check is missing. Run pear-check' });
+    if (v.description === 'forbid') { res.writeHead(403); return res.end(); }
+    if (v.description === 'gate') return json(422, { error: 'publish refused: metadata.check reports failures. Run pear-check' });
     versions.push(v);
     return json(201, { ...v, receipt: { version: v.version, check: v.metadata?.check ? 'passed' : 'missing', join: { ws: `/play/${GID}`, default_lobby: 'OPEN' } } });
   }
@@ -55,6 +57,12 @@ assert.deepEqual(versions[2].scene, { entities: [] });
 assert.equal(versions[2].listed, true);
 assert.deepEqual([versions[2].description, versions[2].tags, versions[2].release_notes], ['Tap fast', ['party'], 'v1']);
 assert.equal(versions[1].listed, undefined);
+
+// Publish failures reach the agent readably: the backend's JSON `error` text, or a hint when the body is empty (403).
+const gated = await client.callTool({ name: 'publish', arguments: { id, version: 1, description: 'gate' } });
+assert.ok(gated.isError && gated.content[0].text.includes('HTTP 422 POST') && gated.content[0].text.includes('publish refused: metadata.check reports failures. Run pear-check') && !gated.content[0].text.includes('{"error"'), gated.content[0].text);
+const forbidden = await client.callTool({ name: 'publish', arguments: { id, version: 1, description: 'forbid' } });
+assert.ok(forbidden.isError && /HTTP 403 POST .*only the game owner or a developer/.test(forbidden.content[0].text), forbidden.content[0].text);
 
 const noScene = await client.callTool({ name: 'save_version', arguments: { id, files: { 'ui.json': ui } } });
 assert.ok(noScene.isError && /scene\.json/.test(noScene.content[0].text));
