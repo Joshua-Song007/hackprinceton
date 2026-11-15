@@ -2335,24 +2335,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "pear-studio"
-version = "0.1.0"
-dependencies = [
- "base64 0.21.7",
- "ed25519-dalek",
- "flate2",
- "hex",
- "serde",
- "serde_json",
- "sha2",
- "tar",
- "tauri",
- "tauri-build",
- "tauri-plugin-updater",
- "tauri-plugin-window-state",
-]
-
-[[package]]
 name = "once_cell"
 version = "1.21.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2430,6 +2412,24 @@ dependencies = [
  "redox_syscall",
  "smallvec",
  "windows-link",
+]
+
+[[package]]
+name = "pear-studio"
+version = "0.1.0"
+dependencies = [
+ "base64 0.21.7",
+ "ed25519-dalek",
+ "flate2",
+ "hex",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tar",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-updater",
+ "tauri-plugin-window-state",
 ]
 
 [[package]]

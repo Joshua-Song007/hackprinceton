@@ -312,3 +312,10 @@ Paths: `Web/studio/src/explorer.ts`, `Web/studio/src/explorerText.ts`, `Web/stud
 The scene objects named after a device ("iPhone", "iPhone 2") are the script holders `addHandlerScript` creates, and their rows only said "script". Entity rows now show the script files they hold ("tap.js"), and client script rows show "used by iPhone" (up to two names, then "+N"); the words are pure functions in `explorerText.ts`. Script rows lost the always-visible Rename and Delete buttons: every object and script row has one "⋯" button that opens the row's menu (Open / Rename / Delete for scripts, the existing object menu for objects); the click does not reach the row handler, so the menu stays anchored, and Shift+F10 / the menu key now also opens the script menu. The delete-script confirmation uses the danger button. Empty Scene, Client scripts and Server scripts lists show a one-line hint, and the Add buttons read "Add object", "Add peripheral" and "Add script" (screen-reader names contain the visible text). Not changed: existing entity names, the peripheral blurb (it would overflow a 240 px panel), row height. Not checked in a browser.
 - [x] `Web/studio/src/explorerText.ts`, `Web/studio/test/explorerText.test.ts`
 - [x] `Web/studio/src/explorer.ts`, `Web/studio/src/theme.css`
+
+### 2026-11-15 — Sign-in works for Create account accounts
+Paths: `Web/studio/src/account.ts`, `Web/studio/test/signup.test.ts`
+
+The Sign in tab sent provider "developer", but Create account stores provider "password" and the backend looks accounts up by (provider, subject), so an account just created could never sign back in (401, fields cleared, same screen). `signInDeveloper` now tries provider "password" first and, on a 401 only, retries as provider "developer" (accounts made by the `create-developer` CLI); network and server errors are not retried. A wrong password costs two requests, and the backend delays each failed sign-in. The packaged 0.1.0 dmg predates this fix. The Deep Agent panel being hidden in that build was not looked at here.
+- [x] `Web/studio/src/account.ts`
+- [x] `Web/studio/test/signup.test.ts`

@@ -136,7 +136,11 @@ export class AccountController {
 
   async signInDeveloper(username: string, password: string): Promise<void> {
     if (!username || !password) throw new Error('Enter a username and password.');
-    const res = await this.client.signIn({ provider: 'developer', subject: username, password });
+    const res = await this.client.signIn({ provider: 'password', subject: username, password }).catch((e: unknown) => {
+      // Create account makes provider "password" accounts; the create-developer CLI makes provider "developer" ones.
+      if (e instanceof ApiError && e.kind === 'unauthorized') return this.client.signIn({ provider: 'developer', subject: username, password });
+      throw e;
+    });
     this.account = res.account;
     if (this.persist) this.storage?.setItem(SESSION_KEY, JSON.stringify({ token: res.token, account: res.account }));
     await this.refreshGames();
