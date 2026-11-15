@@ -205,7 +205,7 @@ Not in overview.md; added at user request 2026-11-15. Inspiration: the Quick Dra
 - [ ] `Apps/PearPlayer/PearPlayer/Play/Controller/ControllerSession.swift` — socket, backoff, calibration, monotonic reaction clock; replaces `QuickDrawSession`.
 - [ ] `Packages/PearOutput/Sources/PearOutput/Cues.swift` — shared cue library (tick, arming drone, fire crack, win, lose, fanfare); scripts call `self.audio.play("tick")`.
 - [ ] `Web/packages/pear-runtime/src/cues.ts` — the same cue names and sounds for the web phone page.
-- [ ] `Apps/PearPlayer/PearPlayer/PlayerModel.swift` — remove the `isPhoneOnly` / `QuickDrawSession` special case; launch from the manifest. (Gate: Quick Draw plays from data with no `Play/QuickDraw/*` code; then delete that folder and `Web/studio/public/qd-*`.)
+- [ ] `Apps/PearPlayer/PearPlayer/PlayerModel.swift` — remove the `isPhoneOnly` / `QuickDrawSession` special case; launch from the manifest. (Gate: Quick Draw plays from data with no `Play/QuickDraw/*` code; then delete that folder and `Web/studio/public/qd-*`. (Changed 2026-11-15: the gate also needs the iPad referee screen at parity, see 13.12 `DisplayView.swift`; deleting `Play/QuickDraw/*` earlier removes the master screen.)
 
 ### 13.6 Agent tools and knowledge
 
@@ -238,7 +238,7 @@ Not in overview.md; added at user request 2026-11-15. Inspiration: the Quick Dra
 Goal: updating a game from Studio never needs a Vultr refresh; one Publish uploads the version, lists it for players and shows the join link. Decisions: the player's Discover catalog is the games marketplace (the Phase 10 marketplace stays plugins only); only games the owner lists appear in the catalog; Flagship and HotPotato stay in the repo as test fixtures (tests and `Deploy/demo.sh` use them) but never appear in a production catalog.
 
 - [ ] `Backend/src/api/library.rs` — catalog lists only `listed` games, with cover, description, tags and release notes; unlisted fixtures never show.
-- [ ] `Backend/src/db.rs` — `listed` and listing fields on `Game`; migration `Backend/migrations/0005_listing.sql`.
+- [ ] `Backend/src/db.rs` — `listed` and listing fields on `Game`; migration `Backend/migrations/0005_listing.sql`. (Changed 2026-11-15: renumber to `0006_listing.sql`; `0005` is taken by 13.10 `0005_developer.sql`.)
 - [ ] `Backend/src/memstore.rs` — same fields, so the dev server matches Postgres.
 - [ ] `Backend/src/api/games.rs` — publish accepts listing fields and `listed`; one call creates the version and lists the game.
 - [ ] `Backend/src/game_server/session.rs` — upgrade policy for live lobbies: finish the current match, then move to the new version, instead of restarting mid-match (`session::reload` today).
@@ -250,6 +250,59 @@ Goal: updating a game from Studio never needs a Vultr refresh; one Publish uploa
 - [ ] Human, needs the Vultr URL and owner token: delete the placeholder games already on the hosted library (`DELETE /api/games/{id}` is owner-only); the repo seeds are gone.
 
 Not planned: a general UI description language beyond the Quick Draw and Hot Potato widget set; Studio-hosted agent runners in a live lobby; recorded audio pipeline (cues stay synthesized); collaborative editing (Phase 6).
+
+---
+
+## Phase 13 Part II: Developer access, Quick Draw in Studio, and the gaps
+
+Not in overview.md; added at user request 2026-11-15. Phase 13 (above) makes games data; this part covers what it left out: an in-house developer login that can edit every hosted game, Quick Draw ported into Studio as an ordinary project, and Studio grown ("reverse engineered" from what Quick Draw needed) to author everything Quick Draw does without hand-written Swift or HTML. Decisions: developer accounts use a password checked by the server (argon2id), never passwordless dev sign-in; a developer may publish, delete and edit the listing of any game; covers and descriptions live in Postgres (durable across redeploys); the iPad is the referee/master screen for phone-only games and must be drawn from data like the phone controller. Success test: a developer signs in to Studio, opens Quick Draw, changes a setting, a text and a cue, previews it with simulated phones and the referee screen, publishes, and the iPad and phones show the change with no Xcode build and no Vultr refresh.
+
+### 13.10 Developer accounts and game listing basics
+
+- [ ] `Backend/migrations/0005_developer.sql` — `accounts.role` (player | developer), `accounts.password_hash`; `games.description`, `games.cover`, `games.cover_type`.
+- [ ] `Backend/src/api/accounts.rs` — developer sign-in (`provider: "developer"`, username + password, argon2id, identical 401 for wrong password and unknown user); the passwordless dev path accepts only `provider: "dev"` (closes signing in as another provider's subject); `role` on every account response.
+- [ ] `Backend/src/api/games.rs` — developers pass every owner check; `GET /api/games?all=1`; `PUT /api/games/{id}` (title, description); cover `PUT`/`DELETE`/public `GET`.
+- [ ] `Backend/src/db.rs` — role, password hash, description and cover queries.
+- [ ] `Backend/src/memstore.rs` — same fields, so the dev server matches Postgres.
+- [ ] `Backend/src/api/library.rs` — `description` and `coverUrl` on catalog entries.
+- [ ] `Backend/src/main.rs` — `create-developer <username> "<display name>"` CLI (password from `PEAR_DEVELOPER_PASSWORD`, never argv).
+- [ ] `Web/packages/pear-cloud/src/client.ts` — developer sign-in, `role`, all games, game metadata and cover calls.
+- [ ] `Web/studio/src/loginScreen.ts` — Developer sign-in (username + password).
+- [ ] `Web/studio/src/allGamesSection.ts` — developers see every hosted game and Open any of them as a project linked to its game id.
+- [ ] `Web/studio/src/aboutPanel.ts` — title, description and cover editor for a cloud-linked game.
+- [ ] `Packages/PearCloud/Sources/PearCloud/CloudClient.swift` — `description` and `coverURL` on `CatalogEntry`.
+- [ ] `Apps/PearPlayer/PearPlayer/Library/GameDetailView.swift` — real cover and description, generated art as fallback.
+- [ ] Human: create the developer account on the Vultr database (`docker compose run --rm -e PEAR_DEVELOPER_PASSWORD backend /app/pear-backend create-developer ...`) and share the login privately.
+
+### 13.11 Port Quick Draw into Studio
+
+Quick Draw stops being a repo folder published by script and becomes a Studio project like any other.
+
+- [ ] `Web/studio/src/templates/quickdraw.ts` — "New game from Quick Draw" template (scene, scripts, instructions), so the team can fork it.
+- [ ] `Web/studio/src/phonePlay.ts` — phone-only Play hosts a lobby code, shows phone join links with `&lobby=` and an iPad referee link, instead of the shared `OPEN` lobby.
+- [ ] `Games/QuickDraw/README.md` — the repo copy is a test fixture exported from Studio; Studio's published version is the source of truth.
+- [ ] `Deploy/publish-quickdraw.mjs` — retired once Studio Publish (13.9) is the only path; until then it signs in with the developer login, not a dev subject.
+- [ ] `Deploy/smoke-quickdraw.mjs` — developer login instead of dev sign-in, so the hosted box can turn dev sign-in off.
+
+### 13.12 Studio parity with Quick Draw (gaps in Phase 13)
+
+Each item is something Quick Draw needed that Phase 13 does not schedule.
+
+- [ ] `Schema/pear-game.schema.json` — `settings` (typed tunables with default, min, max: wins needed, arming delay, countdown, idle kick, thresholds) and `display` (master-screen widgets: lobby slots, scoreboard, countdown, result bars, how-to-play from instructions). Extends 13.1.
+- [ ] `Backend/src/game_server/script_host.rs` — read-only `ctx.settings` from the version's manifest. Extends 13.4.
+- [ ] `Web/packages/pear-script/src/server-local.ts` — the same `ctx.settings`.
+- [ ] `Packages/PearScript/Sources/PearScript/ServerScriptEngine.swift` — the same `ctx.settings`.
+- [ ] `Games/QuickDraw/scripts/game.js` — constants (wins, arming window, countdown, idle kick) read from `ctx.settings`.
+- [ ] `Web/studio/src/settingsPanel.ts` — edit settings within their ranges; applied live in local runs.
+- [ ] `Web/studio/src/cuesPanel.ts` — pick and preview the cue played for each event (consumes 13.5 `cues.ts`).
+- [ ] `Web/studio/src/controllerPreview.ts` — draws the phone controller and the referee display from the manifest next to 13.2's simulated phones.
+- [ ] `Apps/PearPlayer/PearPlayer/Play/Controller/DisplayView.swift` — iPad referee/master screen drawn from `display` and the version's instructions; replaces `QuickDrawRefereeView`.
+- [ ] `Backend/src/api/games.rs` — per-game editors (share edit rights with one account) for collaborators who are not developers.
+- [ ] `Backend/src/blobs.rs` — durable storage on the hosted box (S3 or Postgres fallback); avatars are lost on every redeploy today because `PEAR_S3_*` is unset.
+- [ ] `Deploy/vultr-bootstrap.sh` — hosted default `PEAR_DEV_SIGNIN=0` once publish and smoke scripts use the developer login (passwordless sign-in lets anyone act as any dev account).
+- [ ] `docs/creators/scripting-api.md` — `ctx.settings`, referee role, lobby and display contract.
+
+Not planned: multiple developer roles or audit log (one developer role for the hackathon); editing another account's profile picture.
 
 ---
 
