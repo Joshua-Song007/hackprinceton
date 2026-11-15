@@ -5,7 +5,7 @@ import { mount, validate, type Hooks, type Node, type PearUI } from '@pear/ui';
 import type { AccountController } from '../account';
 import type { PanelSpec, PanelView } from '../layout';
 import { button, el } from '../ui';
-import { debugRow, normalizeLobby, randomLobby, sensorHz, sysRow, type PreviewKind } from './helpers';
+import { debugRow, normalizeLobby, randomLobby, sensorHz, sysRow, type LogRow, type PreviewKind } from './helpers';
 import { DEFAULT_CENTER, PreviewMap, type LatLng } from './map';
 import { DeviceSession } from './session';
 import { PreviewTerminal } from './terminal';
@@ -43,9 +43,19 @@ export function openInLivePreview(account: AccountController, gameId: string, lo
   else handoff?.();
 }
 
+/** Rows from outside the panel (the New game from prompt agent stream): buffered until a panel is open, then shown in its terminal. */
+let terminalSink: ((row: Omit<LogRow, 'id'>) => void) | null = null;
+const buffered: Omit<LogRow, 'id'>[] = [];
+export function logToLivePreview(row: Omit<LogRow, 'id'>): void {
+  if (terminalSink) terminalSink(row);
+  else buffered.push(row);
+}
+
 export function createLivePreviewPanel(account: AccountController): PanelView {
   const root = el('div', { class: 'lp-root' });
   const terminal = new PreviewTerminal();
+  terminalSink = (row) => terminal.add(row);
+  buffered.splice(0).forEach((row) => terminal.add(row));
   const map = new PreviewMap((id, at) => {
     const d = devices.find((x) => x.spec.id === id);
     d?.session.send(d.locEvent ?? 'location', { lat: at.lat, lng: at.lng, acc: 5 });
@@ -276,6 +286,7 @@ export function createLivePreviewPanel(account: AccountController): PanelView {
     dispose() {
       disposed = true;
       handoff = null;
+      terminalSink = null;
       unsub();
       ro?.disconnect();
       teardown();

@@ -2,6 +2,7 @@
 // Usage: node Deploy/publish-quickdraw.mjs [https://host] [gameId]
 // Signs in with the developer login from env PEAR_DEV_USER / PEAR_DEV_PASSWORD (a developer may publish any game);
 // without them it falls back to the passwordless "quickdraw-owner" dev account (local servers with PEAR_DEV_SIGNIN=1).
+// PEAR_LIST=1 runs pear-check and lists the game (needs Web/ deps installed).
 // With a gameId it publishes a new version of that game instead of creating one.
 import fs from "node:fs";
 import path from "node:path";
@@ -37,12 +38,22 @@ const assets = {};
 if (process.env.PEAR_NO_UI !== "1" && fs.existsSync(path.join(dir, "ui.json"))) {
   assets["ui.json"] = { contentType: "application/json", data: Buffer.from(read("ui.json")).toString("base64") };
 }
+// PEAR_LIST=1 also lists the game; the backend publish gate (13.7) then needs the passing pear-check report as metadata.check.
+const metadata = { manifest };
+const listing = {};
+if (process.env.PEAR_LIST === "1") {
+  const { checkDir } = await import("../Tools/pear-check/check.mjs");
+  metadata.check = checkDir(dir);
+  if (!metadata.check.ok) throw new Error(`pear-check failed: ${metadata.check.errors.join("; ")}`);
+  listing.listed = true;
+}
 const v = await api("POST", `/api/games/${id}/versions`, owner.token, {
+  ...listing,
   scene,
   client_scripts: scripts(scene.clientScripts),
   server_scripts: scripts(scene.serverScripts),
   assets,
-  metadata: { manifest },
+  metadata,
   run_mode: scene.runMode,
 });
 console.log(`game ${id} version ${v.version}`);

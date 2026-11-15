@@ -81,10 +81,20 @@ server.tool('publish', 'Publish: list the game (listed:true) so phones see it, r
   id, version: z.number().int().positive(),
   description: z.string().optional(), tags: z.array(z.string()).optional(), releaseNotes: z.string().optional(),
 }, tool(async ({ id, version, description, tags, releaseNotes }) => {
-  const v = await api('GET', `/api/games/${id}/versions/${version}`);
-  const { scene, client_scripts, server_scripts, assets, metadata, run_mode } = v;
+  const v = await api('GET', `/api/games/${id}/versions/${version}`, undefined, { connection: 'close' }); // checkFiles blocks the loop (spawnSync); a kept-alive socket would be dead by the POST
+  const { scene, client_scripts, server_scripts, assets, run_mode } = v;
+  // Backend publish gate (13.7): listing needs metadata.manifest and a passing metadata.check; attach them here when the saved version has none.
+  const metadata = { ...v.metadata };
+  metadata.manifest ??= { format: 'pear-game/1', name: description || id };
+  if (!metadata.check) {
+    const files = await versionFiles(v);
+    delete files['metadata.json'];
+    const { checkFiles } = await import('../../pear-check/check.mjs');
+    metadata.check = checkFiles(files);
+    if (!metadata.check.ok) throw new Error(`pear-check failed, fix before publishing: ${metadata.check.errors.join('; ')}`);
+  }
   const n = await api('POST', `/api/games/${id}/versions`, { scene, client_scripts, server_scripts, assets, metadata, run_mode, listed: true, description, tags, release_notes: releaseNotes });
-  return { published: version, version: n.version };
+  return { published: version, version: n.version, receipt: n.receipt };
 }));
 
 server.tool('read_logs', 'Read the live /debug stream (snapshot with recent logs, then events) for N ms. Owner or developer only.', {
