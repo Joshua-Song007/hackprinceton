@@ -239,4 +239,23 @@ function make() {
   h.send("q", "lowered"); assert.equal(h.ctx.state.phase, "countdown"); // no re-tap
 }
 
+// PearUI aim path: pitch crossings (60 up / 45 down) become the same raised/lowered events, per player.
+{
+  const h = make(); h.lobby();
+  h.send("p1", "aim", { pitch: 70 }); assert.equal(h.ctx.state.players.p1.raised, true);
+  h.send("p1", "aim", { pitch: 50 }); assert.equal(h.ctx.state.players.p1.raised, true); // hysteresis band: no lower yet
+  h.send("p1", "aim", { pitch: 45 }); assert.equal(h.ctx.state.players.p1.raised, false);
+  h.send("p1", "aim", { pitch: 55 }); assert.equal(h.ctx.state.players.p1.raised, false); // below 60: no raise
+  h.send("p1", "aim", { pitch: "x" }); h.send("p1", "aim", {}); assert.equal(h.ctx.state.players.p1.raised, false); // malformed ignored
+  h.join("r"); h.send("r", "role", { role: "referee" }); h.send("r", "aim", { pitch: 90 }); assert.equal(h.ctx.state.players.r.raised, false); // referee ignored
+  h.toFire(); // arming-phase aim raise is a foul
+  const g = make(); g.lobby(); g.ready("p1"); g.ready("p2"); g.tick();
+  g.send("p2", "aim", { pitch: 80 }); assert.equal(g.results().at(-1).reason, "foul"); assert.equal(g.results().at(-1).winnerId, "p1");
+  const f = make(); f.lobby(); f.toFire();
+  f.ctx.now = () => 1_000_250; // 250 ms after fire (fire stamped at 1_000_000)
+  f.send("p1", "aim", { pitch: 75 }); f.send("p2", "aim", { pitch: 30 }); // p2 never rises
+  assert.deepEqual(f.ctx.state.reactions, [{ id: "p1", ms: 250 }]);
+  f.tick(); assert.equal(f.results().at(-1).winnerId, "p1"); // report window closes: sole valid raise wins
+}
+
 console.log("QuickDraw selfcheck passed");

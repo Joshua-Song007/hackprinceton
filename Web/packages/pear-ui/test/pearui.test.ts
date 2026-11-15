@@ -15,6 +15,14 @@ describe('expr', () => {
     expect(evalExpr(s, "ev.missing || 'none'")).toBe('none');
     expect(evalExpr(s, "device.kind == 'ipad'")).toBe(true);
   });
+  it('.length on arrays and strings', () => {
+    const t = { ev: { q: [1, 2, 3], n: 'abcd', none: [] } };
+    expect(evalExpr(t, 'ev.q.length')).toBe(3);
+    expect(evalExpr(t, 'ev.n.length')).toBe(4);
+    expect(evalExpr(t, 'ev.none.length')).toBe(0);
+    expect(evalExpr(t, 'ev.q.length == 3')).toBe(true);
+    expect(evalExpr(t, 'ev.missing.length')).toBeUndefined();
+  });
   it('interpolates strings and keeps whole-expression types', () => {
     expect(interpolate(s, 'Round {{ev.state.round}} — {{me.name}}')).toBe('Round 2 — Ada');
     expect(interpolate(s, '{{ev.state.scores}}')).toEqual({ p1: 3 });

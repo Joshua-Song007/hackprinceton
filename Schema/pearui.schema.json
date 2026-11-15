@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://pear.invalid/schema/pearui.schema.json",
+  "title": "PearUI v1 (ui.json)",
+  "description": "A game's native screens as data (plan.md Phase 14, Contract C1). Rendered 1:1 by Web/packages/pear-ui (web) and Apps/PearPlayer/PearPlayer/Play/PearUI (SwiftUI). Web/packages/pear-ui/src/validate.ts is the validator; this file is documentation and editor support. Unknown node types are allowed (they render nothing); unknown fields are kept. Any string prop may contain {{expr}} bindings; expr = dotted path (.length on arrays/strings), optional ==/!= literal, ! prefix, || fallback.",
+  "type": "object",
+  "required": ["pearui", "route", "screens"],
+  "properties": {
+    "pearui": { "const": 1 },
+    "route": {
+      "description": "First entry whose `when` is truthy wins; the last entry has no `when`.",
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/route" }
+    },
+    "screens": { "type": "object", "additionalProperties": { "$ref": "#/$defs/node" } }
+  },
+  "$defs": {
+    "expr": { "type": "string", "description": "C1 expression over { ev.<event>, me, local.<k>, device, item }." },
+    "route": {
+      "type": "object",
+      "required": ["screen"],
+      "properties": { "when": { "$ref": "#/$defs/expr" }, "screen": { "type": "string" } }
+    },
+    "style": {
+      "type": "object",
+      "properties": {
+        "tone": { "enum": ["neutral", "accent", "good", "bad", "warn"] },
+        "size": { "enum": ["s", "m", "l", "xl", "huge"] },
+        "align": { "enum": ["start", "center", "end"] },
+        "pad": { "type": "number", "minimum": 0, "maximum": 4 },
+        "grow": { "type": "boolean" }
+      }
+    },
+    "action": {
+      "oneOf": [
+        { "type": "object", "required": ["send"], "properties": { "send": { "type": "string" }, "data": { "type": "object" } } },
+        { "type": "object", "required": ["set"], "properties": { "set": { "type": "string" }, "value": {} } }
+      ]
+    },
+    "node": {
+      "type": "object",
+      "required": ["type"],
+      "properties": {
+        "type": { "type": "string", "description": "column|row|stack|text|button|image|timer|list|gauge|spacer|map|sensor|effect; others render nothing." },
+        "if": { "$ref": "#/$defs/expr" },
+        "id": { "type": "string" },
+        "style": { "$ref": "#/$defs/style" },
+        "children": { "type": "array", "items": { "$ref": "#/$defs/node" } },
+        "value": { "description": "text: string with bindings; gauge: 0..1 expr." },
+        "label": { "type": "string" },
+        "action": { "$ref": "#/$defs/action" },
+        "src": { "type": "string", "description": "image: asset name." },
+        "until": { "$ref": "#/$defs/expr" },
+        "items": { "$ref": "#/$defs/expr" },
+        "item": { "$ref": "#/$defs/node" },
+        "markers": { "$ref": "#/$defs/expr" },
+        "follow": { "const": "me" },
+        "kind": { "enum": ["motion", "location"] },
+        "event": { "type": "string" },
+        "hz": { "type": "number", "exclusiveMinimum": 0, "maximum": 30 },
+        "on": { "$ref": "#/$defs/expr" },
+        "haptic": { "enum": ["light", "heavy", "success", "fail"] },
+        "sound": { "type": "string" }
+      },
+      "allOf": [
+        { "if": { "properties": { "type": { "const": "button" } }, "required": ["type"] }, "then": { "required": ["action"] } },
+        { "if": { "properties": { "type": { "const": "sensor" } }, "required": ["type"] }, "then": { "required": ["kind", "event"] } },
+        { "if": { "properties": { "type": { "const": "list" } }, "required": ["type"] }, "then": { "required": ["items", "item"] } }
+      ]
+    }
+  }
+}
