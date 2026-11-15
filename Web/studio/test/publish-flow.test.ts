@@ -4,7 +4,7 @@ import { AccountController, readLastPublished, type PublishStepId, type PublishS
 import { checkGame } from '../src/gamePanel';
 import { PreferenceStore } from '../src/preferences';
 import { Project, templateSnapshot } from '../src/project';
-import { publishLinks } from '../src/publishView';
+import { publishLinks, qrDataUrl } from '../src/publishView';
 
 const SERVER = 'https://155-138-208-146.sslip.io';
 const memory = () => {
@@ -109,6 +109,10 @@ describe('publish to Vultr: progress and verify', () => {
     expect(await s.account.publishVerified(s.project)).toMatchObject({ ok: false, step: 'signIn' });
     expect(s.calls).not.toContain('POST /api/games/g1/versions');
     expect(await s.account.publishVerified(s.project)).toMatchObject({ ok: false, step: 'signIn' }); // now signed out locally
+  });
+
+  it('renders a local QR image for a phone link', () => {
+    expect(qrDataUrl('https://x.test/qd-phone.html?game=g1&name=Player1')).toMatch(/^data:image\/gif;base64,/);
   });
 
   it('builds the two phone links for the game', () => {

@@ -1,5 +1,6 @@
 // "Publish to Vultr" sheet: the server URL, a stepwise progress list, and a confirmation card shown only after the server's copy was verified.
 import { PUBLISH_STEPS, VULTR_SERVER_URL, type AccountController, type PublishConfirmation, type PublishStepId, type PublishStepState } from './account';
+import qrcode from 'qrcode-generator';
 import { defaultServerUrl, type PreferenceStore } from './preferences';
 import type { Project } from './project';
 import { announce, button, el, openSheet } from './ui';
@@ -12,6 +13,14 @@ export function publishLinks(serverUrl: string, gameId: string): { label: string
     { label: 'Phone 1', url: `${base}/qd-phone.html?game=${game}&name=Player1` },
     { label: 'Phone 2', url: `${base}/qd-phone.html?game=${game}&name=Player2` },
   ];
+}
+
+/** Local QR code (GIF data URL) for a link, so scanning works without any external service. */
+export function qrDataUrl(text: string): string {
+  const qr = qrcode(0, 'M');
+  qr.addData(text);
+  qr.make();
+  return qr.createDataURL(6, 8);
 }
 
 const MARK: Record<PublishStepState | 'pending', string> = { pending: '\u25CB', running: '\u27F3', done: '\u2713', error: '\u2717' };
@@ -32,7 +41,7 @@ export function openPublishSheet(account: AccountController, prefs: PreferenceSt
     const copyRow = (label: string, link: string) => el('div', { class: 'om-prop' }, [
       el('span', {}, [label]),
       el('div', { class: 'om-field' }, [
-        // shortcut: no QR image, the studio has no QR dependency and the link must not go to an external QR service; add a local encoder to render one here.
+        el('img', { src: qrDataUrl(link), alt: `QR code for ${label}`, width: '120', height: '120' }),
         el('a', { href: link, target: '_blank', rel: 'noreferrer' }, [link]),
         button('Copy', () => void navigator.clipboard.writeText(link).then(() => announce(`Copied ${label} link`)), { variant: 'small', ariaLabel: `Copy ${label} link` }),
       ]),
