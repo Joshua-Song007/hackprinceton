@@ -406,16 +406,16 @@ Not in overview.md; added at user request 2026-11-14 (overview.md stays unchange
 
 ### 12.2 Plugin (Plugins/langchain-deepagents)
 
-- [ ] `Plugins/langchain-deepagents/runtime/translate.py` — forward `/instructions.json` writes as `file_written` (today only `/scripts/**` and `/scene.json` pass).
-- [ ] `Plugins/langchain-deepagents/tests/test_translate.py` — instructions.json forwarded; other paths still dropped.
-- [ ] `Plugins/langchain-deepagents/runtime/instructions.py` — prompts and schema check; modes `author` (plain text to instructions) and `revise` (current instructions plus a chat message to a full proposal). Prompts live in code, no new .md.
-- [ ] `Plugins/langchain-deepagents/runtime/players.py` — a deep agent per (run, player) thread; personas (follows rules, skims, cheats, confused); `decide` (instructions, role, persona, observation) returns actions plus `unsure` notes; `report`; filesystem tools denied (or a plain structured-output call if the deny form is unavailable).
-- [ ] `Plugins/langchain-deepagents/runtime/server.py` — `prepare_project` also writes `instructions.json`; `prompt` with `mode: 'instructions'`; `decide` to `plan` and `report` outside `PROJECT_LOCKS`; every reply keeps the id; per-run call cap on the server side.
-- [ ] `Plugins/langchain-deepagents/tests/test_instructions.py` — scripted model: author, revise, invalid output rejected.
-- [ ] `Plugins/langchain-deepagents/tests/test_players.py` — scripted model: valid actions, memory per player thread, persona applied, invalid action dropped, no file access.
-- [ ] `Plugins/langchain-deepagents/pear-plugin.json` — version 0.7.42 (a seed at the same version fails); permission `filesystem:project_instructions`.
-- [ ] `Web/studio/src/panels/deep-agent.ts` — send `instructions` in the project; mode selector (Scripts / Instructions); a `file_written` of `instructions.json` becomes a pending proposal, never applied directly.
-- [ ] `Web/studio/test/deep-agent.test.ts` — proposal not applied until accepted; scripts and `scene.json` unchanged.
+- [x] `Plugins/langchain-deepagents/runtime/translate.py` — forward `/instructions.json` writes and a successful `submit_instructions` as `file_written` (today only `/scripts/**` and `/scene.json` pass).
+- [x] `Plugins/langchain-deepagents/tests/test_translate.py` — instructions.json forwarded; other paths still dropped.
+- [x] `Plugins/langchain-deepagents/runtime/instructions.py` — prompts and schema check; modes `author` (plain text to instructions) and `revise` (current instructions plus a chat message to a full proposal). Prompts live in code, no new .md.
+- [x] `Plugins/langchain-deepagents/runtime/players.py` — a deep agent per (run, player) thread; personas (follows rules, skims, cheats, confused); `decide` (instructions, role, persona, observation) returns actions plus `unsure` notes; `report`; filesystem tools denied (or a plain structured-output call if the deny form is unavailable).
+- [x] `Plugins/langchain-deepagents/runtime/server.py` — `prepare_project` also writes `instructions.json`; `prompt` with `mode: 'instructions'`; `decide` to `plan` and `report` outside `PROJECT_LOCKS`; every reply keeps the id; per-run call cap on the server side.
+- [x] `Plugins/langchain-deepagents/tests/test_instructions.py` — scripted model: author, revise, invalid output rejected.
+- [x] `Plugins/langchain-deepagents/tests/test_players.py` — scripted model: valid actions, memory per player thread, persona applied, invalid action dropped, no file access.
+- [x] `Plugins/langchain-deepagents/pear-plugin.json` — version 0.7.42 (a seed at the same version fails; `pyproject.toml` and `uv.lock` kept equal); permission `filesystem:project_instructions`.
+- [x] `Web/studio/src/panels/deep-agent.ts` — send `instructions` in the project; mode selector (Scripts / Instructions); a `file_written` of `instructions.json` becomes a pending proposal, never applied directly, with Accept and Reject buttons until the 12.5 diff; an instructions run applies no script or scene write.
+- [x] `Web/studio/test/deep-agent.test.ts` — proposal not applied until accepted; scripts and `scene.json` unchanged.
 
 ### 12.3 Agent players
 

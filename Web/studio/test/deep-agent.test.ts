@@ -234,4 +234,95 @@ describe('deep-agent.ts', () => {
     vi.advanceTimersByTime(60_000);
     expect(MockSocket.instances).toHaveLength(3);
   });
+  describe('instructions mode', () => {
+    const instructions = { title: 'Quick Draw', players: { min: 3, max: 3 }, roles: [{ id: 'ref', kind: 'ref' }], phases: [{ id: 'draw', steps: [] }] };
+
+    function instructionsRun(prompt: (t: string) => string, root: FakeNode) {
+      const select = root.byLabel('Mode');
+      select.value = 'instructions';
+      select.fire('change');
+      return prompt('a duel game');
+    }
+
+    it('sends the mode and the current instructions, and the mode follows the select', () => {
+      const { root, ws, prompt, project } = setup();
+      project.setInstructions({ ...instructions, title: 'Mine' } as never);
+      const textarea = root.find((n) => n.tag === 'textarea')[0]!;
+      expect(textarea.attrs.placeholder).toContain('Describe the game');
+      prompt('first');
+      expect(ws.sent[0]).toMatchObject({ mode: 'scripts', project: { instructions: { title: 'Mine' } } });
+      instructionsRun(prompt, root);
+      expect(ws.sent[1]).toMatchObject({ type: 'prompt', mode: 'instructions', text: 'a duel game', project: { instructions: { title: 'Mine' } } });
+      expect(textarea.attrs.placeholder).toContain('instructions');
+    });
+
+    it('holds an instructions.json write as a proposal until Accept, then applies it as an undoable step', () => {
+      const { root, ws, prompt, project } = setup();
+      const id = instructionsRun(prompt, root);
+      ws.push({ type: 'file_written', id, path: 'instructions.json', content: JSON.stringify(instructions) });
+      expect(project.instructions).toBeNull();
+      expect(project.proposal?.title).toBe('Quick Draw');
+      const files = root.byLabel('Files');
+      expect(files.textContent).toContain('instructions.json (proposed: Quick Draw, 1 roles, 1 phases)');
+      expect(files.buttons().map((b) => b.textContent)).toEqual(['Accept', 'Reject']);
+      files.buttons()[0]!.fire('click');
+      expect(project.instructions?.title).toBe('Quick Draw');
+      expect(project.proposal).toBeNull();
+      expect(files.textContent).toContain('instructions.json (accepted)');
+      expect(files.buttons()).toHaveLength(0);
+      project.undo();
+      expect(project.instructions).toBeNull();
+    });
+
+    it('Reject discards the proposal and a newer proposal replaces an older one', () => {
+      const { root, ws, prompt, project } = setup();
+      const id = instructionsRun(prompt, root);
+      ws.push({ type: 'file_written', id, path: 'instructions.json', content: JSON.stringify({ title: 'First' }) });
+      ws.push({ type: 'file_written', id, path: 'instructions.json', content: JSON.stringify({ title: 'Second' }) });
+      const files = root.byLabel('Files');
+      expect(files.textContent).toContain('instructions.json (replaced by a newer proposal)');
+      expect(files.buttons()).toHaveLength(2);
+      files.buttons()[1]!.fire('click');
+      expect(project.proposal).toBeNull();
+      expect(project.instructions).toBeNull();
+      expect(files.textContent).toContain('instructions.json (rejected)');
+    });
+
+    it('shows a sentence when the file is not usable instructions', () => {
+      const { root, ws, prompt, project } = setup();
+      const id = instructionsRun(prompt, root);
+      ws.push({ type: 'file_written', id, path: 'instructions.json', content: '{not json' });
+      ws.push({ type: 'file_written', id, path: 'instructions.json', content: '5' });
+      expect(project.proposal).toBeNull();
+      expect(root.byLabel('Files').buttons()).toHaveLength(0);
+      const alerts = root.find((n) => n.attrs.role === 'alert')[0]!.textContent;
+      expect(alerts).toContain('instructions.json not applied:');
+      expect(alerts).toContain('instructions: expected object');
+    });
+
+    it('applies no scripts or scene in an instructions run, but still does in a scripts run', () => {
+      const { root, ws, prompt, project } = setup();
+      const before = structuredClone(project.scene);
+      const id = instructionsRun(prompt, root);
+      ws.push({ type: 'file_written', id, path: 'scripts/sneaky.client.js', content: 'export default script({})' });
+      ws.push({ type: 'file_written', id, path: 'scene.json', content: JSON.stringify({ name: 'Hacked', entities: [] }) });
+      expect(Object.keys(project.clientScripts)).not.toContain('sneaky');
+      expect(project.scene).toEqual(before);
+      expect(root.byLabel('Files').textContent).toContain('scripts/sneaky.client.js (ignored: this was an instructions run)');
+      const select = root.byLabel('Mode');
+      select.value = 'scripts';
+      select.fire('change');
+      const next = prompt('now scripts');
+      ws.push({ type: 'file_written', id: next, path: 'scripts/ok.client.js', content: 'export default script({})' });
+      expect(Object.keys(project.clientScripts)).toContain('ok');
+    });
+
+    it('a proposal made elsewhere is accepted from the panel only while it is still pending', () => {
+      const { root, ws, prompt, project } = setup();
+      const id = instructionsRun(prompt, root);
+      ws.push({ type: 'file_written', id, path: 'instructions.json', content: JSON.stringify(instructions) });
+      project.rejectProposal();
+      expect(root.byLabel('Files').buttons()).toHaveLength(0);
+    });
+  });
 });

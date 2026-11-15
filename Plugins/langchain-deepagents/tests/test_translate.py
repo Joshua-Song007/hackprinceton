@@ -77,3 +77,24 @@ def test_scene_json_edit_becomes_file_written(tmp_path):
     assert events == [{"type": "file_written", "path": "scene.json", "content": '{"entities": []}'}]
     assert not translate_module._in_scripts(tmp_path, "/scene.json.bak")
     assert not translate_module._in_scripts(tmp_path, "/scripts/../scene.json/../AGENTS.md")
+
+
+def test_instructions_json_write_and_a_successful_submit_become_file_written(tmp_path):
+    (tmp_path / "instructions.json").write_text('{"title": "T"}', encoding="utf-8")
+    state = new_state()
+    events = translate(updates((), ai(("write_file", {"file_path": "/instructions.json"}, "w1"))), tmp_path, state)
+    events += translate(updates((), ToolMessage(content="ok", tool_call_id="w1", name="write_file")), tmp_path, state)
+    events += translate(updates((), ai(("submit_instructions", {"instructions": {}}, "s1"))), tmp_path, state)
+    events += translate(updates((), ToolMessage(content="Saved", tool_call_id="s1", name="submit_instructions")), tmp_path, state)
+    assert events == [{"type": "file_written", "path": "instructions.json", "content": '{"title": "T"}'}] * 2
+
+
+def test_a_rejected_submit_and_lookalike_instruction_paths_emit_nothing(tmp_path):
+    (tmp_path / "instructions.json").write_text('{"title": "old"}', encoding="utf-8")
+    state = new_state()
+    events = translate(updates((), ai(("submit_instructions", {"instructions": {}}, "s1"))), tmp_path, state)
+    events += translate(updates((), ToolMessage(content="Error: players must be {min, max}", tool_call_id="s1", name="submit_instructions")), tmp_path, state)
+    assert events == []
+    assert not translate_module._in_scripts(tmp_path, "/instructions.json.bak")
+    assert not translate_module._in_scripts(tmp_path, "/scripts/../instructions.json/x")
+    assert translate_module._in_scripts(tmp_path, "/instructions.json")

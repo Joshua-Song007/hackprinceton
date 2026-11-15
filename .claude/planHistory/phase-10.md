@@ -60,3 +60,17 @@ Goal: the live AI path is run once for real; today only `OMNI_AGENT_FAKE=1` is e
 - [x] Non-Windows `stop_runtime` kills only the direct child; use process groups so `uv` leaves no orphaned python.
 - [x] Postgres paths (0002 migrate guard, upsert, installs) have no CI run; add a `DATABASE_URL` job. (2026-11-14: `.github/workflows/backend-postgres.yml`, never run on CI; same tests pass locally on Postgres 17.)
 - [ ] Live model run: OpenAI key has no credits; Anthropic and Google untested; Google default model id unverified.
+
+## Later changes
+
+### 2026-11-14 — Instructions and player agents in the Deep Agents plugin
+Paths: `Plugins/langchain-deepagents/runtime/instructions.py`, `Plugins/langchain-deepagents/runtime/players.py`, `Plugins/langchain-deepagents/runtime/server.py`, `Plugins/langchain-deepagents/runtime/translate.py`, `Plugins/langchain-deepagents/pear-plugin.json`, `Web/studio/src/panels/deep-agent.ts`
+
+Plugin 0.7.42 (Phase 12.2, see plan.md). `prompt` takes `mode` `scripts` or `instructions`; the instructions agent reads the project but cannot write files and saves only through `submit_instructions` (checked, retried on "Error"), forwarded as one `file_written` `instructions.json` that the panel holds as a proposal (Accept / Reject) and never applies by itself. An instructions run applies no script or scene write. `decide` returns a `plan` {actions, unsure} and `report` a `report_result` {unsure, summary} for agent players: one deep agent per (run, player), memory thread, default in-memory backend (no disk), recursion limit 10, 60 s timeout, 120 calls per player (`PEAR_PLAYER_CALL_CAP`), 32 agents per connection, model `PEAR_PLAYER_MODEL` outside hosted mode. Actions: walk_to, look_at, gesture, give_device, say, wait.
+
+Known, not changed: a `prompt` in flight delays reading `decide`; a run that stops without `report` keeps its agents until the connection closes; each decide pays the deep agent's built-in prompt; no cost meter yet (12.3); quality of the authoring and player agents is not tested against a live model.
+
+- [x] `Plugins/langchain-deepagents/runtime/instructions.py`, `Plugins/langchain-deepagents/runtime/players.py`, `Plugins/langchain-deepagents/runtime/server.py`, `Plugins/langchain-deepagents/runtime/translate.py`.
+- [x] `Plugins/langchain-deepagents/tests/test_instructions.py`, `Plugins/langchain-deepagents/tests/test_players.py`, `Plugins/langchain-deepagents/tests/test_translate.py`.
+- [x] `Plugins/langchain-deepagents/pear-plugin.json`, `Plugins/langchain-deepagents/pyproject.toml`, `Plugins/langchain-deepagents/uv.lock`.
+- [x] `Web/studio/src/panels/deep-agent.ts`, `Web/studio/test/deep-agent.test.ts`.

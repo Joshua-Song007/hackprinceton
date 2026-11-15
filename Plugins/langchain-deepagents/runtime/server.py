@@ -8,6 +8,10 @@ Hosted mode (PEAR_RUNTIME_SECRET set, run beside the Pear backend): /ws needs
 is PEAR_PROJECTS_ROOT/<X-Pear-Account>/<X-Pear-Project>, and the model key comes only from the
 X-Pear-Model-Provider / X-Pear-Model-Key headers (that account's key): env keys are never used.
 Bind address: PEAR_RUNTIME_HOST (default 127.0.0.1).
+
+Messages: `prompt` (with `mode` "scripts" or "instructions"; the instructions agent answers with one `file_written` for
+instructions.json), and the agent players' `decide` -> `plan` and `report` -> `report_result`, which run beside a prompt and never
+touch the project (see players.py). Agent players use PEAR_PLAYER_MODEL (not in hosted mode) and PEAR_PLAYER_CALL_CAP.
 """
 import asyncio
 import hmac
@@ -27,10 +31,13 @@ from langchain.chat_models import init_chat_model
 from websockets.asyncio.server import serve
 from websockets.exceptions import ConnectionClosed
 
+import instructions as game_instructions
+import players
 from translate import new_state, translate
 
 PLUGIN_DIR = Path(__file__).resolve().parent.parent
 NO_KEY_MESSAGE = "No model API key: set ANTHROPIC_API_KEY, OPENAI_API_KEY or GOOGLE_API_KEY."
+PLAYER_TIMEOUT_S = 60
 
 
 # Default "provider:model" per key provider (the backend's provider names).
@@ -92,12 +99,30 @@ SUBAGENTS = [
 ]
 
 
-def build_agent(project_dir: Path, model=None):
-    """The deep agent for one project. `model` (a chat model instance) is injected by tests; otherwise the env picks it."""
+def resolve_model(model=None):
+    """`model` when given (a chat model instance from tests or the hosted key), else the env's "provider:model" choice."""
     if model is None:
         model = choose_model(os.environ)
         if model.startswith("google_genai:") and not os.environ.get("GOOGLE_API_KEY") and os.environ.get("GEMINI_API_KEY"):
             model = init_chat_model(model, api_key=os.environ["GEMINI_API_KEY"])
+    return model
+
+
+def player_model(model=None):
+    """The model for agent players: PEAR_PLAYER_MODEL outside hosted mode (hosted never uses env keys), else the authoring agent's."""
+    if model is None and not hosted() and os.environ.get("PEAR_PLAYER_MODEL"):
+        return os.environ["PEAR_PLAYER_MODEL"]
+    return resolve_model(model)
+
+
+MODES = ("scripts", "instructions")
+
+
+def build_agent(project_dir: Path, model=None, mode: str = "scripts"):
+    """The deep agent for one project. `model` (a chat model instance) is injected by tests; otherwise the env picks it."""
+    model = resolve_model(model)
+    if mode == "instructions":
+        return game_instructions.build_agent(project_dir, model)
     # The subagents specs carry no model, so they inherit this one.
     return create_deep_agent(
         model=model,
@@ -110,13 +135,21 @@ def build_agent(project_dir: Path, model=None):
     )
 
 
-def prepare_project(project_dir: Path, snapshot: dict) -> None:
-    """Copy the skills into the project, write scene.json and render AGENTS.md from the prompt's project snapshot."""
+def prepare_project(project_dir: Path, snapshot: dict, mode: str = "scripts") -> None:
+    """Copy the skills into the project, write scene.json and instructions.json (or remove a stale one) and render AGENTS.md from the prompt's project snapshot."""
     shutil.copytree(PLUGIN_DIR / "skills", project_dir / ".pear" / "skills", dirs_exist_ok=True)
     (project_dir / "scene.json").write_text(json.dumps(snapshot.get("scene") or {}, indent=2), encoding="utf-8")
-    dump = lambda key: json.dumps(snapshot.get(key), indent=2)  # noqa: E731
-    template = Template((PLUGIN_DIR / "AGENTS.md.tmpl").read_text(encoding="utf-8"))
-    text = template.safe_substitute(scene=dump("scene"), scripts=dump("scripts"), peripherals=dump("peripherals"))
+    current = snapshot.get("instructions")
+    if current:
+        (project_dir / "instructions.json").write_text(json.dumps(current, indent=2) + "\n", encoding="utf-8")
+    else:
+        (project_dir / "instructions.json").unlink(missing_ok=True)
+    if mode == "instructions":
+        text = game_instructions.agents_md(snapshot)
+    else:
+        dump = lambda key: json.dumps(snapshot.get(key), indent=2)  # noqa: E731
+        template = Template((PLUGIN_DIR / "AGENTS.md.tmpl").read_text(encoding="utf-8"))
+        text = template.safe_substitute(scene=dump("scene"), scripts=dump("scripts"), peripherals=dump("peripherals"))
     (project_dir / "AGENTS.md").write_text(text, encoding="utf-8")
 
 
@@ -131,6 +164,10 @@ async def run_prompt(message: dict, project_dir: Path, model=None, env_model=Tru
     agent finishes even if the socket reading the events is slow. `env_model=False` (hosted mode)
     never falls back to env keys; `secrets` are redacted from error text.
     """
+    mode = message.get("mode") or "scripts"
+    if mode not in MODES:
+        yield {"type": "error", "message": f"unknown mode '{mode}': use {' or '.join(MODES)}"}
+        return
     if model is None and (not env_model or choose_model(os.environ) is None):
         yield {"type": "error", "message": NO_KEY_MESSAGE}
         return
@@ -140,8 +177,8 @@ async def run_prompt(message: dict, project_dir: Path, model=None, env_model=Tru
     async def produce():
         try:
             async with PROJECT_LOCKS.setdefault(project_dir, asyncio.Lock()):
-                prepare_project(project_dir, message.get("project") or {})
-                agent = build_agent(project_dir, model)
+                prepare_project(project_dir, message.get("project") or {}, mode)
+                agent = build_agent(project_dir, model, mode)
                 state = new_state()
                 async for chunk in agent.astream(
                     {"messages": [{"role": "user", "content": message["text"]}]},
@@ -227,21 +264,59 @@ async def handle_socket(websocket, model=None):
         except Exception as exc:  # noqa: BLE001 - bad ids or an unusable key: tell the panel, then close
             await websocket.send(json.dumps({"type": "error", "id": None, "message": sanitize(str(exc), secrets)}))
             return
+    pool = players.PlayerPool(lambda: player_model(model))
+    send_lock = asyncio.Lock()
+    tasks: set[asyncio.Task] = set()
+
+    async def send(payload: dict) -> None:
+        async with send_lock:
+            await websocket.send(json.dumps(payload))
+
+    async def answer_player(message: dict) -> None:
+        """One `decide` or `report`: runs beside prompts, answers with the request's id, never raises."""
+        try:
+            if model is None and choose_model(os.environ) is None and not os.environ.get("PEAR_PLAYER_MODEL"):
+                raise players.PlayerError(NO_KEY_MESSAGE)
+            async with asyncio.timeout(PLAYER_TIMEOUT_S):
+                if message["type"] == "decide":
+                    reply = {"type": "plan", **await pool.decide(message)}
+                else:
+                    reply = {"type": "report_result", **await pool.report(message)}
+        except players.PlayerError as exc:
+            reply = {"type": "error", "message": str(exc)}
+        except TimeoutError:
+            reply = {"type": "error", "message": f"The agent player did not answer within {PLAYER_TIMEOUT_S} s."}
+        except Exception as exc:  # noqa: BLE001 - any agent failure must reach the caller as one error
+            reply = {"type": "error", "message": sanitize(f"{type(exc).__name__}: {exc}", [*secrets, *env_secrets(os.environ)])}
+        try:
+            await send({**reply, "id": message.get("id")})
+        except ConnectionClosed:
+            pass
+
     try:
         async for raw in websocket:
             try:
                 message = json.loads(raw)
-                prompt_id, is_prompt = message.get("id"), message.get("type") == "prompt"
+                prompt_id, kind = message.get("id"), message.get("type")
             except (ValueError, AttributeError):
-                message, prompt_id, is_prompt = {}, None, False
-            if not is_prompt or not isinstance(message.get("text"), str):
-                await websocket.send(json.dumps({"type": "error", "id": prompt_id, "message": "expected a prompt message"}))
+                message, prompt_id, kind = {}, None, None
+            if kind in ("decide", "report"):
+                task = asyncio.create_task(answer_player(message))
+                tasks.add(task)
+                task.add_done_callback(tasks.discard)
+                continue
+            if kind != "prompt" or not isinstance(message.get("text"), str):
+                await send({"type": "error", "id": prompt_id, "message": "expected a prompt message"})
                 continue
             project_dir = hosted_dir if hosted() else Path(os.environ.get("PEAR_PROJECT_DIR", ".")).resolve()
             async for event in run_prompt(message, project_dir, model, env_model, secrets):
-                await websocket.send(json.dumps({**event, "id": prompt_id}))
+                await send({**event, "id": prompt_id})
     except ConnectionClosed:
         pass
+    finally:
+        for task in tasks:
+            task.cancel()
+        pool.close()
 
 
 async def main() -> None:

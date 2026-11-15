@@ -2,6 +2,8 @@
 from pathlib import Path
 
 SCRIPT_TOOLS = {"write_file", "edit_file"}
+# The instructions agent's own tool: it validates, writes /instructions.json itself and answers "Saved" or "Error: ...".
+INSTRUCTIONS_TOOL = "submit_instructions"
 
 
 def new_state() -> dict:
@@ -44,11 +46,12 @@ def _status(name: str, status: str, detail: str) -> dict:
 
 
 def _in_scripts(project_dir: Path, file_path) -> bool:
-    """True for files the panel applies: anything under /scripts/, and /scene.json."""
+    """True for files the panel applies: anything under /scripts/, /scene.json, and /instructions.json (a proposal)."""
     if not isinstance(file_path, str) or not file_path.startswith("/"):
         return False
     target = (project_dir / file_path.lstrip("/")).resolve()
-    return target == (project_dir / "scene.json").resolve() or target.is_relative_to((project_dir / "scripts").resolve())
+    return (target in ((project_dir / "scene.json").resolve(), (project_dir / "instructions.json").resolve())
+            or target.is_relative_to((project_dir / "scripts").resolve()))
 
 
 def _message_events(namespace, message, project_dir: Path, state: dict) -> list[dict]:
@@ -66,6 +69,8 @@ def _message_events(namespace, message, project_dir: Path, state: dict) -> list[
                 events.append(_status(name, "started", args.get("description", "")))
             elif call["name"] in SCRIPT_TOOLS and _in_scripts(project_dir, args.get("file_path")):
                 state["writes"][call["id"]] = args["file_path"].lstrip("/")
+            elif call["name"] == INSTRUCTIONS_TOOL:
+                state["writes"][call["id"]] = "instructions.json"
         if not message.tool_calls and not namespace:
             state["summary"] = _text(message.content)
     elif kind == "tool":

@@ -8,7 +8,8 @@ import './deep-agent.css';
 
 interface TodoItem { content: string; status: 'pending' | 'in_progress' | 'completed' }
 interface AgentRow { state: string; detail: string }
-interface FileLink { path: string; ref: ScriptRef | null; note?: string }
+interface FileLink { path: string; ref: ScriptRef | null; note?: string; proposal?: string }
+type Mode = 'scripts' | 'instructions';
 
 type RuntimeMessage =
   | { type: 'todos'; id: string; items: TodoItem[] }
@@ -28,6 +29,7 @@ const OPEN = 1;
 const STATUS_LABEL: Record<TodoItem['status'], string> = { pending: 'Pending', in_progress: 'In progress', completed: 'Completed' };
 const RETRY_MIN_MS = 500;
 const RETRY_MAX_MS = 10_000;
+const PLACEHOLDER: Record<Mode, string> = { scripts: 'Describe the game or script you want', instructions: 'Describe how the game is played, or what to change in its instructions' };
 const SCRIPT_PATH = /^scripts\/([^/]+)\.(client|server)\.js$/;
 
 /** scripts/<name>.client.js -> client <name>; scripts/<name>.server.js -> server <name>; anything else is not a Project script. */
@@ -54,10 +56,20 @@ function createView({ url, project, openScript, WebSocketImpl }: DeepAgentOption
   let todos: TodoItem[] = [];
   const agents = new Map<string, AgentRow>();
   let files: FileLink[] = [];
+  let mode: Mode = 'scripts';
+  /** The mode of the prompt in flight: an instructions run applies only instructions.json. */
+  let runMode: Mode = 'scripts';
+  let pendingFile: FileLink | null = null;
 
   const unreachable = `Cannot reach the Deep Agent runtime at ${url}.`;
   const promptId = 'deep-agent-prompt';
-  const input = el('textarea', { id: promptId, rows: 4, placeholder: 'Describe the game or script you want' });
+  const input = el('textarea', { id: promptId, rows: 4, placeholder: PLACEHOLDER.scripts });
+  const modeId = 'deep-agent-mode';
+  const modeSelect = el('select', { id: modeId, 'aria-label': 'Mode' }, [el('option', { value: 'scripts' }, ['Scripts']), el('option', { value: 'instructions' }, ['Instructions'])]);
+  modeSelect.addEventListener('change', () => {
+    mode = modeSelect.value === 'instructions' ? 'instructions' : 'scripts';
+    input.setAttribute('placeholder', PLACEHOLDER[mode]);
+  });
   const send = button('Send', () => submit());
   send.classList.add('om-btn--default');
   send.setAttribute('aria-keyshortcuts', 'Control+Enter Meta+Enter');
@@ -69,6 +81,8 @@ function createView({ url, project, openScript, WebSocketImpl }: DeepAgentOption
   const element = el('div', { class: 'deep-agent' }, [
     status,
     alerts,
+    el('label', { for: modeId }, ['Mode']),
+    modeSelect,
     el('label', { for: promptId }, ['Prompt']),
     input,
     send,
@@ -80,6 +94,14 @@ function createView({ url, project, openScript, WebSocketImpl }: DeepAgentOption
     fileList,
   ]);
 
+  const decide = (f: FileLink, accept: boolean) => {
+    if (accept) project.acceptProposal();
+    else project.rejectProposal();
+    f.note = accept ? 'accepted' : 'rejected';
+    if (pendingFile === f) pendingFile = null;
+    render();
+  };
+
   const render = () => {
     status.textContent = run ? `${connection}. ${run}` : connection;
     alerts.replaceChildren(...errors.map((e) => el('p', {}, [`Error: ${e}`])));
@@ -87,6 +109,9 @@ function createView({ url, project, openScript, WebSocketImpl }: DeepAgentOption
     agentList.replaceChildren(...[...agents].map(([name, a]) => el('li', { 'data-state': a.state }, [`${name}: ${a.state}${a.detail ? ` (${a.detail})` : ''}`])));
     fileList.replaceChildren(
       ...files.map((f) => {
+        if (f.proposal !== undefined && f === pendingFile && project.proposal) {
+          return el('li', {}, [`${f.path} (proposed: ${f.proposal}) `, button('Accept', () => decide(f, true), { variant: 'small' }), button('Reject', () => decide(f, false), { variant: 'small' })]);
+        }
         const label = f.ref ? `${f.path} (open in editor)` : `${f.path} (${f.note ?? 'not a Studio script'})`;
         return el('li', {}, [f.ref ? button(label, () => openScript(f.ref!), { variant: 'borderless' }) : label]);
       }),
@@ -136,10 +161,11 @@ function createView({ url, project, openScript, WebSocketImpl }: DeepAgentOption
     agents.clear();
     files = [];
     errors = [];
+    runMode = mode;
     run = 'Working';
     input.value = '';
     const scripts = (['client', 'server'] as const).flatMap((kind) => Object.entries(project.scripts(kind)).map(([name, source]) => ({ kind, name, source })));
-    socket.send(JSON.stringify({ type: 'prompt', id: currentId, text, project: { scene: project.scene, scripts, peripherals: [] } }));
+    socket.send(JSON.stringify({ type: 'prompt', id: currentId, text, mode, project: { scene: project.scene, scripts, peripherals: [], instructions: project.instructions } }));
     render();
   };
 
@@ -159,6 +185,27 @@ function createView({ url, project, openScript, WebSocketImpl }: DeepAgentOption
         agents.set(msg.name, { state: msg.state, detail: msg.detail ?? '' });
         break;
       case 'file_written': {
+        if (msg.path === 'instructions.json') {
+          let problem: string | undefined;
+          try {
+            problem = project.propose(JSON.parse(msg.content));
+          } catch (e) {
+            problem = e instanceof Error ? e.message : String(e);
+          }
+          if (problem) errors.push(`instructions.json not applied: ${problem}`);
+          const p = project.proposal;
+          const entry: FileLink = problem || !p
+            ? { path: msg.path, ref: null, note: 'not applied' }
+            : { path: msg.path, ref: null, proposal: `${p.title || 'untitled'}, ${p.roles.length} roles, ${p.phases.length} phases` };
+          if (pendingFile && !problem) pendingFile.note = 'replaced by a newer proposal';
+          if (!problem) pendingFile = entry;
+          files.push(entry);
+          break;
+        }
+        if (runMode === 'instructions') {
+          files.push({ path: msg.path, ref: null, note: 'ignored: this was an instructions run' });
+          break;
+        }
         if (msg.path === 'scene.json') {
           let problem: string | undefined;
           try {
@@ -198,6 +245,7 @@ function createView({ url, project, openScript, WebSocketImpl }: DeepAgentOption
     }
   });
 
+  const offProject = project.onChange((c) => { if (c === 'proposal') render(); });
   render();
   connect();
 
@@ -206,6 +254,7 @@ function createView({ url, project, openScript, WebSocketImpl }: DeepAgentOption
     focus: () => input.focus(),
     dispose: () => {
       disposed = true;
+      offProject();
       clearTimeout(retryTimer);
       socket?.close();
     },
