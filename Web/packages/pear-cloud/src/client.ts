@@ -223,6 +223,13 @@ export class CloudClient {
     return response;
   }
 
+  /** POST /api/accounts/signup: a `player` account with a password; the response is the same token body as sign-in. */
+  async signUp(request: { username: string; password: string; display_name: string }): Promise<SignInResponse> {
+    const response = await this.request<SignInResponse>('POST', '/api/accounts/signup', request);
+    this.token = response.token;
+    return response;
+  }
+
   me(): Promise<Account> {
     return this.request('GET', '/api/accounts/me');
   }
