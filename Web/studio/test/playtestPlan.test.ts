@@ -1,12 +1,21 @@
 import { describe, expect, it } from 'vitest';
 import {
-  CALL_BUDGETS, CREWS, PERSONA_LABELS, assignRoles, costText, describeAction, describeCue, describeUnsure, logLine, personaFor, readiness, seatCrew, startProblem,
+  CALL_BUDGETS, CREWS, PERSONA_LABELS, agentColorVar, assignRoles, costText, describeAction, describeCue, describeUnsure, logLine, personaFor, readiness, seatCrew, startProblem,
 } from '../src/playtestPlan';
 import { PERSONAS } from '../src/agentPlayers';
 
 const roles = [
   { id: 'ref', kind: 'ref' as const }, { id: 'runner', kind: 'player' as const }, { id: 'scorer', kind: 'player' as const },
 ];
+
+describe('agentColorVar', () => {
+  it('gives each player a token the viewport also uses, and cycles past the last one', () => {
+    expect(agentColorVar(0)).toBe('--axis-z');
+    expect(agentColorVar(1)).toBe('--selection');
+    expect(agentColorVar(4)).toBe(agentColorVar(0));
+    expect(new Set([0, 1, 2, 3].map(agentColorVar)).size).toBe(4);
+  });
+});
 
 describe('crews and budgets', () => {
   it('every crew only names known behaviours, and every behaviour has a plain label', () => {

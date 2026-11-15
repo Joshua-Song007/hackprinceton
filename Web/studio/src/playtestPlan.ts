@@ -1,6 +1,6 @@
 // What a playtest is made of, in plain words: who plays (a crew of behaviours), how long (a call budget), which role each player
 // takes, what is ready before Start, and how an agent's actions and cues read in the play-by-play. Pure: no DOM, no run state.
-import type { Action, Cue } from '@pear/runtime';
+import { AVATAR_PALETTE_VARS, type Action, type Cue } from '@pear/runtime';
 import type { AgentStatus, Persona } from './agentPlayers';
 
 export type CrewId = 'realistic' | 'careful' | 'first-timers' | 'rule-benders' | 'mix';
@@ -67,6 +67,9 @@ export function seatCrew(count: number, crew: CrewId, roles: readonly { id: stri
   const assigned = assignRoles(roles, count);
   return assigned.map((role, n) => ({ persona: personaFor(crew, n), role }));
 }
+
+/** The CSS variable of the colour the n-th player's agent figure has in the viewport, so a card's swatch matches it. */
+export const agentColorVar = (n: number): string => AVATAR_PALETTE_VARS[n % AVATAR_PALETTE_VARS.length]!;
 
 const fixed = (n: number): string => n.toFixed(1);
 

@@ -14,6 +14,8 @@ export const AGENT_WALK_TIMEOUT_S = 10;
 export const AGENT_BACKOFF_S = 10;
 /** Failed decides in a row after which an agent gives up: a plugin with no key would otherwise spend the whole budget failing. */
 export const AGENT_MAX_FAILURES = 3;
+/** How long, in game seconds, the last thing an agent said stays on its name tag in the viewport. */
+export const SAY_SHOWN_S = 6;
 const LOG_LIMIT = 200;
 
 /** Who an agent player is: its persona and the instructions role it plays ('' for none). */
@@ -68,6 +70,8 @@ export class AgentDriver {
   calls = 0;
   readonly notes: AgentNoteRecord[] = [];
   lastSay = '';
+  /** Game time of `lastSay`. */
+  lastSayAt = 0;
   summary = '';
   looked = false;
   lastGameTime = 0;
@@ -115,6 +119,11 @@ export class AgentDriver {
     return this.cap;
   }
 
+  /** What the agent said in the last `SAY_SHOWN_S` game seconds as of game time `now`, else ''; for its name tag. */
+  saying(now: number): string {
+    return this.lastSay && now - this.lastSayAt < SAY_SHOWN_S ? this.lastSay : '';
+  }
+
   /** What the agent is doing right now, in words, for its card. */
   get doing(): string {
     if (this.looked) return this.disposed ? 'Done' : 'Looking back...';
@@ -144,7 +153,10 @@ export class AgentDriver {
       this.currentText = describeAction(action);
       if (action.type === 'wait') this.current = { kind: 'wait', until: now + action.seconds };
       else {
-        if (action.type === 'say') this.lastSay = action.text;
+        if (action.type === 'say') {
+          this.lastSay = action.text;
+          this.lastSayAt = this.o.host.gameTime();
+        }
         this.addLog('did', this.currentText);
         this.o.host.apply(action);
         if (action.type === 'walk_to' && this.o.host.walking()) this.current = { kind: 'walk', until: now + this.walkTimeout };

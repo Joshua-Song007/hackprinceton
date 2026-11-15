@@ -12,7 +12,7 @@ import prelude from '../../../Packages/PearScript/Sources/PearScript/Resources/p
 import { SIM_DEVICE_KINDS, SimDevices, UsisPlayer, attachGestureKeys, attachMouseLook, type SimDeviceKind, type SimDevicesOptions } from '@pear/sim';
 import { AgentDriver, type AgentNoteRecord, type AgentSeat } from './agentPlayers';
 import { socketTransport, type AgentTransport, type DecideRequest } from './agentTransport';
-import { seatCrew, startProblem, type AgentLogEntry, type CrewId } from './playtestPlan';
+import { describeAction, seatCrew, startProblem, type AgentLogEntry, type CrewId } from './playtestPlan';
 import { buildPlaytestReport, type PlaytestReport } from './playtestReport';
 import type { AccountController } from './account';
 import { describeError } from './account';
@@ -978,6 +978,7 @@ export class RunController {
   /** The only way an agent acts: the same moves a person has (walk, turn the head, gesture, hand over a device, speak). What cannot be done comes back as a note cue. */
   private applyAgent(p: TestPlayer, a: Action): void {
     const d = p.run.devices;
+    if (a.type !== 'say') this.out('log', `[${p.id}] ${describeAction(a)}`); // what an agent does is printed; speech is printed below
     const lookToward = (x: number, z: number) => d.setHeadLook(Math.atan2(-(x - d.position[0]), -(z - d.position[2])), 0);
     if (a.type === 'walk_to') this.walkTo(p.id, a.x, a.z);
     else if (a.type === 'look_at') {
@@ -1013,11 +1014,13 @@ export class RunController {
   rigView(): RigView | null {
     if (!this.players.length) return null;
     return {
-      avatars: this.players.map((p) => {
+      avatars: this.players.map((p, n) => {
         const d = p.run.devices;
         const { yaw, pitch } = d.headLook;
         const held = [...this.holders].filter(([, id]) => id === p.id).map(([kind]) => ({ kind, shared: true }));
-        return { id: p.id, position: d.position, yaw, pitch, driven: p.id === this.driven, devices: [...d.list().map((kind) => ({ kind, shared: false })), ...held], hapticAt: p.hapticAt };
+        // An agent player also shows who it is, what it is doing, what it just said and where it is walking, in its own colour.
+        const tag = p.agent ? { label: p.name, ...(p.agent.doing === 'Waiting' ? {} : { doing: p.agent.doing }), say: p.agent.saying(this.gameTime()), goal: p.goal, tint: n } : {};
+        return { id: p.id, position: d.position, yaw, pitch, driven: p.id === this.driven, devices: [...d.list().map((kind) => ({ kind, shared: false })), ...held], hapticAt: p.hapticAt, ...tag };
       }),
       free: [...this.rooms].filter(([kind]) => ownershipOf(this.ownership, kind).mode === 'free').map(([kind, room]) => ({ kind, at: room.position })),
     };

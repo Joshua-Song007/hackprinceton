@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { parseScene, type Action, type Observation } from '@pear/runtime';
 import type { CallResult, HandlerCall, ScriptSandbox } from '@pear/script';
-import { AgentDriver, type AgentHost } from '../src/agentPlayers';
+import { AgentDriver, SAY_SHOWN_S, type AgentHost } from '../src/agentPlayers';
 import type { AgentTransport, DecideRequest, PlanReply, ReportReply } from '../src/agentTransport';
 import { createPauseClock } from '../src/pauseClock';
 import { LocalRun, createPlayServer, joinPlay } from '../src/run';
@@ -72,6 +72,20 @@ describe('AgentDriver', () => {
     d.tick();
     expect(f.applied).toEqual([{ type: 'say', text: 'hi' }]);
     expect(d.lastSay).toBe('hi');
+  });
+
+  it('shows what it said for SAY_SHOWN_S game seconds, then nothing', async () => {
+    const w = world(), f = fakes(), d = driver(f, w);
+    expect(d.saying(0)).toBe('');
+    d.tick();
+    f.waiting[0]!.resolve({ actions: [{ type: 'say', text: 'hi' }], unsure: [] });
+    await flush();
+    f.state.t = 10;
+    d.tick();
+    expect(d.lastSay).toBe('hi');
+    expect(d.saying(10)).toBe('hi');
+    expect(d.saying(10 + SAY_SHOWN_S - 0.1)).toBe('hi');
+    expect(d.saying(10 + SAY_SHOWN_S)).toBe('');
   });
 
   it('releases on an error, notes it once and waits before asking again', async () => {

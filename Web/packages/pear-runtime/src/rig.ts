@@ -65,7 +65,18 @@ export interface AvatarView {
   devices: { kind: RigDevice; shared: boolean }[];
   /** `Date.now()` of the last haptic, 0 for never. */
   hapticAt: number;
+  /** Agent players only: the name above the figure, what it is doing now, what it just said, where it is walking to, and its colour (an index into `AVATAR_PALETTE`). Never part of an observation. */
+  label?: string;
+  doing?: string;
+  say?: string;
+  goal?: readonly [number, number] | null;
+  tint?: number;
 }
+
+/** Viewport colours an agent figure cycles through (red is a plain player, the accent colour is the driven one). */
+export const AVATAR_PALETTE = ['axisZ', 'selection', 'axisY', 'text'] as const;
+/** The studio token behind each palette entry, for a swatch that matches the figure. */
+export const AVATAR_PALETTE_VARS = ['--axis-z', '--selection', '--axis-y', '--text'] as const;
 
 export interface RigView {
   avatars: AvatarView[];
@@ -84,7 +95,8 @@ export function rigKey(view: RigView | null, now: number): string {
     const age = now - v.hapticAt;
     const pulse = v.hapticAt && age >= 0 && age < PULSE_MS ? Math.floor(age / 50) + 1 : 0;
     return [v.id, v.driven ? 1 : 0, q(v.position[0]), q(v.position[1]), q(v.position[2]), Math.round(v.yaw * 200), Math.round(v.pitch * 200), pulse,
-      v.devices.map((d) => `${d.kind}${d.shared ? '*' : ''}`).join('+')].join(',');
+      v.devices.map((d) => `${d.kind}${d.shared ? '*' : ''}`).join('+'),
+      v.tint ?? '', v.goal ? `${q(v.goal[0])}:${q(v.goal[1])}` : '', JSON.stringify([v.label ?? '', v.doing ?? '', v.say ?? ''])].join(',');
   });
   const f = view.free.map((d) => `${d.kind}@${q(d.at[0])},${q(d.at[1])},${q(d.at[2])}`);
   return `${a.join('|')}#${f.join('|')}`;

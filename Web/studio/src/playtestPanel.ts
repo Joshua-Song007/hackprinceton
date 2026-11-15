@@ -2,7 +2,7 @@
 // every agent (what it is doing, what it did, said and heard) and read the report. Agents test the written instructions.
 import type { PanelView } from './layout';
 import { MARKETPLACE_PANEL_ID } from './marketplace/panel';
-import { CALL_BUDGETS, CREWS, DEFAULT_BUDGET, DEFAULT_CREW, PERSONA_LABELS, costText, logLine, readiness, startProblem, type CrewId } from './playtestPlan';
+import { CALL_BUDGETS, CREWS, agentColorVar, DEFAULT_BUDGET, DEFAULT_CREW, PERSONA_LABELS, costText, logLine, readiness, startProblem, type CrewId } from './playtestPlan';
 import { renderPlaytest } from './playtestView';
 import type { Project } from './project';
 import type { RunController } from './run';
@@ -13,7 +13,7 @@ const PAD = 'padding:4px 12px';
 export function createPlaytestPanel(project: Project, run: RunController, sendToChat: (text: string) => string | undefined, openPanel: (id: string) => void): PanelView {
   const root = el('div', { class: 'pn', role: 'region', 'aria-label': 'Playtest', tabindex: -1 });
   const group = (t: string) => el('div', { class: 'pn-group' }, [t]);
-  const intro = el('p', { class: 'om-sub', style: PAD }, ['Agents play your instructions the way people in the room would: they only see and hear what is near them. They test the instructions, not your scripts.']);
+  const intro = el('p', { class: 'om-sub', style: PAD }, ['Agents play your written instructions the way people in the room would: they only see and hear what is near them. In the Viewport each agent is a coloured figure with its name, what it is doing and, when walking, its target marked on the floor. They test the instructions, not your scripts.']);
   const body = el('div');
   root.append(intro, body);
 
@@ -111,6 +111,7 @@ export function createPlaytestPanel(project: Project, run: RunController, sendTo
   let cardKey = '';
   const statusLine = el('p', { class: 'om-sub', role: 'status', style: PAD });
   const stop = button('Stop and see report', () => void run.finishPlaytest().then((m) => { notice = m ?? ''; }), { variant: 'default' });
+  const watch = button('Watch in Viewport', () => openPanel('viewport'), { variant: 'small', ariaLabel: 'Watch in Viewport: show the agents moving in the scene' });
   const refreshLive = (): void => {
     const agents = run.players.filter((p) => p.agent);
     const key = agents.map((p) => `${p.id}:${p.agent!.seat.persona}:${p.agent!.seat.role}`).join('|');
@@ -124,7 +125,7 @@ export function createPlaytestPanel(project: Project, run: RunController, sendTo
         cardRefs.set(p.id, refs);
         const roleName = roles.find((r) => r.id === d.seat.role)?.name;
         return el('li', { style: 'display:grid;gap:2px;padding:6px 12px' }, [
-          el('strong', {}, [roleName ? `${p.name} (${roleName})` : p.name]),
+          el('strong', {}, [el('span', { class: 'pt-dot', style: `background:var(${agentColorVar(run.players.indexOf(p))})`, 'aria-hidden': 'true' }), roleName ? `${p.name} (${roleName})` : p.name]),
           el('span', { class: 'om-sub' }, [PERSONA_LABELS[d.seat.persona]]),
           refs.doing, refs.calls, refs.say,
           el('div', {}, [button('Take over', () => run.drive(p.id), { variant: 'small', ariaLabel: `Take over ${p.name}: drive this player yourself` })]),
@@ -158,7 +159,7 @@ export function createPlaytestPanel(project: Project, run: RunController, sendTo
     if (m === 'setup') return body.replaceChildren(...setup());
     if (m === 'live') {
       refreshLive();
-      body.replaceChildren(group('Playtest running'), statusLine, el('div', { style: PAD }, [stop]), cards, group('Play-by-play'), logBox);
+      body.replaceChildren(group('Playtest running'), statusLine, el('div', { style: `${PAD};display:flex;gap:8px;align-items:center` }, [stop, watch]), cards, group('Play-by-play (also printed in the Console)'), logBox);
       refreshLog();
       return;
     }
@@ -167,7 +168,7 @@ export function createPlaytestPanel(project: Project, run: RunController, sendTo
       group('Playtest finished'),
       run.report ? renderPlaytest(run.report, sendToChat) : el('p', { class: 'pn-empty' }, ['The playtest stopped before there was anything to report.']),
       el('div', { style: PAD }, [again]),
-      group('Play-by-play'), logBox,
+      group('Play-by-play (also printed in the Console)'), logBox,
     );
     refreshLog();
   };

@@ -84,3 +84,12 @@ From a UX critique of the form: the sheet scrolls inside itself with Cancel and 
 - [x] `Web/studio/src/ui.ts`, `Web/studio/src/theme.css`
 - [x] `Web/studio/test/newGame.test.ts` — `newGameProblems` cases.
 
+
+### 2026-11-15 — Agent players: visible in the Viewport, actions printed
+Paths: `Web/packages/pear-runtime/src/rig.ts`, `Web/packages/pear-runtime/src/viewport.ts`, `Web/studio/src/run.ts`, `Web/studio/src/agentPlayers.ts`, `Web/studio/src/playtestPanel.ts`, `Web/studio/src/playtestPlan.ts`, `Web/studio/src/theme.css`
+
+Agent players are no longer the same faint red cylinder. Each is a figure in its own colour (blue, orange, green, white; red stays a plain player, the accent colour the driven one) with a name tag above its head showing its name, what it is doing and what it just said (for 6 game seconds), and while walking a ring on the floor at its target with a line to it. `AvatarView` gained optional `label`, `doing`, `say`, `goal` and `tint`; `buildObservation` copies explicit fields only, so none of it reaches what an agent sees (tested). Every agent action except speech is printed to the Console as `[player-1] walks to x 2.0, z 3.0`. The Playtest panel intro says what to look for, live mode has a Watch in Viewport button, each card has a swatch matching its figure, and the play-by-play heading says it is also in the Console. Agent speed (1.5 m/s) and decision cadence are unchanged. Not verified in a browser: the name tags, rings and colours.
+- [x] `Web/packages/pear-runtime/src/rig.ts`, `Web/packages/pear-runtime/src/viewport.ts`
+- [x] `Web/studio/src/run.ts`, `Web/studio/src/agentPlayers.ts`
+- [x] `Web/studio/src/playtestPanel.ts`, `Web/studio/src/playtestPlan.ts`, `Web/studio/src/theme.css`
+- [x] `Web/packages/pear-runtime/test/rig.test.ts`, `Web/packages/pear-runtime/test/observation.test.ts`, `Web/studio/test/agentRun.test.ts`, `Web/studio/test/agentPlayers.test.ts`, `Web/studio/test/playtestPlan.test.ts`

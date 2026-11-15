@@ -3,7 +3,7 @@
 import * as THREE from 'three';
 import type { Pose } from '@pear/core';
 import type { WorldEntity } from './scene';
-import { GAZE_LENGTH, LOOK_LOCK_DEG, PULSE_MS, rigKey, rigLayout, type RigDevice, type RigHit, type RigVec, type RigView } from './rig';
+import { AVATAR_PALETTE, GAZE_LENGTH, LOOK_LOCK_DEG, PULSE_MS, rigKey, rigLayout, type RigDevice, type RigHit, type RigVec, type RigView } from './rig';
 import { DEFAULT_ORBIT, contentBounds, frameBox, moveBy, orbitBy, orbitPosition, panBy, rayPlaneY, zoomBy, type OrbitState } from './orbit';
 
 export interface ViewportColors {
@@ -64,6 +64,8 @@ export class Viewport {
   private rigGroup = new THREE.Group(); // simulated players and room devices, rebuilt on its own so a turning head does not rebuild the scene
   private rigView: RigView | null = null;
   private rigKeyNow = '';
+  /** Name-tag textures by text and colour: a walking agent changes the rig a few centimetres at a time, and a new canvas per rebuild would churn. */
+  private tagTextures = new Map<string, THREE.CanvasTexture>();
   private gizmoScene = new THREE.Scene();
   private gizmoCamera = new THREE.PerspectiveCamera(30, 1, 0.1, 20);
   private gizmo = new THREE.Group();
@@ -287,6 +289,8 @@ export class Viewport {
 
   dispose(): void {
     this.clearRig();
+    for (const t of this.tagTextures.values()) t.dispose();
+    this.tagTextures.clear();
     this.clear();
     this.renderer.dispose();
   }
@@ -296,9 +300,39 @@ export class Viewport {
       if (o instanceof THREE.Mesh || o instanceof THREE.LineSegments || o instanceof THREE.Line) {
         o.geometry.dispose();
         (o.material as THREE.Material).dispose();
-      }
+      } else if (o instanceof THREE.Sprite) o.material.dispose(); // the cached name-tag texture outlives the sprite
     });
     this.rigGroup.clear();
+  }
+
+  /** A name tag: up to three lines on a dark plate, each cut at 28 characters, `depthTest` off so it reads through the scene. */
+  private tagSprite(lines: string[], color: string): THREE.Sprite {
+    const text = lines.map((l) => (l.length > 28 ? `${l.slice(0, 27)}…` : l));
+    const key = `${color}|${text.join('\n')}`;
+    let map = this.tagTextures.get(key);
+    if (!map) {
+      if (this.tagTextures.size >= 64) {
+        for (const t of this.tagTextures.values()) t.dispose();
+        this.tagTextures.clear();
+      }
+      const c = document.createElement('canvas');
+      c.width = 256;
+      c.height = text.length * 40;
+      const g = c.getContext('2d')!;
+      g.fillStyle = 'rgba(0, 0, 0, 0.6)';
+      g.fillRect(0, 0, c.width, c.height);
+      g.fillStyle = color;
+      g.font = 'bold 26px sans-serif';
+      g.textAlign = 'center';
+      g.textBaseline = 'middle';
+      text.forEach((l, i) => g.fillText(l, 128, i * 40 + 21, 244));
+      map = new THREE.CanvasTexture(c);
+      this.tagTextures.set(key, map);
+    }
+    const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map, depthTest: false }));
+    sprite.scale.set(1, (text.length * 40) / 256, 1);
+    sprite.renderOrder = 10;
+    return sprite;
   }
 
   private buildRig(): void {
@@ -327,10 +361,10 @@ export class Viewport {
 
     for (const a of view.avatars) {
       const l = rigLayout(a);
-      const color = a.driven ? c.accent : c.axisX;
+      const color = a.driven ? c.accent : a.tint !== undefined ? c[AVATAR_PALETTE[a.tint % AVATAR_PALETTE.length]!] : c.axisX;
       const bodyH = Math.max(0.2, l.head[1] - 0.14);
       const body = new THREE.CylinderGeometry(0.2, 0.2, bodyH, 14);
-      const bodyMesh = new THREE.Mesh(body, new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.1 }));
+      const bodyMesh = new THREE.Mesh(body, new THREE.MeshBasicMaterial({ color, transparent: true, opacity: a.tint !== undefined ? 0.22 : 0.1 }));
       bodyMesh.position.set(l.head[0], bodyH / 2, l.head[2]);
       bodyMesh.userData.avatarId = a.id;
       const bodyEdges = new THREE.LineSegments(new THREE.EdgesGeometry(body, 40), new THREE.LineBasicMaterial({ color }));
@@ -344,6 +378,17 @@ export class Viewport {
       coneLines.position.set(...l.head).addScaledVector(new THREE.Vector3(...l.forward), GAZE_LENGTH / 2);
       coneLines.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), new THREE.Vector3(...l.forward).negate());
       this.rigGroup.add(bodyMesh, bodyEdges, head, gaze, coneLines);
+      if (a.label) {
+        const lines = [a.label, a.doing ?? '', a.say ? `“${a.say}”` : ''].filter(Boolean);
+        const tag = this.tagSprite(lines, color);
+        tag.position.set(l.head[0], l.head[1] + 0.3 + tag.scale.y / 2, l.head[2]);
+        this.rigGroup.add(tag);
+      }
+      if (a.goal) {
+        const at: RigVec = [a.goal[0], 0.02, a.goal[1]];
+        const path = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(l.feet[0], 0.02, l.feet[2]), new THREE.Vector3(...at)]), new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.7 }));
+        this.rigGroup.add(path, ring(at, 0.25, color, 0.9));
+      }
       for (const d of a.devices) {
         if (d.kind === 'airpods') this.rigGroup.add(...marker('airpods', l.leftEar, 1, a.id, d.shared), ...marker('airpods', l.rightEar, 1, a.id, d.shared));
         else this.rigGroup.add(...marker(d.kind, d.kind === 'phone' ? l.hand : l.leftWrist, 1, a.id, d.shared));

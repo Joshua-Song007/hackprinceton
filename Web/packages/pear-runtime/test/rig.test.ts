@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { GAZE_LENGTH, rigKey, rigLayout, type AvatarView, type RigView } from '../src/rig';
+import { AVATAR_PALETTE, AVATAR_PALETTE_VARS, GAZE_LENGTH, rigKey, rigLayout, type AvatarView, type RigView } from '../src/rig';
 
 const near = (a: readonly number[], b: readonly number[]) => a.forEach((v, i) => expect(v).toBeCloseTo(b[i]!, 5));
 
@@ -51,6 +51,23 @@ describe('rigKey', () => {
     expect(rigKey(view(avatar({ devices: [{ kind: 'phone', shared: true }] })), 0)).not.toBe(base);
     expect(rigKey(view(avatar({ driven: false })), 0)).not.toBe(base);
     expect(rigKey(view(avatar()), 0)).toBe(base);
+  });
+
+  it('changes when an agent figure gets a name, an action, speech, a walk target or a colour, and not when they stay the same', () => {
+    const base = rigKey(view(avatar()), 0);
+    const tagged = avatar({ label: 'Ada', doing: 'walks to x 2.0, z 3.0', say: 'ready?', goal: [2, 3], tint: 1 });
+    const key = rigKey(view(tagged), 0);
+    expect(key).not.toBe(base);
+    for (const over of [{ label: 'Bo' }, { doing: 'Thinking...' }, { say: '' }, { goal: [2, 3.5] as const }, { goal: null }, { tint: 2 }]) {
+      expect(rigKey(view({ ...tagged, ...over }), 0)).not.toBe(key);
+    }
+    expect(rigKey(view({ ...tagged }), 9000)).toBe(key);
+    expect(rigKey(view(avatar({ goal: null })), 0)).toBe(base);
+  });
+
+  it('the palette has a CSS variable for each colour, and an index past the end wraps', () => {
+    expect(AVATAR_PALETTE_VARS).toHaveLength(AVATAR_PALETTE.length);
+    expect(AVATAR_PALETTE[5 % AVATAR_PALETTE.length]).toBe(AVATAR_PALETTE[1]);
   });
 
   it('a free device moving changes it, and a haptic pulse changes it as it ages then settles', () => {

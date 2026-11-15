@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { parseInstructions, parseScene } from '@pear/runtime';
 import type { ScriptSandbox } from '@pear/script';
 import type { SimDeviceKind } from '@pear/sim';
+import type { AgentDriver } from '../src/agentPlayers';
 import { LocalRun, RunController, type RunDeps, type TestPlayer } from '../src/run';
 
 const sandbox = { loadScript: async () => {}, call: async () => ({ outputs: [] }), dispose: () => {} } as unknown as ScriptSandbox;
@@ -78,6 +79,27 @@ describe('what an agent can do', () => {
     expect(players[3]!.cues).toEqual([]);
     expect(players[0]!.cues).toEqual([]);
     expect(logs).toContain('[player-1] says: ready?');
+  });
+
+  it('prints what it does to the Console, one line per action, and speech keeps its own line', () => {
+    const { players, internals, logs } = setup();
+    internals.applyAgent(players[0]!, { type: 'walk_to', x: 2, z: 3 });
+    internals.applyAgent(players[0]!, { type: 'look_at', x: -5, z: 0 });
+    internals.applyAgent(players[0]!, { type: 'gesture', gesture: 'tap' });
+    internals.applyAgent(players[0]!, { type: 'say', text: 'ready?' });
+    expect(logs).toEqual(['[player-1] walks to x 2.0, z 3.0', '[player-1] looks toward x -5.0, z 0.0', '[player-1] does a tap', '[player-1] says: ready?']);
+  });
+
+  it('the viewport gets a name tag, action, speech, walk target and colour for agent players only', () => {
+    const { run, players } = setup();
+    players[1]!.agent = { doing: 'walks to x 2.0, z 3.0', saying: () => 'hi' } as unknown as AgentDriver;
+    players[1]!.goal = [2, 3];
+    players[2]!.agent = { doing: 'Waiting', saying: () => '' } as unknown as AgentDriver;
+    const [plain, walking, waiting] = run.rigView()!.avatars;
+    expect(walking).toMatchObject({ id: 'player-2', label: 'player-2', doing: 'walks to x 2.0, z 3.0', say: 'hi', goal: [2, 3], tint: 1 });
+    expect(waiting).toMatchObject({ label: 'player-3', say: '', goal: null, tint: 2 });
+    expect('doing' in waiting!).toBe(false);
+    for (const k of ['label', 'doing', 'say', 'goal', 'tint']) expect(k in plain!).toBe(false);
   });
 
   it('a gesture needs a phone: with one it is sent, without one it comes back as a note', () => {

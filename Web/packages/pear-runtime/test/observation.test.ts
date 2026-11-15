@@ -21,6 +21,13 @@ describe('buildObservation', () => {
     expect(Object.keys(o)).toEqual(['gameTime', 'you', 'others', 'heard']);
   });
 
+  it('never carries what the viewport shows about a player (name tag, action, speech, walk target, colour)', () => {
+    const tagged = { ...avatar('p2', 0, -3, Math.PI), label: 'SECRETNAME', doing: 'SECRETDOING', say: 'SECRETSAY', goal: [7, 7] as const, tint: 2 };
+    const o = buildObservation({ ...me, label: 'MYTAG', doing: 'MYDOING' }, [me, tagged], [], 0);
+    expect(o.others).toHaveLength(1);
+    expect(JSON.stringify(o)).not.toMatch(/SECRET|MYTAG|MYDOING|tint|goal/);
+  });
+
   it('bearing is positive to the left and follows the own yaw', () => {
     expect(buildObservation(me, [avatar('l', -3, -3)], [], 0).others[0]!.bearing).toBe(45);
     expect(buildObservation(me, [avatar('r', 3, -3)], [], 0).others[0]!.bearing).toBe(-45);
