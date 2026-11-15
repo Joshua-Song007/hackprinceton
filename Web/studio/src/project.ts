@@ -16,6 +16,8 @@ export interface ProjectSnapshot {
   version: number | null;
   /** What players read and do in the real world; absent for a project that has none. */
   instructions?: Instructions | null;
+  assets?: NewGameVersion['assets'];
+  metadata?: NewGameVersion['metadata'];
 }
 
 export type ProjectChange = 'open' | 'scene' | 'script' | 'scripts' | 'saved' | 'cloud' | 'instructions' | 'proposal';
@@ -102,6 +104,8 @@ export class Project {
   gameId: string | null = null;
   version: number | null = null;
   instructions: Instructions | null = null;
+  assets: NewGameVersion['assets'] = {};
+  metadata: NewGameVersion['metadata'] = {};
   /** An agent's suggested instructions, waiting for the creator to accept or reject. Not part of the snapshot, undo or autosave. */
   proposal: Instructions | null = null;
   dirty = false;
@@ -179,6 +183,8 @@ export class Project {
     this.gameId = s.gameId;
     this.version = s.version;
     this.instructions = s.instructions ?? null;
+    this.assets = structuredClone(s.assets ?? {});
+    this.metadata = structuredClone(s.metadata ?? {});
   }
 
   /** Replaces the whole project (open template, open from cloud, restore draft); clean afterwards. */
@@ -195,6 +201,7 @@ export class Project {
   snapshot(): ProjectSnapshot {
     return structuredClone({
       scene: this.scene, clientScripts: this.clientScripts, serverScripts: this.serverScripts, gameId: this.gameId, version: this.version,
+      assets: this.assets, metadata: this.metadata,
       ...(this.instructions ? { instructions: this.instructions } : {}),
     });
   }
@@ -599,18 +606,21 @@ export class Project {
   /** The body of a `POST /api/games/{id}/versions` request. */
   toVersion(): NewGameVersion {
     this.syncNames();
+    const metadata: NewGameVersion['metadata'] = { ...structuredClone(this.metadata), name: this.name, source: 'pear-studio' };
+    delete metadata.instructions;
+    if (this.instructions) metadata.instructions = structuredClone(this.instructions);
     return {
       scene: this.scene,
       client_scripts: this.clientScripts,
       server_scripts: this.serverScripts,
-      assets: {},
-      metadata: { name: this.name, source: 'pear-studio', ...(this.instructions ? { instructions: this.instructions } : {}) },
+      assets: structuredClone(this.assets),
+      metadata,
       run_mode: this.description().runMode,
     };
   }
 
   static snapshotOfVersion(v: GameVersion): ProjectSnapshot {
-    const snapshot: ProjectSnapshot = { scene: v.scene, clientScripts: v.client_scripts, serverScripts: v.server_scripts, gameId: v.game_id, version: v.version };
+    const snapshot: ProjectSnapshot = { scene: v.scene, clientScripts: v.client_scripts, serverScripts: v.server_scripts, gameId: v.game_id, version: v.version, assets: structuredClone(v.assets ?? {}), metadata: structuredClone(v.metadata ?? {}) };
     try {
       const raw = v.metadata?.instructions;
       if (raw !== undefined && raw !== null) snapshot.instructions = parseInstructions(raw);

@@ -30,6 +30,14 @@ export function parseProjectFile(text: string): ProjectSnapshot {
   const version = raw.version ?? null;
   if ((gameId !== null && typeof gameId !== 'string') || (version !== null && typeof version !== 'number')) throw new Error('The project file has a bad cloud link.');
   const snapshot: ProjectSnapshot = { scene: raw.scene, clientScripts: raw.clientScripts, serverScripts: raw.serverScripts, gameId, version };
+  if (raw.assets !== undefined) {
+    if (!isRecord(raw.assets)) throw new Error('The project file has an invalid asset map.');
+    snapshot.assets = raw.assets;
+  }
+  if (raw.metadata !== undefined) {
+    if (!isRecord(raw.metadata)) throw new Error('The project file has invalid metadata.');
+    snapshot.metadata = raw.metadata;
+  }
   if (raw.instructions !== undefined && raw.instructions !== null) {
     try {
       snapshot.instructions = parseInstructions(raw.instructions);

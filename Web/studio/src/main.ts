@@ -136,7 +136,10 @@ project.onChange((c) => {
   if (c === 'open' || c === 'scene') refreshScene();
   try { if (c === 'open' && wants3D(project.description()) && layout.api.panels.length) layout.show('viewport'); } catch { /* invalid scene: leave the layout */ }
 });
-selection.onChange((id) => viewport.select(id));
+selection.onChange((id) => {
+  viewport.select(id);
+  if (id) layout.show('inspector');
+});
 viewport.onPick = (id) => selection.set(id);
 viewport.selectedId = () => selection.entityId;
 viewport.entityY = (id) => { let y: number | undefined; walkEntities(project.scene, (e, eid) => { if (eid === id && Array.isArray(e.position)) y = Number(e.position[1]); }); return y; };
