@@ -128,6 +128,18 @@ export class AccountController {
     await this.refreshGames();
   }
 
+  get isDeveloper(): boolean {
+    return this.account?.role === 'developer';
+  }
+
+  async signInDeveloper(username: string, password: string): Promise<void> {
+    if (!username || !password) throw new Error('Enter a username and password.');
+    const res = await this.client.signIn({ provider: 'developer', subject: username, password });
+    this.account = res.account;
+    if (this.persist) this.storage?.setItem(SESSION_KEY, JSON.stringify({ token: res.token, account: res.account }));
+    await this.refreshGames();
+  }
+
   async signOut(): Promise<void> {
     try {
       await this.client.signOut();
@@ -140,7 +152,8 @@ export class AccountController {
   }
 
   async refreshGames(): Promise<void> {
-    this.games = await this.client.listGames();
+    // A developer sees (and may publish to) every game, so the selected game survives being someone else's.
+    this.games = this.isDeveloper ? await this.client.listAllGames() : await this.client.listGames();
     if (this.gameId && !this.games.some((g) => g.id === this.gameId)) this.select(null);
     this.emit();
   }
@@ -246,6 +259,9 @@ export class AccountController {
   }
 }
 
+/** Small "Developer" pill for the account UI. */
+export const developerBadge = (): HTMLElement => el('span', { class: 'scr-tag', title: 'Developer account' }, ['Developer']);
+
 export interface AccountSheetHooks {
   project: Project;
   /** Replace the open project; the caller confirms unsaved changes. */
@@ -295,7 +311,7 @@ export function openAccountSheet(account: AccountController, prefs: PreferenceSt
         const title = el('input', { type: 'text', 'aria-label': 'New game title', placeholder: 'Game title' });
         const gameId = account.gameId;
         rows.push(
-          el('div', { class: 'om-prop' }, [el('span', {}, ['Signed in as']), el('span', {}, [account.account.display_name || account.account.subject])]),
+          el('div', { class: 'om-prop' }, [el('span', {}, ['Signed in as']), el('span', {}, [account.account.display_name || account.account.subject, ...(account.isDeveloper ? [' ', developerBadge()] : [])])]),
           el('div', { class: 'om-prop' }, [el('label', {}, ['Game']), picker]),
           el('div', { class: 'om-prop' }, [el('label', {}, ['New game']), el('div', { class: 'om-field' }, [title])]),
           el('div', { class: 'sheet-actions' }, [

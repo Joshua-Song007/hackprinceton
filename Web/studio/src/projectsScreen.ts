@@ -4,6 +4,7 @@ import { describeError, type AccountController } from './account';
 import { TEMPLATES, deleteDraft, loadDraft, loadDraftAt, type ProjectSnapshot, type TemplateId } from './project';
 import { SORT_KEYS, SORT_LABELS, dropThumb, filterProjects, forgetOpened, forgetRecent, formatWhen, loadOpened, loadRecent, loadSort, loadThumbs, markOpened, mergeProjects, projectStats, rowAction, saveSort, saveThumb, sortProjects, thumbHit, type ProjectRow, type RecentEntry, type SortKey, type Thumb } from './recent';
 import { openProjectFile, type SavedFile } from './projectFile';
+import { allGamesSection } from './allGamesSection';
 import { renderThumbnail, thumbStamp, ThumbnailQueue } from './thumbnail';
 
 export interface ProjectsHooks {
@@ -209,6 +210,7 @@ export function renderProjectsScreen(root: HTMLElement, h: ProjectsHooks): void 
     ]),
   ]);
   const section = (title: string, count: HTMLElement, list: HTMLElement) => el('section', { class: 'scr-section' }, [el('h2', {}, [title, count]), list]);
+  const all = allGamesSection(account, (snapshot) => h.open(snapshot), run);
   root.replaceChildren(el('div', { class: 'scr-card scr-wide' }, [
     el('div', { class: 'scr-bar' }, [
       el('h1', {}, ['Projects']),
@@ -216,6 +218,6 @@ export function renderProjectsScreen(root: HTMLElement, h: ProjectsHooks): void 
       create,
     ]),
     error,
-    el('div', { class: 'scr-shell' }, [side, el('div', { class: 'scr-main' }, [section('Solo', soloCount, soloList), section('Shared', sharedCount, sharedList)])]),
+    el('div', { class: 'scr-shell' }, [side, el('div', { class: 'scr-main' }, [section('Solo', soloCount, soloList), section('Shared', sharedCount, sharedList), ...(all ? [all] : [])])]),
   ]));
 }

@@ -171,3 +171,41 @@ describe('sockets', () => {
     expect(sockets).toHaveLength(4);
   });
 });
+
+describe('CloudClient developer and About routes', () => {
+  it('signs in as a developer without a display name and reads the role', async () => {
+    const dev = { ...account, provider: 'developer', role: 'developer' };
+    const fetch = stub(json({ token: 'tok', account: dev }));
+    const c = new CloudClient({ fetch });
+    const res = await c.signIn({ provider: 'developer', subject: 'root', password: 'pw' });
+    expect(res.account.role).toBe('developer');
+    expect(JSON.parse(lastCall(fetch).init.body as string)).toEqual({ provider: 'developer', subject: 'root', password: 'pw' });
+  });
+
+  it('maps a 401 on developer sign-in to unauthorized', async () => {
+    const c = new CloudClient({ fetch: stub(json({}, 401)) });
+    await expect(c.signIn({ provider: 'developer', subject: 'root', password: 'x' })).rejects.toMatchObject({ kind: 'unauthorized' });
+  });
+
+  it('lists all games, updates a game and handles the cover routes', async () => {
+    const game = { id: 'g 1', owner_id: 'o', title: 'T', created_at: 't', updated_at: 't', owner_name: 'Ada', has_cover: true };
+    const fetch = stub(json([game]), json(game), new Response(null, { status: 204 }), new Response(null, { status: 204 }), json({}, 413));
+    const c = new CloudClient({ baseUrl: 'http://s', fetch, token: 'tok' });
+    expect(await c.listAllGames()).toEqual([game]);
+    expect(lastCall(fetch).url).toBe('http://s/api/games?all=1');
+    await c.updateGame('g 1', { description: 'hi' });
+    expect(lastCall(fetch, 1).url).toBe('http://s/api/games/g%201');
+    expect(lastCall(fetch, 1).init.method).toBe('PUT');
+    expect(JSON.parse(lastCall(fetch, 1).init.body as string)).toEqual({ description: 'hi' });
+    const img = new Blob(['x'], { type: 'image/png' });
+    await c.uploadCover('g 1', img);
+    expect(lastCall(fetch, 2).url).toBe('http://s/api/games/g%201/cover');
+    expect(lastCall(fetch, 2).init.method).toBe('PUT');
+    expect(lastCall(fetch, 2).init.headers['Content-Type']).toBe('image/png');
+    expect(lastCall(fetch, 2).init.body).toBe(img);
+    await c.deleteCover('g 1');
+    expect(lastCall(fetch, 3).init.method).toBe('DELETE');
+    await expect(c.uploadCover('g 1', img)).rejects.toMatchObject({ status: 413 });
+    expect(c.coverUrl('g 1', 'v2')).toBe('http://s/api/games/g%201/cover?v=v2');
+  });
+});
