@@ -39,7 +39,9 @@ type AgentOutcome = (u64, Result<String, String>);
 const MAX_JOBS: usize = 10_000; // promise jobs run after one handler or poll
 
 const GLUE: &str = r#"
-(function (fire, fireAll, report, log, after, cancel, agentRun) {
+(function (fire, fireAll, report, log, after, cancel, meta) {
+  var lobby = meta.lobby;
+  var agentRun = meta.agentRun;
   "use strict";
   var scripts = [];
   var state = {};
@@ -62,6 +64,20 @@ const GLUE: &str = r#"
   });
   var names = {};
   var nextTimer = 1;
+  var pending = [];
+  var seen = [];
+  var phases = {};
+  var phase = null;
+  var PLAYER_KEY = "__pearPlayer";
+  function canon(v) {
+    if (v === null || typeof v !== "object") { return JSON.stringify(v); }
+    if (Array.isArray(v)) { return "[" + v.map(canon).join(",") + "]"; }
+    return "{" + Object.keys(v).sort().map(function (k) { return JSON.stringify(k) + ":" + canon(v[k]); }).join(",") + "}";
+  }
+  function touch(playerId) {
+    for (var i = 0; i < seen.length; i++) { if (seen[i].id === playerId) { seen[i].lastSeen = Date.now(); return; } }
+    seen.push({ id: playerId, lastSeen: Date.now() });
+  }
   var agentCalls = {};
   var nextAgentCall = 1;
   var agent = Object.freeze({
@@ -77,13 +93,36 @@ const GLUE: &str = r#"
     state: state,
     agent: agent,
     remote: remote,
+    lobby: String(lobby),
     now: function () { return Date.now(); },
-    after: function (ms, tag, data) {
+    players: function () {
+      return seen.map(function (p) { return { id: p.id, name: names[p.id] || "", lastSeen: p.lastSeen }; });
+    },
+    enterPhase: function (name) {
+      var at = Date.now();
+      phase = String(name);
+      phases[phase] = at;
+      return at;
+    },
+    phaseEnteredAt: function (name) {
+      var key = name === undefined || name === null ? phase : String(name);
+      return key !== null && Object.prototype.hasOwnProperty.call(phases, key) ? phases[key] : null;
+    },
+    after: function (ms, tag, data, playerId) {
       var id = nextTimer++;
-      after(id, Number(ms) || 0, String(tag), encode(data));
+      var player = playerId === undefined || playerId === null ? null : String(playerId);
+      var wire = player === null ? encode(data) : encode(Object.fromEntries([[PLAYER_KEY, { p: player, d: data === undefined ? null : data }]]));
+      pending.push({ id: id, tag: String(tag), key: canon(JSON.parse(wire)), player: player });
+      after(id, Number(ms) || 0, String(tag), wire);
       return id;
     },
-    cancel: function (id) { cancel(Number(id)); }
+    cancel: function (id) {
+      id = Number(id);
+      for (var i = 0; i < pending.length; i++) {
+        if (pending[i].id === id) { pending.splice(i, 1); cancel(id); return true; }
+      }
+      return false;
+    }
   });
   globalThis.__pearHost = {
     add: function (definition) { scripts.push(definition); },
@@ -101,8 +140,20 @@ const GLUE: &str = r#"
       if (handler === "onRemote" || handler === "onTimer") {
         try { data = JSON.parse(dataJson); } catch (e) { data = null; }
       }
+      if (handler === "onPlayerJoin" || handler === "onRemote") { touch(playerId); }
+      if (handler === "onPlayerLeave") {
+        seen = seen.filter(function (p) { return p.id !== playerId; });
+      }
       if (handler === "onRemote") { args.push(name, data); }
-      else if (handler === "onTimer") { args = [ctx, name, data]; }
+      else if (handler === "onTimer") {
+        var key = canon(data);
+        var fired = null;
+        for (var i = 0; i < pending.length; i++) {
+          if (pending[i].tag === name && pending[i].key === key) { fired = pending.splice(i, 1)[0]; break; }
+        }
+        args = [ctx, name, data];
+        if (fired && fired.player !== null) { args = [ctx, name, data[PLAYER_KEY].d, fired.player]; }
+      }
       scripts.forEach(function (script) {
         if (typeof script[handler] !== "function") { return; }
         try {
@@ -112,6 +163,9 @@ const GLUE: &str = r#"
           }
         } catch (e) { report(handler + ": " + String(e)); }
       });
+      if (handler === "onPlayerLeave") {
+        pending.filter(function (t) { return t.player === playerId; }).forEach(function (t) { ctx.cancel(t.id); });
+      }
     }
   };
 })
@@ -232,6 +286,8 @@ impl QuickJsHost {
         let agent = self.agent.clone();
         let agent_done = self.agent_done.clone();
         let game_id = self.game_id.clone();
+        // session key is "<game>/<LOBBY>"; a bare id (tests, older callers) is the default lobby
+        let lobby = game_id.rsplit_once('/').map_or("OPEN", |(_, l)| l).to_string();
         self.context.with(|ctx| {
             let fail = |e: rquickjs::Error| format!("{e}");
             ctx.eval::<(), _>(PRELUDE).map_err(fail)?;
@@ -284,7 +340,10 @@ impl QuickJsHost {
             })
             .map_err(fail)?;
             let glue: Function = ctx.eval(GLUE).map_err(fail)?;
-            glue.call::<_, ()>((fire, fire_all, report, log, after, cancel, agent_run)).map_err(fail)?;
+            let meta = Object::new(ctx.clone()).map_err(fail)?;
+            meta.set("lobby", lobby).map_err(fail)?;
+            meta.set("agentRun", agent_run).map_err(fail)?;
+            glue.call::<_, ()>((fire, fire_all, report, log, after, cancel, meta)).map_err(fail)?;
             Ok(())
         })
     }
@@ -536,7 +595,7 @@ mod tests {
         let out = h.on_remote("a", "x", &Value::Null);
         let Outgoing::FireAll { data, .. } = &out[0] else { panic!("expected FireAll") };
         assert_eq!(data["io"], json!(vec!["undefined"; 6]));
-        assert_eq!(data["keys"], json!(["after", "agent", "cancel", "now", "remote", "state"]));
+        assert_eq!(data["keys"], json!(["after", "agent", "cancel", "enterPhase", "lobby", "now", "phaseEnteredAt", "players", "remote", "state"]));
         assert_eq!(data["frozen"], json!(true));
     }
 
