@@ -242,3 +242,31 @@ async fn instances_list_close_kick_and_limits() {
     assert!(!list.as_array().unwrap().iter().any(|i| i["game_id"] == gid && i["lobby"] == "KICK1"));
     drop(s_c);
 }
+
+#[tokio::test]
+async fn ghost_kick_needs_owner_or_developer_and_a_silent_player() {
+    let addr = serve().await;
+    let dev = developer(addr).await;
+    let a = player(addr, "ghost-a").await;
+    let gid = "123e4567-e89b-12d3-a456-4266141740b2";
+    let s_a = play(addr, gid, "GHOST1", &a).await.unwrap();
+    let a_id = call(addr, "GET", "/api/accounts/me", Some(&a), None).await.1["id"].as_str().unwrap().to_string();
+    let path = format!("/api/instances/{gid}/GHOST1/ghosts/{a_id}");
+
+    assert_eq!(call(addr, "DELETE", &path, None, None).await.0, 401);
+    // a plain player who does not own the game is refused (no db in this harness: 503, with one: 403/404)
+    assert!(matches!(call(addr, "DELETE", &path, Some(&a), None).await.0, 403 | 404 | 503));
+    // a live player is refused, an unknown one is 404
+    assert_eq!(call(addr, "DELETE", &path, Some(&dev), None).await.0, 409);
+    assert_eq!(call(addr, "DELETE", &format!("/api/instances/{gid}/GHOST1/ghosts/nobody"), Some(&dev), None).await.0, 404);
+    assert_eq!(call(addr, "DELETE", &format!("/api/instances/{gid}/no/ghosts/x"), Some(&dev), None).await.0, 400);
+
+    // silent past PEAR_GHOST_SECS: kicked, socket ends
+    std::env::set_var("PEAR_GHOST_SECS", "1");
+    tokio::time::sleep(std::time::Duration::from_millis(1300)).await;
+    let st = call(addr, "DELETE", &path, Some(&dev), None).await.0;
+    std::env::remove_var("PEAR_GHOST_SECS");
+    assert_eq!(st, 204);
+    assert!(ends(s_a).await);
+    assert_eq!(call(addr, "DELETE", &path, Some(&dev), None).await.0, 404);
+}
