@@ -105,6 +105,15 @@ for key in PEAR_PLUGIN_SIGNING_KEY PEAR_SECRET_KEY PEAR_RUNTIME_SECRET; do
   fi
 done
 
+# Postgres reads POSTGRES_PASSWORD only when its volume is first created, so a regenerated .env no
+# longer matches an existing pgdata volume. Set the role's password from .env before the backend starts
+# (the container's local socket needs no password).
+if grep -q '^COMPOSE_PROFILES=localdb' .env; then
+  docker compose up -d --wait postgres
+  pw="$(grep '^POSTGRES_PASSWORD=' .env | cut -d= -f2-)"
+  docker compose exec -T postgres psql -q -U pear -d pear -c "ALTER USER pear WITH PASSWORD '$pw';"
+fi
+
 docker compose up -d --build
 docker compose ps
 if grep -q '^PEAR_S3_BUCKET=.' .env; then
