@@ -57,3 +57,61 @@ describe('AccountController.signUp', () => {
     expect(err).toBeInstanceOf(ApiError);
   });
 });
+
+describe('AccountController.signInDeveloper', () => {
+  const okBody = (provider: string) => ({ token: 'tok', account: { id: 'a', provider, subject: 'tien', display_name: 'Tien', created_at: '', role: provider === 'developer' ? 'developer' : 'player' } });
+  const setup = (respond: (body: { provider: string }) => Response | 'network') => {
+    const storage = memory();
+    const prefs = new PreferenceStore(storage);
+    prefs.set({ serverUrl: 'https://pear.test' });
+    const providers: string[] = [];
+    vi.stubGlobal('fetch', async (input: string, init: RequestInit) => {
+      if (new URL(input).pathname !== '/api/accounts/signin') return json(200, []);
+      const body = JSON.parse(init.body as string) as { provider: string };
+      providers.push(body.provider);
+      const r = respond(body);
+      if (r === 'network') throw new TypeError('offline');
+      return r;
+    });
+    return { account: new AccountController(prefs, true, storage), storage, providers };
+  };
+
+  it('signs in a Create account (password) account with one request', async () => {
+    const { account, storage, providers } = setup((b) => json(200, okBody(b.provider)));
+    await account.signInDeveloper('tien', 'correct-horse');
+    expect(providers).toEqual(['password']);
+    expect(account.account?.provider).toBe('password');
+    expect(JSON.parse(storage.getItem('pear.studio.session')!).token).toBe('tok');
+  });
+
+  it('falls back to the developer provider when the password one is rejected', async () => {
+    const { account, providers } = setup((b) => (b.provider === 'password' ? json(401) : json(200, okBody(b.provider))));
+    await account.signInDeveloper('root', 'correct-horse');
+    expect(providers).toEqual(['password', 'developer']);
+    expect(account.isDeveloper).toBe(true);
+  });
+
+  it('throws unauthorized, and stays signed out, when both providers reject', async () => {
+    const { account, providers } = setup(() => json(401));
+    const err = await account.signInDeveloper('tien', 'wrong-password').catch((e) => e);
+    expect(providers).toEqual(['password', 'developer']);
+    expect(err).toBeInstanceOf(ApiError);
+    expect(err.kind).toBe('unauthorized');
+    expect(account.account).toBeNull();
+  });
+
+  it('does not retry on other errors', async () => {
+    const down = setup(() => 'network');
+    expect((await down.account.signInDeveloper('tien', 'correct-horse').catch((e) => e)).kind).toBe('network');
+    expect(down.providers).toEqual(['password']);
+    const busy = setup(() => json(503));
+    expect((await busy.account.signInDeveloper('tien', 'correct-horse').catch((e) => e)).kind).toBe('unavailable');
+    expect(busy.providers).toEqual(['password']);
+  });
+
+  it('asks for both fields before any request', async () => {
+    const { account, providers } = setup((b) => json(200, okBody(b.provider)));
+    await expect(account.signInDeveloper('tien', '')).rejects.toThrow('Enter a username and password.');
+    expect(providers).toEqual([]);
+  });
+});
