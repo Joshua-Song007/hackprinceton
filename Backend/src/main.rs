@@ -6,6 +6,25 @@ use sqlx::postgres::PgPoolOptions;
 
 #[tokio::main]
 async fn main() {
+    pear_backend::api::status::mark_started();
+    // `pear-backend storage-check`: ensure the bucket exists, then write/read/delete a probe object. Prints the
+    // storage description and the result only (never a key); exit 0 on success, 1 on failure.
+    if std::env::args().nth(1).as_deref() == Some("storage-check") {
+        let b = pear_backend::blobs::blobs();
+        println!("storage: {}", b.describe());
+        let r = match b.ensure_bucket().await {
+            Ok(()) => b.probe().await,
+            Err(e) => Err(e),
+        };
+        match r {
+            Ok(()) => println!("storage-check: ok"),
+            Err(e) => {
+                println!("storage-check: FAILED: {e}");
+                std::process::exit(1);
+            }
+        }
+        std::process::exit(0);
+    }
     // Pool is lazy: no connection is attempted until a query runs, so startup never panics.
     let db = match std::env::var("DATABASE_URL") {
         Ok(url) => match PgPoolOptions::new().connect_lazy(&url) {
@@ -65,6 +84,16 @@ async fn main() {
         eprintln!("seed: {new} published, {unchanged} unchanged, {failed} failed");
         std::process::exit(if failed == 0 { 0 } else { 1 });
     }
+
+    let blobs = pear_backend::blobs::blobs();
+    eprintln!("storage: {}", blobs.describe());
+    if blobs.kind() == "memory" {
+        eprintln!("storage: PEAR_S3_* not set, assets and bundles are held in memory and are lost on restart");
+    }
+    tokio::spawn(async {
+        let r = pear_backend::api::status::run_probe().await;
+        eprintln!("storage probe: {}", r.reason.as_deref().unwrap_or("ok"));
+    });
 
     let studio_dir = std::env::var("PEAR_STUDIO_DIR").ok().map(std::path::PathBuf::from);
     if let Some(dir) = &studio_dir {

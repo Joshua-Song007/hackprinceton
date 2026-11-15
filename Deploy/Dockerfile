@@ -26,6 +26,7 @@ COPY Deploy/download.html /app/studio/download/index.html
 COPY Web/studio/src/studio-tokens.css /app/studio/download/tokens.css
 # Plugin sources for the marketplace seed job: docker compose run --rm backend /app/pear-backend seed /app/Plugins
 COPY Plugins /app/Plugins
-ENV PORT=8080 PEAR_STUDIO_DIR=/app/studio
+ARG PEAR_BUILD=dev
+ENV PORT=8080 PEAR_STUDIO_DIR=/app/studio PEAR_BUILD=$PEAR_BUILD
 EXPOSE 8080
 CMD ["/app/pear-backend"]
