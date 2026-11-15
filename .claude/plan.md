@@ -147,6 +147,7 @@ The developer environment writes games blind and the pieces that run them have d
 8. **Publish has no proof.** `publishView.ts` verifies the server's copy, not that the game works. The version carries no test result, capability list or controller description, so the launch page cannot show readiness, instructions or cover.
 9. **Real hardware is unreachable from the loop.** The simulator has no motion, so the raise path has no automated test on the player; `PearPlayer` has no unit-test target.
 10. **Process docs lag the code.** `plan.md` had no Quick Draw entry; `Deploy` still names the database `omni` in places the wishlist flags against newer `pear` compose config; the 2026-11-14 autonomous run spent 75 PRs and 366 comments on coordination (`docs/agents/autonomy-findings.md`) while the authoring loop gained no tools.
+11. **Updating a game still means touching the Vultr box (user report 2026-11-15).** The code already hot-reloads live sessions on publish (`session::reload` in `games.rs`), so the refresh is probably for things outside the version: backend code, migrations, and hand-placed static pages like `qd-phone.html` (unverified). Publishing also does not list the game anywhere a player browses beyond the raw catalog, and the demo catalog was filled with placeholder games (`Deploy/seed-library.sh`, now deleted) that list and open but have no game logic.
 
 ### Why the LangChain environment is weak
 
@@ -231,6 +232,22 @@ Not in overview.md; added at user request 2026-11-15. Inspiration: the Quick Dra
 - [ ] `Apps/PearPlayer/PearPlayer.xcodeproj/project.pbxproj` — a unit-test target for the app (detector, controller, protocol).
 - [ ] `Packages/PearLibrary/Sources/PearLibrary/DeviceProfile.swift` — readiness diagnostics: permissions, calibration, connection, distinguishing denied, unsupported and unknown.
 - [ ] `Deploy/preflight.sh` — checks service and database names (`omni` vs `pear`) and required env, without printing secrets.
+
+### 13.9 Seamless upgrade, publish and listing
+
+Goal: updating a game from Studio never needs a Vultr refresh; one Publish uploads the version, lists it for players and shows the join link. Decisions: the player's Discover catalog is the games marketplace (the Phase 10 marketplace stays plugins only); only games the owner lists appear in the catalog; Flagship and HotPotato stay in the repo as test fixtures (tests and `Deploy/demo.sh` use them) but never appear in a production catalog.
+
+- [ ] `Backend/src/api/library.rs` — catalog lists only `listed` games, with cover, description, tags and release notes; unlisted fixtures never show.
+- [ ] `Backend/src/db.rs` — `listed` and listing fields on `Game`; migration `Backend/migrations/0005_listing.sql`.
+- [ ] `Backend/src/memstore.rs` — same fields, so the dev server matches Postgres.
+- [ ] `Backend/src/api/games.rs` — publish accepts listing fields and `listed`; one call creates the version and lists the game.
+- [ ] `Backend/src/game_server/session.rs` — upgrade policy for live lobbies: finish the current match, then move to the new version, instead of restarting mid-match (`session::reload` today).
+- [ ] `Backend/src/api/mod.rs` — `GET /api/version` (build, applied migrations) so Studio and the player can tell the server is behind.
+- [ ] `Deploy/deploy.sh` — one command (or CI on merge to `main`) that builds, migrates and restarts the Vultr box, so a backend change never needs manual steps; static phone pages ship inside the published version (13.1), not the server image.
+- [ ] `Web/studio/src/publishView.ts` — one Publish: check (13.2), upload, list, receipt; "Update game" vs "New game" on the same game id; warns when `/api/version` shows a behind server.
+- [ ] `Web/studio/src/lobbiesPanel.ts` — shows which live lobbies the new version has reached.
+- [ ] `Apps/PearPlayer/PearPlayer/Library/GameDetailView.swift` — "Updated" badge and release notes; the newest version is fetched at launch.
+- [ ] Human, needs the Vultr URL and owner token: delete the placeholder games already on the hosted library (`DELETE /api/games/{id}` is owner-only); the repo seeds are gone.
 
 Not planned: a general UI description language beyond the Quick Draw and Hot Potato widget set; Studio-hosted agent runners in a live lobby; recorded audio pipeline (cues stay synthesized); collaborative editing (Phase 6).
 
