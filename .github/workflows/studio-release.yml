@@ -7,6 +7,11 @@ on:
   push:
     tags: ['studio-v*']
   workflow_dispatch:
+    inputs:
+      skip_updater:
+        description: Build installers without signed updater artifacts (use while TAURI_SIGNING_PRIVATE_KEY is broken)
+        type: boolean
+        default: false
 permissions:
   contents: write
 jobs:
@@ -71,8 +76,8 @@ jobs:
           tagName: ${{ github.ref_name }}
           releaseName: Pear Studio __VERSION__
           releaseDraft: false
-          includeUpdaterJson: true
-          args: ${{ matrix.args }}
+          includeUpdaterJson: ${{ !inputs.skip_updater }}
+          args: ${{ matrix.args }} ${{ inputs.skip_updater && '--config src-tauri/tauri.no-updater.conf.json' || '' }}
   # Pear Player for Mac, attached to the same release. iOS needs a signed App Store/TestFlight build, so it is not here.
   player-mac:
     needs: release
