@@ -1,7 +1,7 @@
 import type { WebSocketLike } from '@pear/cloud';
 import { describe, expect, it } from 'vitest';
 import {
-  appendRow, debugRow, extractLatLng, filterLog, findUiAsset, frameRow, normalizeLobby, randomLobby, reduceAction, roleFrame, sensorHz, MAX_LOG_ROWS, type LogRow,
+  appendRow, debugRow, inlineUiText, extractLatLng, filterLog, findUiAsset, frameRow, normalizeLobby, randomLobby, reduceAction, roleFrame, sensorHz, MAX_LOG_ROWS, type LogRow,
 } from '../src/livePreview/helpers';
 import { DeviceSession } from '../src/livePreview/session';
 import { emptyState, reduceFrame, validate, type PearUI } from '@pear/ui';
@@ -48,6 +48,8 @@ describe('lobby, assets, sensors, coordinates', () => {
   it('finds ui.json by name or path suffix, with object or bare-hash values', () => {
     expect(findUiAsset({ 'ui.json': { sha256: SHA, size: 1 } })).toBe(SHA);
     expect(findUiAsset({ 'screens/ui.json': SHA })).toBe(SHA);
+    expect(inlineUiText({ 'ui.json': { contentType: 'application/json', data: btoa('{"pearui":1}') } })).toBe('{"pearui":1}');
+    expect(inlineUiText({ 'ui.json': { sha256: SHA } })).toBe(null);
     expect(findUiAsset({ 'scenario.json': { sha256: SHA } })).toBeNull();
     expect(findUiAsset({ 'ui.json': { sha256: 'nope' } })).toBeNull();
     expect(findUiAsset(undefined)).toBeNull();

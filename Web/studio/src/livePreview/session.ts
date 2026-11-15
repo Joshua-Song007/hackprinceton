@@ -2,7 +2,7 @@
 // folds frames with reduceFrame and keeps the latest version's ui.json. No DOM, so the flow is tested with a fake server.
 import { CloudClient, ReconnectingSocket, type PlayFrame, type SocketStatus, type WebSocketLike } from '@pear/cloud';
 import { emptyState, reduceFrame, validate, type PearUI, type ViewState } from '@pear/ui';
-import { extractLatLng, findUiAsset, frameRow, reduceAction, roleFrame, sysRow, type LogRow, type PreviewKind } from './helpers';
+import { extractLatLng, findUiAsset, inlineUiText, frameRow, reduceAction, roleFrame, sysRow, type LogRow, type PreviewKind } from './helpers';
 
 export interface SessionOptions {
   name: string;
@@ -74,12 +74,17 @@ export class DeviceSession {
       const v = await this.client.fetchVersion(this.opts.gameId, 'latest');
       this.loadedVersion = v.version;
       this.assets = v.assets ?? {};
-      const sha = findUiAsset(v.assets);
-      if (!sha) return this.setUi({ kind: 'none', reason: `Version ${v.version} has no ui.json asset yet.` });
-      const f = this.opts.fetch ?? ((i, init) => globalThis.fetch(i, init));
-      const res = await f(`${this.opts.baseUrl.replace(/\/+$/, '')}/api/assets/${sha}`);
-      if (!res.ok) return this.setUi({ kind: 'none', reason: `Could not fetch ui.json (HTTP ${res.status}).` });
-      const ui = (await res.json()) as unknown;
+      const inline = inlineUiText(v.assets);
+      let ui: unknown;
+      if (inline !== null) ui = JSON.parse(inline);
+      else {
+        const sha = findUiAsset(v.assets);
+        if (!sha) return this.setUi({ kind: 'none', reason: `Version ${v.version} has no ui.json asset yet.` });
+        const f = this.opts.fetch ?? ((i, init) => globalThis.fetch(i, init));
+        const res = await f(`${this.opts.baseUrl.replace(/\/+$/, '')}/api/assets/${sha}`);
+        if (!res.ok) return this.setUi({ kind: 'none', reason: `Could not fetch ui.json (HTTP ${res.status}).` });
+        ui = (await res.json()) as unknown;
+      }
       const problems = validate(ui);
       if (problems.length) return this.setUi({ kind: 'none', reason: `ui.json is invalid: ${problems[0]}` });
       this.setUi({ kind: 'ready', ui: ui as PearUI, version: v.version });

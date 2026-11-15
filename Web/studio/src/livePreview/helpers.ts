@@ -28,6 +28,18 @@ export function reduceAction(state: ViewState, action: OutAction): { state: View
   return { state, send: { name: action.name, data: action.data } };
 }
 
+/** Inline `ui.json` text of a version (`{contentType, data}` with base64 data, the binding format: plan.md Phase 14 C1 amendments), else null. */
+export function inlineUiText(assets: Record<string, unknown> | undefined | null): string | null {
+  for (const [name, v] of Object.entries(assets ?? {})) {
+    if (name !== 'ui.json' && !name.endsWith('/ui.json')) continue;
+    const data = (v as { data?: unknown } | null)?.data;
+    if (typeof data !== 'string') continue;
+    const bin = atob(data);
+    return new TextDecoder().decode(Uint8Array.from(bin, (c) => c.charCodeAt(0)));
+  }
+  return null;
+}
+
 /** Sha256 of the version's `ui.json` asset (named `ui.json` or ending in `/ui.json`); the asset value is `{sha256,…}` or a bare hash. */
 export function findUiAsset(assets: Record<string, unknown> | undefined | null): string | null {
   for (const [name, v] of Object.entries(assets ?? {})) {
