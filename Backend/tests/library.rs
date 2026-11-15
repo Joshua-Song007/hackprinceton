@@ -53,7 +53,8 @@ async fn publish(addr: std::net::SocketAddr, token: &str, game: &str, scene: Val
         "server_scripts": {},
         "assets": {},
         "metadata": {},
-        "run_mode": run_mode
+        "run_mode": run_mode,
+        "listed": true
     });
     let (st, body) = call(addr, "POST", &format!("/api/games/{game}/versions"), Some(token), Some(&v)).await;
     assert_eq!(st, 201, "{body}");
@@ -93,7 +94,7 @@ async fn library_lists_published_games_for_any_signed_in_account() {
     assert_eq!(rows.len(), 1, "{rows:?}");
     assert_eq!(
         rows[0],
-        json!({"id": g1, "title": "Haunted house", "author": "Ann", "latestVersion": 2, "runMode": "device", "requiredTier": 2, "description": "", "coverUrl": null})
+        json!({"id": g1, "title": "Haunted house", "author": "Ann", "latestVersion": 2, "runMode": "device", "requiredTier": 2, "description": "", "coverUrl": null, "tags": [], "releaseNotes": ""})
     );
     assert!(rows.iter().all(|r| r["id"] != draft), "an unpublished game must not be listed");
 
@@ -110,5 +111,34 @@ async fn library_lists_published_games_for_any_signed_in_account() {
     assert_eq!(
         (rows[0]["latestVersion"].clone(), rows[0]["runMode"].clone(), rows[0]["requiredTier"].clone()),
         (json!(3), json!("screen"), json!(1))
+    );
+}
+
+#[tokio::test]
+async fn publish_without_listing_stays_hidden_and_one_call_with_listing_shows_it() {
+    std::env::set_var("PEAR_DEV_SIGNIN", "1");
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    let router = app_with_studio(Some(Db::Mem(MemStore::default())), None);
+    tokio::spawn(async move {
+        let _ = axum::serve(listener, router).await;
+    });
+    let ann = sign_in(addr, "ann-listing", "Ann").await;
+    let bob = sign_in(addr, "bob-listing", "Bob").await;
+    let g = create_game(addr, &ann, "Fixture").await;
+    let mut v = json!({"scene": {}, "client_scripts": {}, "server_scripts": {}, "assets": {}, "metadata": {}, "run_mode": "device"});
+    let path = format!("/api/games/{g}/versions");
+    assert_eq!(call(addr, "POST", &path, Some(&ann), Some(&v)).await.0, 201);
+    assert!(library(addr, &bob).await.is_empty(), "a published but unlisted game never shows");
+    v["listed"] = json!(true);
+    v["tags"] = json!(["gps", "outdoor"]);
+    v["release_notes"] = json!("Faster tags");
+    v["description"] = json!("Hide and seek outside");
+    assert_eq!(call(addr, "POST", &path, Some(&ann), Some(&v)).await.0, 201);
+    let rows = library(addr, &bob).await;
+    assert_eq!(rows.len(), 1, "{rows:?}");
+    assert_eq!(
+        (rows[0]["latestVersion"].clone(), rows[0]["tags"].clone(), rows[0]["releaseNotes"].clone(), rows[0]["description"].clone()),
+        (json!(2), json!(["gps", "outdoor"]), json!("Faster tags"), json!("Hide and seek outside"))
     );
 }

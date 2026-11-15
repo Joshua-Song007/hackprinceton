@@ -185,7 +185,7 @@ async fn playing_follows_a_live_socket_and_only_for_accepted_friends() {
     let (st, game) = call(addr, "POST", "/api/games", Some(&b.token), Some(&json!({"title": "Neon Drift"}))).await;
     assert_eq!(st, 201, "{game}");
     let gid = game["id"].as_str().unwrap().to_string();
-    let v = json!({"scene": {}, "client_scripts": {}, "server_scripts": {}, "assets": {}, "metadata": {"title": "Neon Drift"}, "run_mode": "screen"});
+    let v = json!({"scene": {}, "client_scripts": {}, "server_scripts": {}, "assets": {}, "metadata": {"title": "Neon Drift"}, "run_mode": "screen", "listed": true});
     assert_eq!(call(addr, "POST", &format!("/api/games/{gid}/versions"), Some(&b.token), Some(&v)).await.0, 201);
 
     let sock = join(addr, &gid, &b).await;

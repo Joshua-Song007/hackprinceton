@@ -7,12 +7,14 @@
 //   POST /api/games                         {title}            -> 201 Game
 //   GET  /api/games                                            -> 200 [Game] (the caller's games)
 //   GET  /api/games?all=1                                      -> 200 [Game] (every game; developers only, else 403)
-//   PUT  /api/games/{id}                    {title?, description?} -> 200 Game (owner or developer)
+//   PUT  /api/games/{id}          {title?, description?, listed?, tags?, release_notes?} -> 200 Game (owner or developer)
 //   PUT  /api/games/{id}/cover              raw jpeg/png <= 2 MB -> 204 | 413 | 415 (owner or developer)
 //   DELETE /api/games/{id}/cover                               -> 204 (owner or developer)
 //   GET  /api/games/{id}/cover                                 -> 200 image bytes | 404 (public, no auth)
 //   GET  /api/games/{id}/lobbies                               -> 200 [{code, players: [{id, name}]}] live lobbies
-//   POST /api/games/{id}/versions           NewGameVersion     -> 201 GameVersion (owner only; 400 when assets[*].sha256 is not stored)
+//   POST /api/games/{id}/versions           NewGameVersion + {listed?, tags?, release_notes?, description?}
+//                                                              -> 201 GameVersion (owner only; 400 when assets[*].sha256 is not stored);
+//                                                                 the listing fields apply in the same call, so one publish lists the game
 //   GET  /api/games/{id}/versions/{version} number or "latest" -> 200 GameVersion
 
 use axum::body::Bytes;
@@ -26,11 +28,14 @@ use serde::{Deserialize, Serialize};
 use crate::api::accounts::{authenticate, query_param};
 use crate::api::avatars::sniff;
 use crate::game_server::session;
-use crate::db::{self, Account, Game, GameVersion, NewGameVersion};
+use crate::db::{self, Account, Game, GameVersion, Listing, NewGameVersion};
 use crate::AppState;
 
 const MAX_TITLE_LEN: usize = 256;
 const MAX_DESCRIPTION_LEN: usize = 4000;
+const MAX_TAGS: usize = 10;
+const MAX_TAG_LEN: usize = 32;
+const MAX_RELEASE_NOTES_LEN: usize = 4000;
 const MAX_COVER_BYTES: usize = 2 * 1024 * 1024;
 
 #[derive(Debug, Deserialize)]
@@ -58,6 +63,20 @@ pub(crate) fn valid_uuid(s: &str) -> bool {
 
 fn valid_title(t: &str) -> bool {
     !t.trim().is_empty() && t.len() <= MAX_TITLE_LEN
+}
+
+/// Tags are trimmed, non-empty and short, at most MAX_TAGS of them; notes and description are length-capped.
+fn valid_listing(l: &Listing) -> bool {
+    l.tags.as_ref().is_none_or(|t| t.len() <= MAX_TAGS && t.iter().all(|x| !x.trim().is_empty() && x.len() <= MAX_TAG_LEN))
+        && l.release_notes.as_deref().is_none_or(|n| n.len() <= MAX_RELEASE_NOTES_LEN)
+        && l.description.as_deref().is_none_or(|d| d.len() <= MAX_DESCRIPTION_LEN)
+}
+
+fn trim_tags(mut l: Listing) -> Listing {
+    if let Some(t) = l.tags.as_mut() {
+        t.iter_mut().for_each(|x| *x = x.trim().to_string());
+    }
+    l
 }
 
 /// "latest" -> None; a positive integer -> Some(n); anything else -> Err.
@@ -130,7 +149,8 @@ pub(crate) async fn require_editor(pool: &db::Db, account: &Account, game_id: &s
 #[derive(Debug, Deserialize)]
 struct UpdateGameRequest {
     title: Option<String>,
-    description: Option<String>,
+    #[serde(flatten)]
+    listing: Listing,
 }
 
 async fn update_game(
@@ -141,15 +161,20 @@ async fn update_game(
 ) -> Result<Json<Game>, StatusCode> {
     let account = require_account(&headers).await?;
     if !valid_uuid(&game_id)
-        || (req.title.is_none() && req.description.is_none())
+        || (req.title.is_none() && req.listing == Listing::default())
         || req.title.as_deref().is_some_and(|t| !valid_title(t))
-        || req.description.as_deref().is_some_and(|d| d.len() > MAX_DESCRIPTION_LEN)
+        || !valid_listing(&req.listing)
     {
         return Err(StatusCode::BAD_REQUEST);
     }
     let pool = state.db.as_ref().ok_or(StatusCode::SERVICE_UNAVAILABLE)?;
     require_editor(pool, &account, &game_id).await?;
-    db::update_game_meta(pool, &game_id, req.title.as_deref().map(str::trim), req.description.as_deref())
+    let listing = trim_tags(req.listing);
+    db::update_game_meta(pool, &game_id, req.title.as_deref().map(str::trim), None)
+        .await
+        .map_err(|e| db_err("update", e))?
+        .ok_or(StatusCode::NOT_FOUND)?;
+    db::set_listing(pool, &game_id, &listing)
         .await
         .map_err(|e| db_err("update", e))?
         .map(Json)
@@ -207,14 +232,24 @@ async fn fetch_cover(State(state): State<AppState>, Path(game_id): Path<String>)
     }
 }
 
+/// A version plus optional listing fields (`listed`, `tags`, `release_notes`, `description`) in one body.
+#[derive(Debug, Deserialize)]
+struct PublishRequest {
+    #[serde(flatten)]
+    version: NewGameVersion,
+    #[serde(flatten)]
+    listing: Listing,
+}
+
 async fn publish_version(
     State(state): State<AppState>,
     headers: HeaderMap,
     Path(game_id): Path<String>,
-    Json(body): Json<NewGameVersion>,
+    Json(req): Json<PublishRequest>,
 ) -> Result<(StatusCode, Json<GameVersion>), StatusCode> {
     let account = require_account(&headers).await?;
-    if !valid_uuid(&game_id) || !valid_version(&body) {
+    let PublishRequest { version: body, listing } = req;
+    if !valid_uuid(&game_id) || !valid_version(&body) || !valid_listing(&listing) {
         return Err(StatusCode::BAD_REQUEST);
     }
     let pool = state.db.as_ref().ok_or(StatusCode::SERVICE_UNAVAILABLE)?;
@@ -223,6 +258,10 @@ async fn publish_version(
     let v = db::insert_game_version(pool, &game_id, &body)
         .await
         .map_err(|e| db_err("publish", e))?;
+    // shortcut: version and listing are two statements, not one transaction; a failed listing returns 500 after the version exists, retry the publish.
+    if listing != Listing::default() {
+        db::set_listing(pool, &game_id, &trim_tags(listing)).await.map_err(|e| db_err("publish", e))?;
+    }
     session::reload(&game_id, &v); // a live session restarts on the new version
     Ok((StatusCode::CREATED, Json(v)))
 }
@@ -360,6 +399,62 @@ mod tests {
         assert!(!valid_version(&v));
         v.metadata = json!({ "manifest": null });
         assert!(!valid_version(&v));
+    }
+
+    #[test]
+    fn listing_validation() {
+        assert!(valid_listing(&Listing::default()));
+        let tags = |t: &[&str]| Listing { tags: Some(t.iter().map(|x| x.to_string()).collect()), ..Default::default() };
+        assert!(valid_listing(&tags(&["gps", "outdoor"])));
+        assert!(!valid_listing(&tags(&[" "])));
+        assert!(!valid_listing(&tags(&[&"x".repeat(MAX_TAG_LEN + 1)])));
+        assert!(!valid_listing(&tags(&["a"; MAX_TAGS + 1])));
+        assert!(!valid_listing(&Listing { release_notes: Some("n".repeat(MAX_RELEASE_NOTES_LEN + 1)), ..Default::default() }));
+    }
+
+    #[test]
+    fn publish_body_takes_listing_fields_next_to_the_version() {
+        let mut v = serde_json::to_value(nv("device")).unwrap();
+        v["listed"] = json!(true);
+        v["tags"] = json!(["gps"]);
+        v["release_notes"] = json!("fixes");
+        let req: PublishRequest = serde_json::from_value(v).unwrap();
+        assert_eq!(req.version, nv("device"));
+        assert_eq!(req.listing, Listing { listed: Some(true), tags: Some(vec!["gps".into()]), release_notes: Some("fixes".into()), description: None });
+        let plain: PublishRequest = serde_json::from_value(serde_json::to_value(nv("screen")).unwrap()).unwrap();
+        assert_eq!(plain.listing, Listing::default());
+    }
+
+    #[tokio::test]
+    async fn one_publish_call_lists_the_game() {
+        let mem = db::Db::Mem(crate::memstore::MemStore::default());
+        let t = token();
+        let g = db::create_game(&mem, "games-test-account", "T").await.unwrap();
+        assert!(!g.listed);
+        let path = format!("/api/games/{}/versions", g.id);
+        let mut body = serde_json::to_value(nv("device")).unwrap();
+        // Without listing fields the game stays unlisted.
+        let r = request_with(Some(mem.clone()), &post_json(&path, Some(&t), &body.to_string())).await;
+        assert!(r.starts_with("HTTP/1.1 201"), "{r}");
+        assert!(db::list_catalog(&mem).await.unwrap().is_empty());
+        body["listed"] = json!(true);
+        body["tags"] = json!([" gps ", "outdoor"]);
+        body["release_notes"] = json!("second");
+        body["description"] = json!("Run!");
+        let r = request_with(Some(mem.clone()), &post_json(&path, Some(&t), &body.to_string())).await;
+        assert!(r.starts_with("HTTP/1.1 201"), "{r}");
+        let rows = db::list_catalog(&mem).await.unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!((rows[0].latest_version, rows[0].tags.clone()), (2, vec!["gps".to_string(), "outdoor".to_string()]));
+        assert_eq!((rows[0].release_notes.as_str(), rows[0].description.as_str()), ("second", "Run!"));
+        body["tags"] = json!([""]);
+        let r = request_with(Some(mem.clone()), &post_json(&path, Some(&t), &body.to_string())).await;
+        assert!(r.starts_with("HTTP/1.1 400"), "{r}");
+        // PUT can unlist again.
+        let put = format!("PUT /api/games/{} HTTP/1.1\r\nHost: x\r\nAuthorization: Bearer {t}\r\nContent-Type: application/json\r\nContent-Length: 16\r\nConnection: close\r\n\r\n{{\"listed\":false}}", g.id);
+        let r = request_with(Some(mem.clone()), &put).await;
+        assert!(r.starts_with("HTTP/1.1 200"), "{r}");
+        assert!(db::list_catalog(&mem).await.unwrap().is_empty());
     }
 
     fn token() -> String {
