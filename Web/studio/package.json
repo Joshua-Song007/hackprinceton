@@ -22,9 +22,11 @@
     "@pear/runtime": "*",
     "@pear/script": "*",
     "@pear/sim": "*",
+    "@pear/ui": "*",
     "@tauri-apps/plugin-updater": "^2.14.1",
     "codemirror": "^6.0.1",
-    "dockview-core": "^4.0.0"
+    "dockview-core": "^4.0.0",
+    "maplibre-gl": "^6.18.0"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2",

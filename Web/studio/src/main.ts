@@ -28,6 +28,7 @@ import { RunController, ViewportHost, createViewportPanel } from './run';
 import { announce, button, el, openMenu, openSheet, promptSheet, rovingToolbar, type MenuItem } from './ui';
 import { installShortcuts, mod, mountMenuBar } from './menubar';
 import { renderLoginScreen } from './loginScreen';
+import { livePreviewPanel } from './livePreview/panel';
 import { renderProjectsScreen } from './projectsScreen';
 import { nextScreen, type Screen } from './screens';
 import { markOpened, rememberRecent } from './recent';
@@ -92,6 +93,7 @@ const panels: PanelSpec[] = [
   { id: 'console', title: 'Console', create: () => createConsolePanel(debug) },
   { id: 'test', title: 'Test', create: () => createTestPanel(project, run, () => layout.show('playtest'), () => startLocal()) },
   { id: 'playtest', title: 'Playtest', create: () => createPlaytestPanel(project, run, sendToChat, (id) => layout.show(id)) },
+  livePreviewPanel(account),
   { id: 'instructions', title: 'Instructions', create: () => createInstructionsPanel(project, run, sendToChat) },
 ];
 // Desktop: a dockview popout window (window.open, same JS context) keeps the panel live with the main window's state.
@@ -413,6 +415,7 @@ mountMenuBar(document.getElementById('menubar')!, [
       { label: 'Reset camera', run: () => viewport.resetCamera() },
       { label: 'Game instructions', run: () => layout.show('instructions') },
       { label: 'Playtest', run: () => layout.show('playtest') },
+      { label: 'Live Preview', run: () => layout.show('livePreview') },
       { separator: true },
       layoutLabel('default', 'Layout: default'),
       layoutLabel('script-focus', 'Layout: script focus'),

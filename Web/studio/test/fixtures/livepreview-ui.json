@@ -1,0 +1,22 @@
+{
+  "pearui": 1,
+  "route": [{ "when": "device.kind == 'ipad'", "screen": "referee" }, { "screen": "phone" }],
+  "screens": {
+    "phone": { "type": "column", "style": { "pad": 3, "align": "center" }, "children": [
+      { "type": "text", "value": "Quick Draw", "style": { "size": "l" } },
+      { "type": "text", "value": "{{ev.state.needs || 'Waiting for the server…'}}", "style": { "size": "s" } },
+      { "type": "text", "value": "{{ev.state.phase || 'lobby'}}", "style": { "size": "xl", "tone": "accent" } },
+      { "type": "button", "label": "Ready", "style": { "tone": "good" }, "action": { "send": "ready", "data": { "ready": true } } },
+      { "type": "button", "label": "Toggle note", "action": { "set": "note", "value": "tapped" } },
+      { "type": "text", "value": "{{local.note || ''}}", "style": { "size": "s" } },
+      { "type": "sensor", "kind": "motion", "event": "aim", "hz": 10 },
+      { "type": "sensor", "kind": "location", "event": "location", "hz": 1 }
+    ] },
+    "referee": { "type": "column", "style": { "pad": 3, "align": "center" }, "children": [
+      { "type": "text", "value": "Referee", "style": { "size": "l" } },
+      { "type": "text", "value": "{{ev.state.phase || 'lobby'}}", "style": { "size": "huge", "tone": "warn" } },
+      { "type": "text", "value": "{{ev.state.needs || ''}}", "style": { "size": "s" } },
+      { "type": "gauge", "value": 0.4 }
+    ] }
+  }
+}
