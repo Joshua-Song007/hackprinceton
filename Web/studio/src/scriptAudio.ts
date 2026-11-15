@@ -64,7 +64,7 @@ export class ScriptAudio {
   /** Stops everything and releases the AudioContext; a later sound makes a new one. */
   dispose(): void {
     this.stop();
-    void this.ctx?.close?.();
+    this.ctx?.close?.().catch(() => {});
     this.ctx = undefined;
   }
 

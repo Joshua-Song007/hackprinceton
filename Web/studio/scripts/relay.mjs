@@ -4,6 +4,7 @@
 // Run: npm run relay (from Web/studio). Env: PEAR_RELAY_PORT (TCP, default 7777), PEAR_RELAY_WS_PORT (default 8787),
 // PEAR_RELAY_HOST (WebSocket bind address, default 127.0.0.1; 0.0.0.0 lets other machines on the LAN read the sensor stream).
 // Security: the origin check only stops web pages; anyone on a network you expose it to can read your devices' data.
+// LAN exposure is for phones/sensor devices streaming in; the Studio page itself must still be opened from localhost/the native app.
 import net from 'node:net';
 import { WebSocketServer } from 'ws';
 import { Bonjour } from 'bonjour-service';
