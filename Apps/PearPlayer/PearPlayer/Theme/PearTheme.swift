@@ -11,22 +11,23 @@ import UIKit
 /// Powder Blue A7BED3 and tints of them), not the Studio kit's greys. Packages never import this.
 enum PearTheme {
     // Brand kit semantic tokens (docs/brand-kit/tokens.css): dark = Emerald theme, light = Paper theme.
-    static let bgWindow = Color(light: 0xF4FAEF, dark: 0x285943)      // surface-canvas
-    static let bgPanel = Color(light: 0xFFFFFF, dark: 0x764134)       // surface-raised (Clay always takes a Sandy border)
-    static let bgField = Color(light: 0xF4FAEF, dark: 0x285943)       // surface-canvas
-    static let bgDeep = Color(light: 0xDCE9D6, dark: 0x0B1F17)        // bottom of the page backdrop
-    static let bgHover = Color(light: 0xF2F5F4, dark: 0x805043)
-    static let bgSelected = Color(light: 0xDCE7DA, dark: 0x447457)
-    static let line = Color(light: 0xCFDDD0, dark: 0x517971)          // border-subtle
-    static let lineControl = Color(light: 0x285943, dark: 0xE5B181)   // border-strong
-    static let text = Color(light: 0x0F2A1F, dark: 0xF4FAEF)          // ink-primary
-    static let textSecondary = Color(light: 0x285943, dark: 0xC8DCCD) // ink-secondary
-    static let accent = Color(light: 0x285943, dark: 0xC2EFB3)
-    static let onAccent = Color(light: 0xF4FAEF, dark: 0x285943)
-    static let ok = Color(light: 0x285943, dark: 0xC2EFB3)
+    // Dashboard palette (dark charcoal-green with a lime accent); both appearances use it, the root forces dark.
+    static let bgWindow = Color(light: 0x090D0B, dark: 0x090D0B)
+    static let bgPanel = Color(light: 0x131B17, dark: 0x131B17)
+    static let bgField = Color(light: 0x0D1210, dark: 0x0D1210)
+    static let bgDeep = Color(light: 0x060908, dark: 0x060908)
+    static let bgHover = Color(light: 0x1A2420, dark: 0x1A2420)
+    static let bgSelected = Color(light: 0x2D4032, dark: 0x2D4032)
+    static let line = Color(light: 0x1F2A25, dark: 0x1F2A25)
+    static let lineControl = Color(light: 0x3A4A43, dark: 0x3A4A43)
+    static let text = Color(light: 0xF2F6F3, dark: 0xF2F6F3)
+    static let textSecondary = Color(light: 0x9AA9A1, dark: 0x9AA9A1)
+    static let accent = Color(light: 0xC8F58A, dark: 0xC8F58A)
+    static let onAccent = Color(light: 0x10200F, dark: 0x10200F)
+    static let ok = Color(light: 0xC8F58A, dark: 0xC8F58A)
     static let warnSoft = Color(hex: 0xE5B181)
-    static let error = Color(light: 0x9B2F1F, dark: 0xFFB4A3)
-    static let warn = Color(light: 0x7A4B12, dark: 0xF0CBA8)          // state-warn
+    static let error = Color(light: 0xFFB4A3, dark: 0xFFB4A3)
+    static let warn = Color(light: 0xF0CBA8, dark: 0xF0CBA8)
 
     // Locked palette, same in both themes: badge and tag fills take Ink text.
     static let sandy = Color(hex: 0xE5B181)
@@ -50,10 +51,10 @@ enum PearTheme {
         static let s6: CGFloat = 24
     }
 
-    static let radiusControl: CGFloat = 10 // kit radius-md: buttons and cards
+    static let radiusControl: CGFloat = 12 // kit radius-md: buttons and cards
     static let radiusWindow: CGFloat = 10
     static let radiusTag: CGFloat = 4      // kit radius-sm: tags, badges, fields
-    static let radiusPoster: CGFloat = 18  // game posters: rounder than controls, so games read as objects
+    static let radiusPoster: CGFloat = 16  // game posters: rounder than controls, so games read as objects
 
     #if os(macOS)
     static let controlHeight: CGFloat = 24

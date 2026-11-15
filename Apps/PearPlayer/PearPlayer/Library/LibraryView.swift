@@ -1,177 +1,241 @@
 import PearCloud
 import PearLibrary
 import SwiftUI
+#if os(iOS)
+import SafariServices
+#endif
 
 struct LibraryView: View {
     let model: PlayerModel
 
     private enum LibraryFilter: Hashable { case all, playable }
+    private enum Section: Hashable { case discover, friends }
 
     @State private var filter: LibraryFilter? = .all
+    @State private var section: Section = .discover
     @State private var path = NavigationPath()
     @State private var showProfile = false
+    @Environment(\.horizontalSizeClass) private var sizeClass
 
     private var playableOnly: Bool { filter == .playable }
 
     var body: some View {
-        screen
-            .task {
-                await model.library.load()
-                #if DEBUG
-                // Screenshots: `PEAR_DEV_OPEN=<title>` opens that game's page after the library loads.
-                if let title = ProcessInfo.processInfo.environment["PEAR_DEV_OPEN"],
-                   let entry = model.library.entries.first(where: { $0.title == title }) { path.append(entry) }
-                // Smoke test: `PEAR_DEV_PLAY=<title>` runs Play on that game (same path as the Play button).
-                if let title = ProcessInfo.processInfo.environment["PEAR_DEV_PLAY"],
-                   let entry = model.library.entries.first(where: { $0.title == title }) {
-                    do { try await model.play(entry); print("PEAR_DEV_PLAY ok: \(title)") }
-                    catch { print("PEAR_DEV_PLAY failed: \(error)") }
-                }
-                #endif
-            }
-            .onChange(of: model.library.state) { _, state in
-                if state == .failed(.signedOut) { Task { await model.sessionExpired() } }
-            }
-            .sheet(isPresented: $showProfile) { ProfileSettingsSheet(model: model) }
-            .modifier(PlaySurface(model: model))
-    }
-
-    #if os(macOS)
-    @ViewBuilder private var screen: some View {
-        NavigationSplitView {
-            sidebar
-        } detail: {
-            NavigationStack(path: $path) {
-                content
-                    .background { PearBackdrop(seed: featured?.id) }
-                    .navigationTitle(playableOnly ? "Playable on this device" : "All games")
-                    .navigationDestination(for: CatalogEntry.self) { GameDetailView(entry: $0, model: model) }
-                    .navigationDestination(for: PlayRequest.self) { GameDetailView(entry: $0.entry, model: model, autoplay: true) }
-                    .toolbarBackground(PearTheme.bgWindow, for: .windowToolbar)
-                    .toolbarBackground(.visible, for: .windowToolbar)
-                    .toolbar {
-                        ToolbarItem(placement: .primaryAction) {
-                            Button {
-                                Task { await model.library.refresh() }
-                            } label: {
-                                Label("Refresh", systemImage: "arrow.clockwise")
-                            }
-                            .disabled(model.library.isLoading)
-                            .help("Refresh library")
-                            .keyboardShortcut("r")
-                        }
-                    }
-            }
-        }
-        .frame(minWidth: 760, minHeight: 520)
-        .onChange(of: filter) { path = NavigationPath() }
-        .onChange(of: model.library.query) { path = NavigationPath() }
-    }
-
-    @ViewBuilder private var sidebar: some View {
-        @Bindable var library = model.library
-        ScrollView {
-            VStack(alignment: .leading, spacing: PearTheme.Space.s1) {
-                Text("Library")
-                    .font(.headline)
-                    .foregroundStyle(PearTheme.text)
-                    .padding(.horizontal, PearTheme.Space.s2)
-                    .padding(.vertical, PearTheme.Space.s2)
-                    .accessibilityAddTraits(.isHeader)
-                SidebarRow(
-                    title: "All games", symbol: "square.grid.2x2", count: library.entries.count,
-                    selected: filter != .playable
-                ) { filter = .all }
-                SidebarRow(
-                    title: "Playable here", symbol: "checkmark.circle", count: playableCount,
-                    selected: playableOnly
-                ) { filter = .playable }
-                .help("Playable on this device")
-            }
-            .padding(PearTheme.Space.s2)
-            .accessibilityElement(children: .contain)
-        }
-        .background(PearTheme.bgPanel)
-        .searchable(text: $library.query, placement: .sidebar, prompt: "Search games")
-        .navigationSplitViewColumnWidth(min: 220, ideal: 240, max: 300)
-        .safeAreaInset(edge: .bottom, spacing: 0) { accountRow }
-    }
-
-    private var accountRow: some View {
-        VStack(spacing: 0) {
-            Rectangle().fill(PearTheme.line).frame(height: 1)
-            Menu {
-                Text(accountName)
-                Button("Profile settings…") { showProfile = true }
-                Button("Sign out", role: .destructive) { Task { await model.signOut() } }
-            } label: {
-                HStack(spacing: 10) {
-                    Text(String(accountName.prefix(1)).uppercased())
-                        .font(.caption.bold())
-                        .foregroundStyle(PearTheme.onAccent)
-                        .frame(width: 24, height: 24)
-                        .background(PearTheme.accent, in: RoundedRectangle(cornerRadius: PearTheme.radiusControl))
-                        .accessibilityHidden(true)
-                    Text(accountName).foregroundStyle(PearTheme.text).lineLimit(1)
-                    Spacer()
-                    Image(systemName: "chevron.up.chevron.down")
-                        .font(.caption2)
-                        .foregroundStyle(PearTheme.textSecondary)
-                        .accessibilityHidden(true)
-                }
-                .contentShape(Rectangle())
-            }
-            .menuStyle(.borderlessButton)
-            .menuIndicator(.hidden)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .accessibilityLabel("Account, \(accountName)")
-        }
-        .background(PearTheme.bgPanel)
-    }
-    #else
-    @Environment(\.horizontalSizeClass) private var sizeClass
-    @ViewBuilder private var screen: some View {
-        @Bindable var library = model.library
         NavigationStack(path: $path) {
-            content
-                .background { PearBackdrop(seed: featured?.id) }
-                .navigationTitle("Home")
-                .navigationBarTitleDisplayMode(.inline)
+            dashboard
+                .background(PearTheme.bgWindow.ignoresSafeArea())
                 .navigationDestination(for: CatalogEntry.self) { GameDetailView(entry: $0, model: model) }
                 .navigationDestination(for: PlayRequest.self) { GameDetailView(entry: $0.entry, model: model, autoplay: true) }
-                .searchable(text: $library.query, prompt: "Search games")
-                .toolbar {
-                    ToolbarItem(placement: .principal) {
-                        Image("PearMark").resizable().scaledToFit().frame(height: 28).accessibilityLabel("Pear")
-                    }
-                    ToolbarItem(placement: .primaryAction) {
-                        Button {
-                            Task { await model.library.refresh() }
-                        } label: {
-                            Label("Refresh", systemImage: "arrow.clockwise")
+                #if os(iOS)
+                .toolbar(.hidden, for: .navigationBar)
+                #else
+                .toolbar(.hidden, for: .windowToolbar)
+                #endif
+        }
+        .task {
+            await model.library.load()
+            #if DEBUG
+            // Screenshots: `PEAR_DEV_OPEN=<title>` opens that game's page after the library loads.
+            if let title = ProcessInfo.processInfo.environment["PEAR_DEV_OPEN"],
+               let entry = model.library.entries.first(where: { $0.title == title }) { path.append(entry) }
+            // Smoke test: `PEAR_DEV_PLAY=<title>` runs Play on that game (same path as the Play button).
+            if let title = ProcessInfo.processInfo.environment["PEAR_DEV_PLAY"],
+               let entry = model.library.entries.first(where: { $0.title == title }) {
+                do { try await model.play(entry); print("PEAR_DEV_PLAY ok: \(title)") }
+                catch { print("PEAR_DEV_PLAY failed: \(error)") }
+            }
+            #endif
+        }
+        .task { await model.refreshFriends() }
+        .onChange(of: model.library.state) { _, state in
+            if state == .failed(.signedOut) { Task { await model.sessionExpired() } }
+        }
+        .onChange(of: filter) { path = NavigationPath() }
+        .onChange(of: model.library.query) { path = NavigationPath() }
+        .sheet(isPresented: $showProfile) { ProfileSettingsSheet(model: model) }
+        .modifier(PlaySurface(model: model))
+        #if os(macOS)
+        .frame(minWidth: 760, minHeight: 520)
+        #endif
+    }
+
+    #if os(iOS)
+    private var compact: Bool { sizeClass == .compact }
+    #else
+    private let compact = false
+    #endif
+
+    // MARK: Layout
+
+    private var dashboard: some View {
+        HStack(spacing: 0) {
+            if !compact { sidebar }
+            VStack(alignment: .leading, spacing: 0) {
+                topBar
+                if compact { tabs }
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 28) {
+                        switch section {
+                        case .discover: discover
+                        case .friends: friendsPage
                         }
-                        .disabled(model.library.isLoading)
-                        .help("Refresh library")
                     }
-                    ToolbarItem(placement: .automatic) {
-                        Menu {
-                            if case .signedIn(let account) = model.phase {
-                                Text(account.displayName.isEmpty ? "Signed in" : account.displayName)
-                            }
-                            Button("Profile settings…") { showProfile = true }
-                            Button("Sign out", role: .destructive) { Task { await model.signOut() } }
-                        } label: {
-                            AvatarView(name: accountName, size: 32, accountId: accountId)
-                        }
-                        .accessibilityLabel("Account, \(accountName)")
-                        .help("Account")
-                    }
+                    .padding(.horizontal, compact ? 16 : 32)
+                    .padding(.bottom, 32)
+                    .frame(maxWidth: 1400)
+                    .frame(maxWidth: .infinity)
                 }
+                .refreshable {
+                    await model.library.refresh()
+                    await model.refreshFriends()
+                }
+            }
         }
     }
-    #endif
+
+    private var sidebar: some View {
+        VStack(alignment: .leading, spacing: PearTheme.Space.s2) {
+            HStack(spacing: 10) {
+                Image("PearMark").resizable().scaledToFit().frame(height: 30).accessibilityHidden(true)
+                Text("pear").font(PearTheme.display(28)).foregroundStyle(PearTheme.text)
+            }
+            .padding(.horizontal, PearTheme.Space.s3)
+            .padding(.top, 28)
+            .padding(.bottom, 32)
+            NavRow(title: "Discover", symbol: "safari", badge: 0, selected: section == .discover) { section = .discover }
+            NavRow(title: "Friends", symbol: "person.2", badge: model.requests.incoming.count, selected: section == .friends) { section = .friends }
+            Spacer()
+            Button { showProfile = true } label: {
+                HStack(spacing: 10) {
+                    AvatarView(name: accountName, size: 36, accountId: accountId)
+                    Text(accountName)
+                        .font(PearTheme.sans(15, .medium))
+                        .foregroundStyle(PearTheme.text)
+                        .lineLimit(1)
+                    Spacer(minLength: 0)
+                    Image(systemName: "gearshape").foregroundStyle(PearTheme.textSecondary)
+                }
+                .padding(PearTheme.Space.s3)
+                .background(PearTheme.bgPanel, in: RoundedRectangle(cornerRadius: PearTheme.radiusControl))
+                .overlay(RoundedRectangle(cornerRadius: PearTheme.radiusControl).strokeBorder(PearTheme.line))
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Profile, \(accountName)")
+        }
+        .padding(PearTheme.Space.s4)
+        .frame(width: 248)
+        .frame(maxHeight: .infinity)
+        .background(PearTheme.bgField.ignoresSafeArea())
+    }
+
+    /// Compact widths have no sidebar: a pill row switches between the two pages.
+    private var tabs: some View {
+        HStack(spacing: PearTheme.Space.s2) {
+            Chip(title: "Discover", selected: section == .discover) { section = .discover }
+            Chip(title: model.requests.incoming.isEmpty ? "Friends" : "Friends (\(model.requests.incoming.count))", selected: section == .friends) { section = .friends }
+            Spacer()
+        }
+        .padding(.horizontal, 16)
+        .padding(.bottom, PearTheme.Space.s3)
+    }
+
+    private var topBar: some View {
+        @Bindable var library = model.library
+        return VStack(alignment: .leading, spacing: PearTheme.Space.s3) {
+            HStack(spacing: PearTheme.Space.s3) {
+                if !compact {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(section == .discover ? "Step into something new." : "Friends")
+                            .font(PearTheme.display(30))
+                            .foregroundStyle(PearTheme.text)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.6)
+                        Text(section == .discover ? greetingSummary : "\(model.friends.filter { $0.playing != nil }.count) playing now · \(model.friends.count) friends")
+                            .font(PearTheme.sans(16))
+                            .foregroundStyle(PearTheme.textSecondary)
+                            .lineLimit(1)
+                    }
+                    Spacer(minLength: PearTheme.Space.s4)
+                }
+                searchField(text: $library.query)
+                    .frame(maxWidth: compact ? .infinity : 440)
+                iconButton("arrow.clockwise", label: "Refresh library") {
+                    Task { await model.library.refresh(); await model.refreshFriends() }
+                }
+                .disabled(model.library.isLoading)
+                if compact {
+                    Button { showProfile = true } label: { AvatarView(name: accountName, size: 48, accountId: accountId) }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Profile, \(accountName)")
+                }
+            }
+        }
+        .padding(.horizontal, compact ? 16 : 32)
+        .padding(.top, compact ? 12 : 28)
+        .padding(.bottom, compact ? 12 : 20)
+    }
+
+    private func searchField(text: Binding<String>) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: "magnifyingglass").foregroundStyle(PearTheme.textSecondary)
+            TextField("Search games and creators", text: text)
+                .textFieldStyle(.plain)
+                .font(PearTheme.sans(16))
+                .foregroundStyle(PearTheme.text)
+                #if os(iOS)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                #endif
+            if !text.wrappedValue.isEmpty {
+                Button { text.wrappedValue = "" } label: { Image(systemName: "xmark.circle.fill").foregroundStyle(PearTheme.textSecondary) }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Clear search")
+            }
+        }
+        .padding(.horizontal, PearTheme.Space.s4)
+        .frame(height: 48)
+        .background(PearTheme.bgPanel, in: RoundedRectangle(cornerRadius: PearTheme.radiusControl))
+        .overlay(RoundedRectangle(cornerRadius: PearTheme.radiusControl).strokeBorder(PearTheme.line))
+    }
+
+    private func iconButton(_ symbol: String, label: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Group {
+                if model.library.isLoading && symbol == "arrow.clockwise" {
+                    ProgressView().controlSize(.small)
+                } else {
+                    Image(systemName: symbol).font(.system(size: 18, weight: .medium))
+                }
+            }
+            .foregroundStyle(PearTheme.text)
+            .frame(width: 48, height: 48)
+            .background(PearTheme.bgPanel, in: RoundedRectangle(cornerRadius: PearTheme.radiusControl))
+            .overlay(RoundedRectangle(cornerRadius: PearTheme.radiusControl).strokeBorder(PearTheme.line))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(label)
+    }
+
+    // MARK: Pages
+
+    @ViewBuilder private var discover: some View {
+        if let featured {
+            FeaturedHero(entry: featured, compact: compact) {
+                path.append(PlayRequest(entry: featured))
+            } onOpen: {
+                path.append(featured)
+            }
+        }
+        gamesSection
+    }
+
+    private var friendsPage: some View {
+        FriendsPanel(model: model) { friend in
+            if let id = friend.playing?.gameId,
+               let entry = model.library.entries.first(where: { $0.id == id }) {
+                path.append(PlayRequest(entry: entry))
+            }
+        }
+    }
 
     private var playableCount: Int {
         let library = model.library
@@ -215,12 +279,6 @@ struct LibraryView: View {
         return playable + matches.filter { !library.playability(of: $0).isPlayable }
     }
 
-    #if os(iOS)
-    private var compact: Bool { sizeClass == .compact }
-    #else
-    private let compact = false
-    #endif
-
     private var searching: Bool { !model.library.query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
 
     /// The hero: the first playable game in server order, hidden while searching.
@@ -228,76 +286,23 @@ struct LibraryView: View {
         searching ? nil : visible.first { model.library.playability(of: $0).isPlayable }
     }
 
-    private var content: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 40) {
-                VStack(alignment: .leading, spacing: PearTheme.Space.s6) {
-                    ProfileHeader(name: accountName, accountId: accountId, summary: greetingSummary)
-                    if let featured {
-                        FeaturedHero(entry: featured, compact: compact) {
-                            path.append(PlayRequest(entry: featured))
-                        } onOpen: {
-                            path.append(featured)
-                        }
-                    }
-                }
-                FriendsBar(model: model) { friend in
-                    if let id = friend.playing?.gameId,
-                       let entry = model.library.entries.first(where: { $0.id == id }) {
-                        path.append(PlayRequest(entry: entry))
-                    }
-                }
-                gamesSection
-            }
-            .padding(.horizontal, compact ? 20 : 28)
-            .padding(.vertical, PearTheme.Space.s6)
-            .frame(maxWidth: 1400)
-            .frame(maxWidth: .infinity)
-        }
-        .refreshable {
-            await model.library.refresh()
-            await model.refreshFriends()
-        }
-    }
-
-    private func shelfTitle(_ title: String) -> some View {
-        Text(title.uppercased())
-            .font(PearTheme.header(compact ? 13 : 15))
-            .tracking(PearTheme.headerTracking)
-            .foregroundStyle(PearTheme.textSecondary)
-            .accessibilityLabel(title)
-            .accessibilityAddTraits(.isHeader)
-    }
-
-    /// A horizontal row of posters that snaps to each game.
-    @ViewBuilder private func shelf(_ title: String, _ entries: [CatalogEntry]) -> some View {
-        if !entries.isEmpty {
-            VStack(alignment: .leading, spacing: PearTheme.Space.s4) {
-                shelfTitle(title)
-                ScrollView(.horizontal, showsIndicators: false) {
-                    LazyHStack(alignment: .top, spacing: compact ? 14 : 20) {
-                        ForEach(entries) { entry in
-                            poster(entry).frame(width: compact ? 150 : 200)
-                        }
-                    }
-                    .scrollTargetLayout()
-                }
-                .scrollTargetBehavior(.viewAligned)
-                .scrollClipDisabled()
-            }
-        }
-    }
-
-    private func poster(_ entry: CatalogEntry) -> some View {
-        NavigationLink(value: entry) {
-            GameCard(entry: entry, playability: model.library.playability(of: entry))
-        }
-        .buttonStyle(PearPressStyle())
-    }
-
     @ViewBuilder private var gamesSection: some View {
         let library = model.library
-        VStack(alignment: .leading, spacing: 40) {
+        VStack(alignment: .leading, spacing: 20) {
+            HStack(alignment: .firstTextBaseline, spacing: PearTheme.Space.s3) {
+                Text(searching ? "Results" : "All games")
+                    .font(PearTheme.display(28))
+                    .foregroundStyle(PearTheme.text)
+                    .accessibilityAddTraits(.isHeader)
+                Text("\(visible.count) \(visible.count == 1 ? "game" : "games")")
+                    .font(PearTheme.sans(15))
+                    .foregroundStyle(PearTheme.textSecondary)
+                Spacer()
+            }
+            HStack(spacing: PearTheme.Space.s2) {
+                Chip(title: "All games", selected: !playableOnly) { filter = .all }
+                Chip(title: "Playable here", selected: playableOnly) { filter = .playable }
+            }
             if case .failed(.message(let text)) = library.state, !library.entries.isEmpty {
                 HStack {
                     Text(text).font(.callout).foregroundStyle(PearTheme.error)
@@ -340,17 +345,15 @@ struct LibraryView: View {
                     Button("Show all games") { filter = .all }
                         .buttonStyle(PearSecondaryButtonStyle())
                 }
-            } else if searching {
-                VStack(alignment: .leading, spacing: PearTheme.Space.s4) {
-                    shelfTitle("Results")
-                    LazyVGrid(columns: [GridItem(.adaptive(minimum: compact ? 140 : 180), spacing: 20)], spacing: 24) {
-                        ForEach(visible) { poster($0) }
+            } else {
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: compact ? 160 : 230), spacing: 20)], spacing: 20) {
+                    ForEach(visible) { entry in
+                        NavigationLink(value: entry) {
+                            GameCard(entry: entry, playability: library.playability(of: entry))
+                        }
+                        .buttonStyle(PearPressStyle())
                     }
                 }
-            } else {
-                let ready = visible.filter { library.playability(of: $0).isPlayable && $0.id != featured?.id }
-                shelf("Ready to play on this \(deviceName)", ready)
-                shelf("Needs another device", visible.filter { !library.playability(of: $0).isPlayable })
             }
         }
         .animation(PearTheme.motion, value: filter)
@@ -362,35 +365,40 @@ struct PlayRequest: Hashable {
     let entry: CatalogEntry
 }
 
-#if os(macOS)
-/// A sidebar row drawn from the theme tokens: the system selection fill is the tint, which puts white text on
-/// light-green in dark mode.
-private struct SidebarRow: View {
+/// A sidebar row: selected rows take the dark-green fill, others stay flat.
+private struct NavRow: View {
     let title: String
     let symbol: String
-    let count: Int
+    let badge: Int
     let selected: Bool
     let action: () -> Void
     @State private var hovering = false
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: PearTheme.Space.s2) {
+            HStack(spacing: PearTheme.Space.s3) {
                 Image(systemName: symbol)
+                    .font(.system(size: 18))
+                    .foregroundStyle(selected ? PearTheme.accent : PearTheme.textSecondary)
+                    .frame(width: 24)
+                Text(title)
+                    .font(PearTheme.sans(17, selected ? .semibold : .medium))
                     .foregroundStyle(selected ? PearTheme.text : PearTheme.textSecondary)
-                    .frame(width: 20)
-                Text(title).foregroundStyle(PearTheme.text)
                 Spacer()
-                Text("\(count)")
-                    .monospacedDigit()
-                    .foregroundStyle(selected ? PearTheme.text : PearTheme.textSecondary)
+                if badge > 0 {
+                    Text("\(badge)")
+                        .font(PearTheme.sans(13, .semibold, relativeTo: .caption))
+                        .monospacedDigit()
+                        .foregroundStyle(PearTheme.text)
+                        .frame(minWidth: 24, minHeight: 24)
+                        .background(PearTheme.bgSelected, in: RoundedRectangle(cornerRadius: 8))
+                }
             }
-            .padding(.horizontal, PearTheme.Space.s2)
-            .frame(minHeight: PearTheme.rowHeight)
+            .padding(.horizontal, PearTheme.Space.s3)
+            .frame(height: 52)
             .background(
                 selected ? PearTheme.bgSelected : (hovering ? PearTheme.bgHover : Color.clear),
-                in: RoundedRectangle(cornerRadius: PearTheme.radiusControl)
-            )
+                in: RoundedRectangle(cornerRadius: PearTheme.radiusControl))
             .contentShape(RoundedRectangle(cornerRadius: PearTheme.radiusControl))
         }
         .buttonStyle(.plain)
@@ -399,69 +407,77 @@ private struct SidebarRow: View {
         .accessibilityAddTraits(selected ? .isSelected : [])
     }
 }
-#endif
+
+/// A filter pill: lime when selected, dark panel otherwise.
+private struct Chip: View {
+    let title: String
+    let selected: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Text(title)
+                .font(PearTheme.sans(15, .medium))
+                .foregroundStyle(selected ? PearTheme.onAccent : PearTheme.text)
+                .padding(.horizontal, 20)
+                .frame(height: 44)
+                .background(selected ? PearTheme.accent : PearTheme.bgPanel, in: RoundedRectangle(cornerRadius: PearTheme.radiusControl))
+                .overlay(RoundedRectangle(cornerRadius: PearTheme.radiusControl).strokeBorder(selected ? Color.clear : PearTheme.line))
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(selected ? .isSelected : [])
+    }
+}
 
 private struct GameCard: View {
     let entry: CatalogEntry
     let playability: Playability
     @State private var hovering = false
 
-    /// The sensor the game requires; hidden when the status line already names it as the blocker.
-    private var tierBadge: String? {
-        if case .needsTier = playability { return nil }
-        return entry.tierLabel
-    }
-
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 0) {
             Color.clear
-                .aspectRatio(3 / 4, contentMode: .fit)
+                .aspectRatio(16 / 10, contentMode: .fit)
                 .overlay { CoverArt(seed: entry.id) }
-                .overlay(alignment: .bottomLeading) {
-                    Text(entry.title.isEmpty ? "Untitled game" : entry.title)
-                        .font(PearTheme.sans(18, .semibold, relativeTo: .headline))
-                        .foregroundStyle(PearTheme.paper)
-                        .lineLimit(2)
-                        .multilineTextAlignment(.leading)
-                        .padding(14)
-                        .padding(.top, 36)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(PearTheme.scrim)
-                }
                 .overlay(alignment: .topLeading) {
-                    if let tier = tierBadge {
-                        CoverBadge(text: tier, symbol: "dot.radiowaves.left.and.right", fill: PearTheme.sandy)
-                            .padding(10)
-                    }
+                    Text(entry.tierLabel ?? entry.runModeLabel)
+                        .font(PearTheme.sans(12, .medium, relativeTo: .caption))
+                        .foregroundStyle(PearTheme.text)
+                        .padding(.horizontal, 10)
+                        .frame(minHeight: 26)
+                        .background(PearTheme.bgWindow.opacity(0.85), in: RoundedRectangle(cornerRadius: 8))
+                        .padding(10)
                 }
-                .clipShape(RoundedRectangle(cornerRadius: PearTheme.radiusPoster))
-                .overlay {
-                    RoundedRectangle(cornerRadius: PearTheme.radiusPoster)
-                        .strokeBorder(PearTheme.accent, lineWidth: hovering ? 3 : 0)
-                }
-                .shadow(color: PearTheme.ink.opacity(0.35), radius: 14, y: 8)
-            VStack(alignment: .leading, spacing: 2) {
+                .clipped()
+            VStack(alignment: .leading, spacing: 4) {
+                Text(entry.title.isEmpty ? "Untitled game" : entry.title)
+                    .font(PearTheme.sans(18, .semibold, relativeTo: .headline))
+                    .foregroundStyle(PearTheme.text)
+                    .lineLimit(1)
                 Text(entry.author.isEmpty ? "Unknown author" : "by \(entry.author)")
                     .font(PearTheme.small)
                     .foregroundStyle(PearTheme.textSecondary)
                     .lineLimit(1)
-                    .help(entry.author)
-                if !playability.isPlayable {
-                    Label {
-                        // Tea text on Clay only from 24 pt: the word stays Paper, the icon carries the colour.
-                        Text(playability.summary)
-                            .foregroundStyle(playability.isPlayable ? PearTheme.text : PearTheme.textSecondary)
-                    } icon: {
-                        Image(systemName: playability.symbol)
-                            .foregroundStyle(playability.isPlayable ? PearTheme.ok : PearTheme.textSecondary)
-                    }
-                    .font(PearTheme.sans(13, .medium, relativeTo: .subheadline))
-                    .lineLimit(1)
+                Label {
+                    Text(playability.isPlayable ? "Playable here" : playability.summary)
+                } icon: {
+                    Image(systemName: playability.symbol)
+                        .foregroundStyle(playability.isPlayable ? PearTheme.ok : PearTheme.textSecondary)
                 }
+                .font(PearTheme.sans(13, .medium, relativeTo: .subheadline))
+                .foregroundStyle(PearTheme.textSecondary)
+                .lineLimit(1)
+                .padding(.top, 4)
             }
-            .padding(.horizontal, 2)
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(PearTheme.bgPanel)
+        .clipShape(RoundedRectangle(cornerRadius: PearTheme.radiusPoster))
+        .overlay {
+            RoundedRectangle(cornerRadius: PearTheme.radiusPoster)
+                .strokeBorder(hovering ? PearTheme.accent : PearTheme.line, lineWidth: hovering ? 2 : 1)
+        }
         .contentShape(Rectangle())
         .onHover { hovering = $0 }
         #if os(macOS)
@@ -472,7 +488,7 @@ private struct GameCard: View {
     }
 }
 
-/// The featured game: full-width art, display title on a scrim, and Play as the biggest button on the screen.
+/// The featured game: art on the right fading into the panel, title and the two actions on the left.
 private struct FeaturedHero: View {
     let entry: CatalogEntry
     let compact: Bool
@@ -480,48 +496,54 @@ private struct FeaturedHero: View {
     let onOpen: () -> Void
 
     var body: some View {
-        CoverArt(seed: entry.id)
-            .frame(height: compact ? 340 : 440)
-            .frame(maxWidth: .infinity)
-            .overlay(alignment: .bottomLeading) {
-                VStack(alignment: .leading, spacing: PearTheme.Space.s3) {
-                    if let tier = entry.tierLabel {
-                        CoverBadge(text: tier, symbol: "dot.radiowaves.left.and.right", fill: PearTheme.sandy)
+        ZStack(alignment: .leading) {
+            PearTheme.bgPanel
+            CoverArt(seed: entry.id)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .mask(LinearGradient(
+                    stops: [.init(color: .clear, location: compact ? 0.1 : 0.3), .init(color: .black, location: 1)],
+                    startPoint: .leading, endPoint: .trailing))
+            VStack(alignment: .leading, spacing: PearTheme.Space.s3) {
+                Text(entry.tierLabel.map { "Editor's pick · \($0)" } ?? "Editor's pick")
+                    .font(PearTheme.sans(12, .semibold, relativeTo: .caption))
+                    .foregroundStyle(PearTheme.text)
+                    .padding(.horizontal, 10)
+                    .frame(minHeight: 26)
+                    .background(PearTheme.bgWindow.opacity(0.7), in: RoundedRectangle(cornerRadius: 8))
+                Text(entry.title.isEmpty ? "Untitled game" : entry.title)
+                    .font(PearTheme.display(compact ? 32 : 48))
+                    .foregroundStyle(PearTheme.text)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.6)
+                Text(entry.author.isEmpty ? entry.runModeLabel : "by \(entry.author) · \(entry.runModeLabel)")
+                    .font(PearTheme.sans(compact ? 15 : 17))
+                    .foregroundStyle(PearTheme.textSecondary)
+                HStack(spacing: PearTheme.Space.s3) {
+                    Button(action: onPlay) {
+                        Label("Play now", systemImage: "play")
+                            .font(PearTheme.sans(17, .semibold))
+                            .frame(minHeight: 28)
                     }
-                    Text(entry.title.isEmpty ? "Untitled game" : entry.title)
-                        .font(PearTheme.display(compact ? 40 : 64))
-                        .tracking(compact ? -0.3 : -0.6)
-                        .foregroundStyle(PearTheme.paper)
-                        .lineLimit(2)
-                        .minimumScaleFactor(0.6)
-                        .frame(maxWidth: compact ? .infinity : 560, alignment: .leading)
-                    Text(entry.author.isEmpty ? entry.runModeLabel : "by \(entry.author) · \(entry.runModeLabel)")
-                        .font(PearTheme.sans(compact ? 15 : 18, relativeTo: .title3))
-                        .foregroundStyle(PearTheme.paper.opacity(0.85))
-                    HStack(spacing: PearTheme.Space.s3) {
-                        Button(action: onPlay) {
-                            Label("Play", systemImage: "play.fill")
-                                .font(PearTheme.sans(18, .semibold))
-                                .frame(minWidth: compact ? 120 : 160, minHeight: 52)
-                        }
-                        .buttonStyle(PearPrimaryButtonStyle())
-                        Button("Details", action: onOpen)
-                            .buttonStyle(PearSecondaryButtonStyle())
+                    .buttonStyle(PearPrimaryButtonStyle())
+                    Button(action: onOpen) {
+                        Label("View game", systemImage: "arrow.right")
+                            .labelStyle(.titleAndIcon)
+                            .frame(minHeight: 28)
                     }
-                    .padding(.top, PearTheme.Space.s2)
-                    // Art is always dark under the scrim, so the hero's controls take the Emerald theme.
-                    .environment(\.colorScheme, .dark)
+                    .buttonStyle(PearSecondaryButtonStyle())
                 }
-                .padding(compact ? 20 : 36)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(PearTheme.scrim)
+                .padding(.top, PearTheme.Space.s2)
             }
-            .clipShape(RoundedRectangle(cornerRadius: 24))
-            .shadow(color: PearTheme.ink.opacity(0.4), radius: 24, y: 14)
-            .contentShape(RoundedRectangle(cornerRadius: 24))
-            .onTapGesture(perform: onOpen)
-            .accessibilityElement(children: .contain)
-            .accessibilityLabel("Featured, \(entry.title)")
+            .padding(compact ? 20 : 36)
+            .frame(maxWidth: compact ? .infinity : 520, alignment: .leading)
+        }
+        .frame(height: compact ? 300 : 300)
+        .clipShape(RoundedRectangle(cornerRadius: 20))
+        .overlay(RoundedRectangle(cornerRadius: 20).strokeBorder(PearTheme.line))
+        .contentShape(RoundedRectangle(cornerRadius: 20))
+        .onTapGesture(perform: onOpen)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Featured, \(entry.title)")
     }
 }
 
@@ -615,11 +637,31 @@ private struct PlaySurface: ViewModifier {
         Binding(get: { model.activeSession }, set: { if $0 == nil { model.leaveGame() } })
     }
 
+    private var phonePage: Binding<PhonePage?> {
+        Binding(get: { model.phonePage.map(PhonePage.init) }, set: { if $0 == nil { model.leaveGame() } })
+    }
+
     func body(content: Content) -> some View {
         #if os(iOS)
-        content.fullScreenCover(item: session) { PlayView(session: $0, onLeave: model.leaveGame) }
+        content
+            .fullScreenCover(item: session) { PlayView(session: $0, onLeave: model.leaveGame) }
+            .fullScreenCover(item: phonePage) { SafariPage(url: $0.url).ignoresSafeArea() }
         #else
         content.sheet(item: session) { PlayView(session: $0, onLeave: model.leaveGame) }
         #endif
     }
 }
+
+private struct PhonePage: Identifiable {
+    let url: URL
+    var id: URL { url }
+}
+
+#if os(iOS)
+/// Safari's in-app view: the phone page needs Safari's motion-permission prompt and Web Audio, and its Done button leaves the game.
+private struct SafariPage: UIViewControllerRepresentable {
+    let url: URL
+    func makeUIViewController(context: Context) -> SFSafariViewController { SFSafariViewController(url: url) }
+    func updateUIViewController(_ controller: SFSafariViewController, context: Context) {}
+}
+#endif

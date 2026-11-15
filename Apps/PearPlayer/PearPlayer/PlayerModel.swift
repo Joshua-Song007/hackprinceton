@@ -2,6 +2,7 @@ import Foundation
 import Observation
 import PearCloud
 import PearLibrary
+import PearRuntime
 import PearScript
 
 /// The player's composition root: builds the cloud client, the session store, the device profile, the library
@@ -32,6 +33,8 @@ final class PlayerModel {
     private(set) var avatarVersion = 0
     /// The game being played, if any; the library screen shows it full screen.
     private(set) var activeSession: GameSession?
+    /// A phone-only game's hosted page, shown in place of `activeSession` (see `isPhoneOnly`).
+    private(set) var phonePage: URL?
 
     let library: LibraryModel
     private let client: CloudClient
@@ -155,6 +158,11 @@ final class PlayerModel {
             throw CloudError.notSignedIn
         }
         let result = try await launch(entry)
+        if let scene = try? SceneLoader.decode(JSONEncoder().encode(result.game.bundle.scene)), Self.isPhoneOnly(scene) {
+            phonePage = Self.phonePageURL(
+                base: client.baseURL, gameId: result.game.gameId, version: result.game.version, name: account.displayName)
+            return
+        }
         guard let url = NetworkRemoteChannel.playURL(
             base: client.baseURL, gameId: result.game.gameId, token: token, version: result.game.version)
         else { throw CloudError.invalidResponse }
@@ -167,6 +175,28 @@ final class PlayerModel {
     func leaveGame() {
         activeSession?.stop()
         activeSession = nil
+        phonePage = nil
+    }
+
+    /// Same rule as Studio's `isPhoneOnly` (Web/studio/src/phonePlay.ts): a device game whose every entity is
+    /// zero-scale has nothing to draw; its players are phones, so it runs on the hosted phone page, not in 3D.
+    nonisolated static func isPhoneOnly(_ scene: SceneDescription) -> Bool {
+        func invisible(_ e: EntityDescription) -> Bool {
+            e.scale.x == 0 && e.scale.y == 0 && e.scale.z == 0 && e.children.allSatisfy(invisible)
+        }
+        return scene.runMode == .device && !scene.entities.isEmpty && scene.entities.allSatisfy(invisible)
+    }
+
+    // ponytail: qd-phone.html is the only phone page the server ships (Studio links every phone-only game to it);
+    // a per-game page field in the scene is the upgrade path when a second phone-only game exists.
+    nonisolated static func phonePageURL(base: URL, gameId: String, version: Int, name: String) -> URL? {
+        var parts = URLComponents(url: base.appendingPathComponent("qd-phone.html"), resolvingAgainstBaseURL: false)
+        parts?.queryItems = [
+            URLQueryItem(name: "game", value: gameId),
+            URLQueryItem(name: "name", value: name.isEmpty ? "Player" : name),
+            URLQueryItem(name: "version", value: String(version)),
+        ]
+        return parts?.url
     }
 
     // MARK: Friends

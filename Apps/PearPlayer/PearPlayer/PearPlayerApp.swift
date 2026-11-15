@@ -28,6 +28,7 @@ private struct RootView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .environment(\.avatarSource, model.avatarSource)
         .tint(PearTheme.accent)
+        .preferredColorScheme(.dark)
         .foregroundStyle(PearTheme.text)
         .background(PearTheme.bgField.ignoresSafeArea())
         #if os(macOS)

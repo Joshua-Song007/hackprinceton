@@ -18,7 +18,7 @@ public enum Playability: Sendable, Equatable {
     /// 3. The game's required tier must not exceed the device's `maxTier`.
     public static func evaluate(_ entry: CatalogEntry, on profile: DeviceProfile) -> Playability {
         if entry.runMode == "device" {
-            if profile.kind != .iPhone { return .needsPhone }
+            if !profile.sensors.contains(.motion) { return .needsPhone }
         } else {
             if !profile.sensors.contains(.display) { return .needsDisplay }
             if !profile.sensors.contains(.motion) && !profile.sensors.contains(.touch) {

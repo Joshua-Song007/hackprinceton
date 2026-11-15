@@ -16,7 +16,7 @@ struct PlayabilityTests {
         let matrix: [(DeviceProfile.Kind, String, Int, Playability)] = [
             (.iPhone, "device", 1, .playable), (.iPhone, "device", 2, .needsTier(2)), (.iPhone, "device", 3, .needsTier(3)),
             (.iPhone, "screen", 1, .playable), (.iPhone, "screen", 2, .needsTier(2)), (.iPhone, "screen", 3, .needsTier(3)),
-            (.iPad, "device", 1, .needsPhone), (.iPad, "device", 2, .needsPhone), (.iPad, "device", 3, .needsPhone),
+            (.iPad, "device", 1, .playable), (.iPad, "device", 2, .needsTier(2)), (.iPad, "device", 3, .needsTier(3)),
             (.iPad, "screen", 1, .playable), (.iPad, "screen", 2, .needsTier(2)), (.iPad, "screen", 3, .needsTier(3)),
             (.mac, "device", 1, .needsPhone), (.mac, "device", 2, .needsPhone), (.mac, "device", 3, .needsPhone),
             (.mac, "screen", 1, .needsController), (.mac, "screen", 2, .needsController), (.mac, "screen", 3, .needsController),
