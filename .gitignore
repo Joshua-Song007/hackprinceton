@@ -11,3 +11,5 @@ Tools/PhoneProbeHost/*.cues.json
 Packages/PearCore/.build
 Backend/target/
 .env
+
+.impeccable/hook.cache.json
