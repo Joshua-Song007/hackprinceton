@@ -62,10 +62,12 @@ private struct QuickDrawGunView: View {
                 Label("Leave", systemImage: "chevron.left").font(PearTheme.sans(17, .semibold))
             }
             .buttonStyle(PearSecondaryButtonStyle())
+            .fixedSize()
             .accessibilityHint("Leaves this Quick Draw match")
             Spacer()
             if session.refereeConnected {
                 Label("Referee screen connected", systemImage: "tv").font(PearTheme.small).foregroundStyle(PearTheme.accent)
+                    .lineLimit(1).minimumScaleFactor(0.6)
             }
             if session.link != .connected {
                 Label(session.link == .connecting ? "Connecting" : "Reconnecting", systemImage: "wifi.exclamationmark")

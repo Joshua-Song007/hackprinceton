@@ -155,11 +155,11 @@ struct QDVec: Equatable {
     func dot(_ o: QDVec) -> Double { x * o.x + y * o.y + z * o.z }
 }
 
-/// Angle between the rest gravity and the current (low-passed) gravity; 80 degrees raises, 70 lowers. A vector angle has
+/// Angle between the rest gravity and the current (low-passed) gravity; 60 degrees raises, 45 lowers. A vector angle has
 /// no gimbal lock near 90 degrees, and turning about the vertical axis alone is invisible, which is fine for an arm raise.
 struct QDRaiseDetector {
-    static let raiseDeg = 80.0
-    static let lowerDeg = 70.0
+    static let raiseDeg = 60.0
+    static let lowerDeg = 45.0
 
     enum Transition { case raised, lowered }
 
@@ -216,8 +216,8 @@ struct QDRaiseDetector {
             let r = deg * .pi / 180
             for _ in 0..<60 { if let t = d.feed(QDVec(x: 0, y: sin(r), z: -cos(r))) { events.append(t) } }
         }
-        hold(0); hold(60); hold(90); hold(75); hold(60); hold(0)
-        assert(events == [.raised, .lowered], "hysteresis: 75 degrees stays raised, 60 lowers: \(events)")
+        hold(0); hold(40); hold(90); hold(50); hold(30); hold(0)
+        assert(events == [.raised, .lowered], "hysteresis: 40 degrees does not raise, 50 stays raised, 30 lowers: \(events)")
 
         assert(QDLobby.normalize(" k7qm2 ") == "K7QM2" && QDLobby.normalize("abc") == nil && QDLobby.normalize("ABCDEFGHJ") == nil)
         assert(QDLobby.randomCode().count == 5)
