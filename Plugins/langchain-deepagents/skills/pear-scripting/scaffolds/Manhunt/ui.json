@@ -2,7 +2,8 @@
   "pearui": 1,
   "route": [
     { "when": "ev.view.phase == 'countdown'", "screen": "countdown" },
-    { "when": "ev.view.phase == 'hunt'", "screen": "play" },
+    { "when": "ev.view.phase == 'hunt' && ev.you.role == 'hunter'", "screen": "hunter" },
+    { "when": "ev.view.phase == 'hunt'", "screen": "runner" },
     { "when": "ev.view.phase == 'over'", "screen": "over" },
     { "screen": "lobby" }
   ],
@@ -29,40 +30,40 @@
         { "type": "sensor", "kind": "location", "event": "location", "hz": 1, "id": "loc" },
         { "type": "text", "value": "Get ready", "style": { "size": "l", "caps": true, "align": "center" } },
         { "type": "timer", "until": "ev.view.endsAt", "style": { "size": "huge", "align": "center", "mono": true } },
-        { "type": "list", "items": "ev.view.players", "item": {
-          "type": "column", "if": "item.id == me.id", "children": [
-            { "type": "text", "value": "You are a {{item.role}}", "style": { "size": "xl", "align": "center", "tone": "accent" } }
-          ] } }
+        { "type": "text", "value": "You are a {{ev.you.role}}", "if": "ev.you.role", "style": { "size": "xl", "align": "center", "tone": "accent" } }
       ]
     },
-    "play": {
+    "hunter": {
       "type": "column",
-      "style": { "fill": "{{ev.view.alarm && 'bad'}}" },
       "children": [
         { "type": "sensor", "kind": "location", "event": "location", "hz": 1, "id": "loc" },
         { "type": "effect", "id": "catch-haptic", "on": "ev.view.caughtCount", "haptic": "success" },
         { "type": "timer", "until": "ev.view.endsAt", "style": { "size": "xl", "align": "end", "mono": true } },
-        { "type": "list", "items": "ev.view.players", "item": {
-          "type": "column", "if": "item.id == me.id && item.role == 'hunter'", "children": [
-            { "type": "text", "value": "HUNTER", "style": { "size": "l", "caps": true, "tone": "accent" } },
-            { "type": "map", "markers": "ev.view.pings", "follow": "me" },
-            { "type": "text", "value": "{{ev.view.runnersLeft}} runners left", "style": { "size": "l" } },
-            { "type": "text", "value": "Positions refresh every 30 s", "style": { "size": "s", "caps": true } },
-            { "type": "spacer" },
-            { "type": "button", "label": "TAG", "action": { "send": "tag", "data": {} } }
-          ] } },
-        { "type": "list", "items": "ev.view.players", "item": {
-          "type": "column", "if": "item.id == me.id && item.role == 'runner' && !item.caught", "children": [
-            { "type": "text", "value": "RUNNER", "style": { "size": "l", "caps": true, "tone": "accent" } },
-            { "type": "spacer" },
-            { "type": "text", "value": "{{item.hint}}", "style": { "size": "huge", "align": "center", "tone": "{{item.tone}}" } },
-            { "type": "text", "value": "Hunters: {{ev.view.huntersText}}", "style": { "size": "s", "align": "center", "caps": true } }
-          ] } },
-        { "type": "list", "items": "ev.view.players", "item": {
-          "type": "column", "if": "item.id == me.id && item.caught", "children": [
-            { "type": "text", "value": "CAUGHT", "style": { "size": "huge", "align": "center", "tone": "bad" } },
-            { "type": "text", "value": "{{ev.view.runnersLeft}} runners still free", "style": { "size": "m", "align": "center" } }
-          ] } }
+        { "type": "text", "value": "HUNTER", "style": { "size": "l", "caps": true, "tone": "accent" } },
+        { "type": "map", "markers": "ev.you.pings", "follow": "me" },
+        { "type": "text", "value": "{{ev.view.runnersLeft}} runners left", "style": { "size": "l" } },
+        { "type": "text", "value": "Positions refresh every 30 s", "style": { "size": "s", "caps": true } },
+        { "type": "spacer" },
+        { "type": "button", "label": "TAG", "action": { "send": "tag", "data": {} } }
+      ]
+    },
+    "runner": {
+      "type": "column",
+      "style": { "fill": "{{ev.you.alarm && 'bad'}}" },
+      "children": [
+        { "type": "sensor", "kind": "location", "event": "location", "hz": 1, "id": "loc" },
+        { "type": "effect", "id": "catch-haptic", "on": "ev.view.caughtCount", "haptic": "success" },
+        { "type": "timer", "until": "ev.view.endsAt", "style": { "size": "xl", "align": "end", "mono": true } },
+        { "type": "column", "if": "!ev.you.caught", "children": [
+          { "type": "text", "value": "RUNNER", "style": { "size": "l", "caps": true, "tone": "accent" } },
+          { "type": "spacer" },
+          { "type": "text", "value": "{{ev.you.hint}}", "style": { "size": "huge", "align": "center", "tone": "{{ev.you.tone}}" } },
+          { "type": "text", "value": "Hunters: {{ev.you.huntersText}}", "style": { "size": "s", "align": "center", "caps": true } }
+        ] },
+        { "type": "column", "if": "ev.you.caught", "children": [
+          { "type": "text", "value": "CAUGHT", "style": { "size": "huge", "align": "center", "tone": "bad" } },
+          { "type": "text", "value": "{{ev.view.runnersLeft}} runners still free", "style": { "size": "m", "align": "center" } }
+        ] }
       ]
     },
     "over": {

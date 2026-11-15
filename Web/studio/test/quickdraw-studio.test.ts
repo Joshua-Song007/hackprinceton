@@ -10,8 +10,7 @@ import { ScriptSandbox, type WorkerLike } from '@pear/script';
 import gameSource from '../../../Games/QuickDraw/scripts/game.js?raw';
 import playerSource from '../../../Games/QuickDraw/scripts/player.js?raw';
 import sceneJson from '../../../Games/QuickDraw/scene.json';
-import flagshipScene from '../../../Games/Flagship/scene.json';
-import hotPotatoScene from '../../../Games/HotPotato/scene.json';
+import manhuntScene from '../../../Games/Manhunt/scene.json';
 import { rigFor } from '../src/needs';
 import { isPhoneOnly, phoneLinks } from '../src/phonePlay';
 import { Project } from '../src/project';
@@ -241,8 +240,9 @@ describe('Quick Draw Play routing', () => {
 
   it('classifies only the invisible-entity device game as phone-only', () => {
     expect(isPhoneOnly(parseScene(sceneJson))).toBe(true);
-    expect(isPhoneOnly(parseScene(hotPotatoScene))).toBe(false); // device mode, but visible entities
-    expect(isPhoneOnly(parseScene(flagshipScene))).toBe(false);
+    expect(isPhoneOnly(parseScene(manhuntScene))).toBe(true);
+    expect(isPhoneOnly({ ...parseScene(sceneJson), runMode: 'screen' })).toBe(false); // invisible entities, but not a device game
+    expect(isPhoneOnly({ ...parseScene(sceneJson), entities: [{ ...parseScene(sceneJson).entities[0]!, scale: [1, 1, 1] }] })).toBe(false); // device mode, but a visible entity
     expect(isPhoneOnly({ ...parseScene(sceneJson), entities: [] })).toBe(false); // an empty device scene is not a phone-only game
   });
 

@@ -1,9 +1,22 @@
 import { describe, expect, it } from 'vitest';
 import { quat, type Quat, type Vec3 } from '@pear/core';
-import flagship from '../../../../Games/Flagship/scene.json';
 import { InputBus, SceneEvents, flattenScene, parseScene, parseInputs, parseOwnership, ownershipOf, parsePeripherals, SceneError, STALE_AFTER_MS } from '../src';
 
-const scene = parseScene(flagship);
+// Inline fixture: a head-tracked scene with a sphere trigger at the player origin, a box trigger ahead, and a looked-at entity to the left.
+const scene = parseScene({
+  name: 'Fixture',
+  requiredTier: 1,
+  playerOrigin: [0, 1.6, 0],
+  runMode: 'screen',
+  clientScripts: ['enemy', 'player'],
+  serverScripts: ['game'],
+  entities: [
+    { name: 'Crypt', position: [0, 0, 0], children: [{ name: 'Floor', position: [0, 0, -6], scale: [12, 0.1, 16] }] },
+    { name: 'Sanctuary', position: [0, 1.6, 0], components: [{ type: 'trigger', shape: 'sphere', radius: 1.2, probeSlots: ['head'] }, { type: 'script', name: 'player' }] },
+    { name: 'WraithLeft', position: [-3.5, 1.5, -6], scale: [0.9, 1.8, 0.9], components: [{ type: 'script', name: 'enemy' }] },
+    { name: 'WraithAhead', position: [0, 1.9, -9], scale: [1.2, 2.2, 1.2], components: [{ type: 'trigger', shape: 'box', size: [3, 3, 3], probeSlots: ['head'] }, { type: 'script', name: 'enemy' }] },
+  ],
+});
 
 function headPacket(over: { position?: Vec3; orientation?: Quat; t?: number; source?: string } = {}) {
   const { position, orientation = [0, 0, 0, 1], t = 0, source = 'sim' } = over;
@@ -28,17 +41,16 @@ function makeRig() {
 }
 
 describe('scene.ts', () => {
-  it('loads Games/Flagship/scene.json', () => {
-    expect(scene.name).toBe('Hollow Choir');
-    expect(scene.requiredTier).toBe(1); // lowered in 43b5dd1: heart rate only scales aggression
+  it('parses a scene with children, triggers and scripts', () => {
+    expect(scene.name).toBe('Fixture');
+    expect(scene.requiredTier).toBe(1);
     expect(scene.runMode).toBe('screen');
     expect(scene.clientScripts).toEqual(['enemy', 'player']);
     expect(scene.serverScripts).toEqual(['game']);
     expect(scene.playerOrigin).toEqual([0, 1.6, 0]);
     const world = flattenScene(scene);
     expect(world.map((e) => e.id)).toEqual([
-      'Crypt', 'Crypt/Floor', 'Crypt/Ceiling', 'Crypt/Brazier', 'Crypt/DripCistern',
-      'Sanctuary', 'WraithLeft', 'WraithRight', 'WraithAhead',
+      'Crypt', 'Crypt/Floor', 'Sanctuary', 'WraithLeft', 'WraithAhead',
     ]);
     expect(world.find((e) => e.id === 'Crypt/Floor')!.position).toEqual([0, 0, -6]);
     const sanctuary = scene.entities.find((e) => e.name === 'Sanctuary')!;

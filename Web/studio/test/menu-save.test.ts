@@ -2,19 +2,20 @@ import { parseInstructions } from '@pear/runtime';
 import { describe, expect, it } from 'vitest';
 import { matches } from '../src/menubar';
 import { Project, templateSnapshot } from '../src/project';
+import { gameSnapshot } from './games';
 import { parseProjectFile, safeFileName, serializeProject } from '../src/projectFile';
 
 describe('project file', () => {
   it('round-trips a project', () => {
-    const snap = templateSnapshot('flagship');
+    const snap = gameSnapshot('QuickDraw');
     expect(parseProjectFile(serializeProject(snap))).toEqual(snap);
   });
 
   it('keeps instructions through a file, and a file without them opens with none', () => {
     const instructions = parseInstructions({ title: 'Quick Draw', players: { min: 3, max: 3 }, roles: [{ id: 'ref', kind: 'ref' }] });
-    const snap = { ...templateSnapshot('flagship'), instructions };
+    const snap = { ...gameSnapshot('QuickDraw'), instructions };
     expect(parseProjectFile(serializeProject(snap))).toEqual(snap);
-    const plain = parseProjectFile(serializeProject(templateSnapshot('flagship')));
+    const plain = parseProjectFile(serializeProject(gameSnapshot('QuickDraw')));
     expect('instructions' in plain).toBe(false);
   });
 

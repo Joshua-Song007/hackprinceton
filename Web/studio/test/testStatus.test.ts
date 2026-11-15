@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { checkGame, type Check } from '../src/gamePanel';
 import { Project, templateSnapshot } from '../src/project';
+import { gameSnapshot } from './games';
 import { deviceCaption, devicesSubtitle, emptyPlayersText, playingText, readinessRows, readinessSummary, runLine, slotWords } from '../src/testStatus';
 
 describe('readinessRows', () => {
@@ -19,8 +20,8 @@ describe('readinessRows', () => {
   });
 
   it('a game that has everything is ready; only the not-published row is left', () => {
-    const hot = new Project(templateSnapshot('hotpotato'));
-    const r = readinessRows(checkGame(hot, 'Stopped', null).checks);
+    const game = new Project(gameSnapshot('QuickDraw'));
+    const r = readinessRows(checkGame(game, 'Stopped', null).checks);
     expect(r.fixes).toBe(0);
     expect(r.rows.map((x) => x.level)).toEqual(['optional']);
     expect(readinessSummary(r.fixes)).toBe('Ready to play');

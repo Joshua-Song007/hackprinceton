@@ -1,22 +1,19 @@
 import { describe, expect, it } from 'vitest';
 import type { SceneInputs } from '@pear/runtime';
 import { describeInputs, inferInputs, missingInputs, rigFor } from '../src/needs';
-import { templateSnapshot } from '../src/project';
+import { gameSnapshot } from './games';
 
 const none: SceneInputs = { head: false, position: false, heartRate: false, gestures: [], players: [1, 32] };
 
 describe('inferInputs', () => {
-  it('reads the hot potato template', () => {
-    const i = inferInputs(templateSnapshot('hotpotato').clientScripts);
-    expect(i.position).toBe(true);
+  it('reads the Quick Draw scripts', () => {
+    const i = inferInputs(gameSnapshot('QuickDraw').clientScripts);
     expect(i.gestures).toEqual(expect.arrayContaining(['tap']));
     expect(i.players).toEqual([1, 32]);
   });
-  it('reads the Flagship template', () => {
-    const i = inferInputs(templateSnapshot('flagship').clientScripts);
-    expect(i.head).toBe(true);
-    expect(i.heartRate).toBe(true);
-    expect(i.gestures).toEqual(expect.arrayContaining(['flick']));
+  it('reads head, position, heart rate and gestures from the script source', () => {
+    const i = inferInputs({ s: 'export default script({ onLookAt() {}, onHeartRate() {}, onTick(self, ctx) { ctx.position; }, onGesture(self, ctx, g) { if (g.type === "flick") {} } });' });
+    expect(i).toMatchObject({ head: true, position: true, heartRate: true, gestures: ['flick'] });
   });
   it('finds nothing in empty scripts', () => {
     expect(inferInputs({})).toEqual(none);

@@ -1,0 +1,228 @@
+{
+ "version": 1,
+ "selfcheck": "selfcheck.mjs",
+ "scenarios": [
+  {
+   "name": "hunter tags runner1",
+   "durationMs": 45000,
+   "devices": [
+    {
+     "name": "Hunter",
+     "kind": "phone",
+     "role": "phone",
+     "script": [
+      {
+       "at": 0,
+       "gps": {
+        "lat": 40.3431,
+        "lng": -74.6551
+       }
+      },
+      {
+       "at": 1000,
+       "gps": {
+        "lat": 40.3431,
+        "lng": -74.6550646
+       }
+      },
+      {
+       "at": 2000,
+       "gps": {
+        "lat": 40.3431,
+        "lng": -74.6550292
+       }
+      },
+      {
+       "at": 3000,
+       "gps": {
+        "lat": 40.3431,
+        "lng": -74.6549938
+       }
+      },
+      {
+       "at": 4000,
+       "gps": {
+        "lat": 40.3431,
+        "lng": -74.6549584
+       }
+      },
+      {
+       "at": 5000,
+       "gps": {
+        "lat": 40.3431,
+        "lng": -74.654923
+       }
+      },
+      {
+       "at": 6000,
+       "gps": {
+        "lat": 40.3431,
+        "lng": -74.6548876
+       }
+      },
+      {
+       "at": 7000,
+       "gps": {
+        "lat": 40.3431,
+        "lng": -74.6548522
+       }
+      },
+      {
+       "at": 8000,
+       "gps": {
+        "lat": 40.3431,
+        "lng": -74.6548168
+       }
+      },
+      {
+       "at": 9000,
+       "gps": {
+        "lat": 40.3431,
+        "lng": -74.6547814
+       }
+      },
+      {
+       "at": 10000,
+       "gps": {
+        "lat": 40.3431,
+        "lng": -74.654746
+       }
+      },
+      {
+       "at": 11000,
+       "gps": {
+        "lat": 40.3431,
+        "lng": -74.6547106
+       }
+      },
+      {
+       "at": 12000,
+       "gps": {
+        "lat": 40.3431,
+        "lng": -74.6546752
+       }
+      },
+      {
+       "at": 13000,
+       "gps": {
+        "lat": 40.3431,
+        "lng": -74.6546398
+       }
+      },
+      {
+       "at": 14000,
+       "gps": {
+        "lat": 40.3431,
+        "lng": -74.6546044
+       }
+      },
+      {
+       "at": 15000,
+       "gps": {
+        "lat": 40.3431,
+        "lng": -74.654569
+       }
+      },
+      {
+       "at": 16000,
+       "gps": {
+        "lat": 40.3431,
+        "lng": -74.6545336
+       }
+      },
+      {
+       "at": 17000,
+       "gps": {
+        "lat": 40.3431,
+        "lng": -74.6544982
+       }
+      },
+      {
+       "at": 18000,
+       "gps": {
+        "lat": 40.3431,
+        "lng": -74.6544628
+       }
+      },
+      {
+       "at": 19000,
+       "gps": {
+        "lat": 40.3431,
+        "lng": -74.6544274
+       }
+      },
+      {
+       "at": 20000,
+       "gps": {
+        "lat": 40.3431,
+        "lng": -74.654392
+       }
+      }
+     ],
+     "rules": [
+      {
+       "on": "view",
+       "when": "data.phase == 'hunt'",
+       "after": 22000,
+       "once": true,
+       "send": {
+        "name": "tag",
+        "data": {}
+       }
+      }
+     ]
+    },
+    {
+     "name": "Runner1",
+     "kind": "phone",
+     "role": "phone",
+     "script": [
+      {
+       "at": 0,
+       "gps": {
+        "lat": 40.3431,
+        "lng": -74.654392
+       }
+      }
+     ]
+    },
+    {
+     "name": "Runner2",
+     "kind": "phone",
+     "role": "phone",
+     "script": [
+      {
+       "at": 0,
+       "gps": {
+        "lat": 40.35,
+        "lng": -74.6551
+       }
+      }
+     ]
+    }
+   ],
+   "expect": [
+    {
+     "by": 40000,
+     "device": "Hunter",
+     "expr": "ev.view.caughtCount == 1"
+    },
+    {
+     "by": 40000,
+     "device": "Runner1",
+     "expr": "ev.view.runnersLeft == 1"
+    },
+    {
+     "by": 40000,
+     "device": "Hunter",
+     "expr": "ev.you.role == 'hunter'"
+    },
+    {
+     "by": 40000,
+     "device": "Runner2",
+     "expr": "ev.you.role == 'runner' && !ev.you.caught"
+    }
+   ]
+  }
+ ]
+}

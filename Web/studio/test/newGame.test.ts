@@ -56,11 +56,8 @@ describe('newGameProblems', () => {
 
 describe('templatePlayers and the starting form', () => {
   it('only a count the template chose is filled in', () => {
-    expect(templatePlayers('hotpotato')).toEqual([2, 32]);
     expect(templatePlayers('blank')).toBeNull();
     expect(templatePlayers('tapcounter')).toBeNull();
-    expect(templatePlayers('flagship')).toBeNull();
-    expect(emptyForm('hotpotato')).toMatchObject({ min: '2', max: '32' });
     expect(emptyForm('blank')).toMatchObject({ min: '', max: '', roles: [{ name: 'Player', kind: 'player' }], phases: [] });
   });
 });
@@ -81,7 +78,7 @@ describe('newGameSnapshot', () => {
   });
 
   it('keeps the template, and the project it opens as has one player limit', () => {
-    const snap = newGameSnapshot(filled({ template: 'hotpotato', min: '3', max: '5' }));
+    const snap = newGameSnapshot(filled({ template: 'tapcounter', min: '3', max: '5' }));
     expect(Object.keys(snap.clientScripts).length + Object.keys(snap.serverScripts).length).toBeGreaterThan(0);
     const p = new Project(snap);
     expect(p.playerLimits()).toEqual({ min: 3, max: 5, from: 'instructions' });

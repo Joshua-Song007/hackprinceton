@@ -7,6 +7,7 @@ import { menuPosition } from '../src/ui';
 import { errorRange } from '../src/editor';
 import { PreferenceStore, defaultPreferences, motionReduced, parsePreferences } from '../src/preferences';
 import { Project, templateSnapshot, walkEntities } from '../src/project';
+import { gameSnapshot } from './games';
 
 describe('preferences.ts', () => {
   it('clamps scale and font size, rejects unknown themes, trims the server URL', () => {
@@ -25,24 +26,24 @@ describe('preferences.ts', () => {
 });
 
 describe('project.ts', () => {
-  it('imports the Flagship template from Games/Flagship', () => {
-    const p = new Project(templateSnapshot('flagship'));
-    expect(p.name).toBe('Hollow Choir');
-    expect(Object.keys(p.clientScripts)).toEqual(['enemy', 'player']);
+  it('loads Quick Draw from Games/QuickDraw as a project', () => {
+    const p = new Project(gameSnapshot('QuickDraw'));
+    expect(p.name).toBe('Quick Draw');
+    expect(Object.keys(p.clientScripts)).toEqual(['player']);
     expect(Object.keys(p.serverScripts)).toEqual(['game']);
-    expect(p.clientScripts.player).toContain('onTriggerEnter');
+    expect(p.clientScripts.player).toContain('onGesture');
     expect(p.description().entities.length).toBeGreaterThan(0);
   });
 
   it('raw entity ids match flattenScene ids', () => {
-    const p = new Project(templateSnapshot('flagship'));
+    const p = new Project(gameSnapshot('QuickDraw'));
     const ids: string[] = [];
     walkEntities(p.scene, (_e, id) => ids.push(id));
     expect(ids).toEqual(flattenScene(p.description()).map((e) => e.id));
   });
 
   it('tracks dirty state and keeps scene script lists in sync', () => {
-    const p = new Project(templateSnapshot('flagship'));
+    const p = new Project(gameSnapshot('QuickDraw'));
     expect(p.dirty).toBe(false);
     p.setScript('client', 'player', '// edited');
     expect(p.dirty).toBe(true);
@@ -52,19 +53,19 @@ describe('project.ts', () => {
     expect(p.addScript('server', 'extra')).toMatch(/already exists/);
     expect(p.addScript('client', 'bad name')).toMatch(/start with a letter/);
     expect(p.renameScript('client', 'player', 'hero')).toBeUndefined();
-    expect(p.scene.clientScripts).toEqual(['enemy', 'hero']);
-    expect(p.entity('Sanctuary')!.components).toContainEqual({ type: 'script', name: 'hero' });
+    expect(p.scene.clientScripts).toEqual(['hero']);
+    expect(p.entity('PlayerScriptHost')!.components).toContainEqual({ type: 'script', name: 'hero' });
     p.deleteScript('server', 'extra');
     const v = p.toVersion();
     expect(v.server_scripts).toEqual({ game: p.serverScripts.game });
-    expect(v.run_mode).toBe('screen');
-    expect(Object.keys(v.client_scripts)).toEqual(['enemy', 'hero']);
+    expect(v.run_mode).toBe('device');
+    expect(Object.keys(v.client_scripts)).toEqual(['hero']);
   });
 
   it('edits an entity through updateEntity and flags the project dirty', () => {
-    const p = new Project(templateSnapshot('flagship'));
-    expect(p.updateEntity('Sanctuary', (e) => (e.position = [1, 2, 3]))).toBe(true);
-    expect(p.description().entities.find((e) => e.name === 'Sanctuary')!.position).toEqual([1, 2, 3]);
+    const p = new Project(gameSnapshot('QuickDraw'));
+    expect(p.updateEntity('PlayerScriptHost', (e) => (e.position = [1, 2, 3]))).toBe(true);
+    expect(p.description().entities.find((e) => e.name === 'PlayerScriptHost')!.position).toEqual([1, 2, 3]);
     expect(p.dirty).toBe(true);
     expect(p.updateEntity('Nope', () => {})).toBe(false);
   });
@@ -165,7 +166,7 @@ describe('account.ts publishIfChanged', () => {
     acc.gameId = 'g1';
     let n = 0;
     (acc as unknown as { client: unknown }).client = { publish: async () => ({ version: ++n, game_id: 'g1' }) };
-    const p = new Project(templateSnapshot('flagship'));
+    const p = new Project(gameSnapshot('QuickDraw'));
     expect(await acc.publishIfChanged(p)).toEqual({ version: 1, published: true });
     expect(await acc.publishIfChanged(p)).toEqual({ version: 1, published: false });
     p.setCloud('g1', 1);

@@ -207,6 +207,16 @@
    "by": 40000,
    "device": "Runner1",
    "expr": "ev.view.runnersLeft == 1"
+  },
+  {
+   "by": 40000,
+   "device": "Hunter",
+   "expr": "ev.you.role == 'hunter'"
+  },
+  {
+   "by": 40000,
+   "device": "Runner2",
+   "expr": "ev.you.role == 'runner' && !ev.you.caught"
   }
  ]
 }

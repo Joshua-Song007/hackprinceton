@@ -7,7 +7,7 @@ export interface PhoneLink { label: string; url: string }
 
 const invisible = (e: EntityDescription): boolean => e.scale.every((s) => s === 0) && e.children.every(invisible);
 
-/** A device game whose every entity is zero-scale: its players are phones, not avatars in a scene. HotPotato and screen games have visible entities. */
+/** A device game whose every entity is zero-scale: its players are phones, not avatars in a scene. Screen games and device games with visible entities are not phone-only. */
 export function isPhoneOnly(scene: SceneDescription): boolean {
   return scene.runMode === 'device' && scene.entities.length > 0 && scene.entities.every(invisible);
 }
