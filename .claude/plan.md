@@ -379,7 +379,7 @@ Not planned: multiple developer roles or audit log (one developer role for the h
 ### 14.3 Headless sim
 - [x] `Web/packages/pear-sim/src/headless.ts` + `bin/pear-sim-run` — C2 over real `/play` sockets; Quick Draw scenario passes (Built 2026-11-15 `f62b61f`: `Web/packages/pear-sim/bin/pear-sim-run.ts`, `Games/QuickDraw/scenario.json` (2 phones + iPad referee, reactive rules) passed on hosted in 19 s; pear-sim depends on `@pear/ui` for expr, recorded in architecture.md)
 ### 14.4 Pear MCP server
-- [ ] `Tools/pear-mcp/` — C3 over `@modelcontextprotocol/sdk` stdio
+- [x] `Tools/pear-mcp/` — C3 over `@modelcontextprotocol/sdk` stdio (Built 2026-11-15 by Jacob, PR #183 merged `8c58e9a`: `src/index.js`, `src/pear.js`, `src/kit.js`; script files map as `scripts/client|server/<name>.js`, other files become assets with `/` → `_` in the name; `test.mjs` passes against hosted incl. run_scenario, `test-write.mjs` against a mock API; Deep Agents `pear_tools.load_tools()` loads all 8 tools. Open follow-up: pass the token to the runner via env, not argv)
 ### 14.5 Deep Agents uses Pear MCP + loop
 - [x] `Plugins/langchain-deepagents/runtime/` — MCP client (langchain-mcp-adapters), loop prompt: write → run_scenario → fix until expect passes; external MCP servers from config (Built 2026-11-15 `a434312`: `runtime/pear_tools.py` (env `PEAR_MCP_COMMAND`, `PEAR_MCP_ARGS`, `PEAR_EXTRA_MCP`), mode `game` in `runtime/server.py`, CLI `runtime/game_cli.py` (`uv run python runtime/game_cli.py "<prompt>"`), `tests/test_game_mode.py`; 70 pytest pass; never run against a real MCP server since 14.4 is not built)
 ### 14.6 Studio Live Preview tab
