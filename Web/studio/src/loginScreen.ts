@@ -9,7 +9,7 @@ import { renderSignupForm } from './signupScreen';
 
 export function renderLoginScreen(root: HTMLElement, account: AccountController, prefs: PreferenceStore, onDone: () => void): void {
   const server = button('', () => openSettingsSheet(prefs), { variant: 'borderless' });
-  const showServer = () => { server.textContent = `Server: ${account.serverUrl || 'this page'}`; };
+  const showServer = () => { server.textContent = `Server: ${account.serverUrl || 'this page'} · Change`; server.title = 'Change the server in Settings'; };
   showServer();
   prefs.onChange(showServer);
   const user = el('input', { type: 'text', 'aria-label': 'Username', placeholder: 'Username', spellcheck: 'false', autocomplete: 'username' });
