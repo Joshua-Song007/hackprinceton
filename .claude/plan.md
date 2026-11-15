@@ -330,7 +330,7 @@ Not planned: multiple developer roles or audit log (one developer role for the h
 
 ### Status: RESUMED 2026-11-15 03:40 (user): remote Windows workers (Jacob, Tien) implement every non-Swift item fully polished, tested, judge-ready; this Mac laptop merges Swift, reviews, runs and gives feedback. (Paused 03:30–03:40.)
 - Built on main: 14.1 (`07b267f`), 14.3 (`f62b61f`), 14.5 (`a434312`). Built on a pushed branch, not merged: 14.2 `feat/pearui-swift` (`72cf8d2`, iOS Simulator build passes, not run on a device).
-- Not built: 14.4, 14.6, 14.7, plus `Schema/pearui.schema.json`. Partial, uncommitted work from stopped workers: `.claude/worktrees/agent-afb58de7c51f3c48b` (14.4), `agent-a0ae30f8a66da0dad` (14.6), `agent-a075703c3defe4511` (14.7, game.js edit started). Local only; inspect before reuse, else restart from the briefs below.
+- Not built: 14.6 (Tien, #181). 14.4 and 14.7 merged (Jacob). Partial, uncommitted work from stopped workers: `.claude/worktrees/agent-afb58de7c51f3c48b` (14.4), `agent-a0ae30f8a66da0dad` (14.6), `agent-a075703c3defe4511` (14.7, game.js edit started). Local only; inspect before reuse, else restart from the briefs below.
 - Resume order: merge `feat/pearui-swift` → 14.4 (unblocks 14.5 end to end) → 14.7 (needs the `aim` server path) → 14.6 → schema file.
 - Workers for resume: run on the 2 remote laptops (V2 autonomy, `.claude/instructions.md` Speed Rules). This laptop orchestrates only.
 
@@ -385,7 +385,7 @@ Not planned: multiple developer roles or audit log (one developer role for the h
 ### 14.6 Studio Live Preview tab
 - [ ] `Web/studio/src/livePreview/` — device frames rendering PearUI from live session, MapLibre GPS map of devices, terminal of /debug frames + tool calls
 ### 14.7 Quick Draw in PearUI (validation)
-- [ ] `Games/QuickDraw/ui.json` — referee (ipad) + gun (phone) screens matching native; `Games/QuickDraw/scenario.json` passes in 14.3
+- [x] `Games/QuickDraw/ui.json` — referee (ipad) + gun (phone) screens matching native; `Games/QuickDraw/scenario.json` passes in 14.3 (Built 2026-11-15 by Jacob, PR #184 merged `0fe3fa4`: additive `aim` handler (60/45) + `view` display event + `fireAt`/`countdownEnd`/`last`/`matchInfo` state in `Games/QuickDraw/scripts/game.js`; `Games/QuickDraw/scenario-aim.json`; `Schema/pearui.schema.json`; `.length` in `Web/packages/pear-ui/src/expr.ts`; `Web/packages/pear-ui/test/quickdraw-ui.test.ts`. Limit: aim-driven reaction time is server-measured (includes latency). NOT yet published to hosted: `Deploy/publish-quickdraw.mjs` sends `assets: {}`, so it must upload ui.json as an asset first)
 ### 14.8 Later (not scheduled tonight)
 - [ ] thumbnails + gameplay image carousel; developer web About edit; marketplace map plugin with iOS look; iOS Simulator stream check
 
