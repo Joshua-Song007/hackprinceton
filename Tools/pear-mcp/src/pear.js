@@ -35,7 +35,7 @@ export async function api(method, path, body, headers = {}) {
 
 export const contentType = (name) => CT[name.split('.').pop().toLowerCase()] || null;
 
-/** Splits a files map into a NewGameVersion body, uploading non-script files as assets. */
+/** Splits a files map into a NewGameVersion body, inlining non-script files as base64 assets (the form iOS decodes). */
 export async function buildVersion(id, files, runMode = 'screen') {
   const v = { scene: null, client_scripts: {}, server_scripts: {}, assets: {}, metadata: {}, run_mode: runMode };
   for (const [path, content] of Object.entries(files)) {
@@ -48,20 +48,20 @@ export async function buildVersion(id, files, runMode = 'screen') {
       const ct = contentType(path);
       if (!ct) throw new Error(`${path}: unsupported file type (allowed: .json .html .css .js)`);
       const name = path.replace(/\//g, '_'); // asset names allow only [A-Za-z0-9._-]
-      const { sha256, size, content_type } = await api('PUT', `/api/games/${id}/assets/${name}`, new TextEncoder().encode(content), { 'content-type': ct });
-      v.assets[name] = { sha256, size, content_type };
+      v.assets[name] = { contentType: ct, data: Buffer.from(content).toString('base64') };
     }
   }
   if (!v.scene || typeof v.scene !== 'object') throw new Error('files must include scene.json (a JSON object)');
   return v;
 }
 
-/** A version back into a files map; assets are fetched by hash (public GET). */
+/** A version back into a files map; inline assets are base64-decoded, legacy sha256 ones fetched by hash. */
 export async function versionFiles(v) {
   const files = { 'scene.json': JSON.stringify(v.scene, null, 2), 'metadata.json': JSON.stringify(v.metadata, null, 2) };
   for (const [n, s] of Object.entries(v.client_scripts)) files[`scripts/client/${n}.js`] = s;
   for (const [n, s] of Object.entries(v.server_scripts)) files[`scripts/server/${n}.js`] = s;
   for (const [n, a] of Object.entries(v.assets)) {
+    if (a.data != null) { files[n] = Buffer.from(a.data, 'base64').toString(); continue; }
     const r = await fetch(`${cloudUrl()}/api/assets/${a.sha256}`);
     files[n] = r.ok ? await r.text() : `<asset fetch failed: HTTP ${r.status}>`;
   }

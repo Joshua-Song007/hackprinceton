@@ -1,13 +1,12 @@
 // Write-path test against a local mock of the Pear API (create_game, save_version, get_game, publish); never touches hosted.
 // Run: node test-write.mjs
 import assert from 'node:assert/strict';
-import { createHash } from 'node:crypto';
 import { createServer } from 'node:http';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 
 const GID = '11111111-2222-3333-4444-555555555555';
-const blobs = {}, versions = [], seen = [];
+const versions = [], seen = [];
 const srv = createServer(async (req, res) => {
   const chunks = []; for await (const c of req) chunks.push(c);
   const body = Buffer.concat(chunks);
@@ -15,18 +14,12 @@ const srv = createServer(async (req, res) => {
   const json = (code, v) => { res.writeHead(code, { 'content-type': 'application/json' }); res.end(JSON.stringify(v)); };
   let m;
   if (req.method === 'POST' && req.url === '/api/games') return json(201, { id: GID, title: JSON.parse(body).title });
-  if ((m = /^\/api\/games\/[^/]+\/assets\/([\w.-]+)$/.exec(req.url)) && req.method === 'PUT') {
-    const sha256 = createHash('sha256').update(body).digest('hex');
-    blobs[sha256] = body;
-    return json(200, { name: m[1], sha256, size: body.length, content_type: req.headers['content-type'] });
-  }
   if (req.method === 'POST' && req.url === `/api/games/${GID}/versions`) {
     const v = { ...JSON.parse(body), version: versions.length + 1 };
     versions.push(v);
     return json(201, v);
   }
   if ((m = /^\/api\/games\/[^/]+\/versions\/(\w+)$/.exec(req.url))) return json(200, versions[m[1] === 'latest' ? versions.length - 1 : m[1] - 1]);
-  if ((m = /^\/api\/assets\/(\w+)$/.exec(req.url))) { res.writeHead(200); return res.end(blobs[m[1]]); }
   json(404, {});
 });
 await new Promise((r) => srv.listen(0, '127.0.0.1', r));
@@ -43,7 +36,8 @@ const ui = '{"pearui":1,"route":[{"screen":"a"}],"screens":{"a":{"type":"text","
 const saved = await call('save_version', { id, files: { 'scene.json': '{"entities":[]}', 'scripts/server/game.js': 'export default (function(){return {};})();', 'ui.json': ui } });
 assert.equal(saved.version, 1);
 assert.deepEqual(saved.assets, ['ui.json']);
-assert.equal(versions[0].assets['ui.json'].content_type, 'application/json');
+assert.deepEqual(versions[0].assets['ui.json'], { contentType: 'application/json', data: Buffer.from(ui).toString('base64') });
+assert.equal(seen.some((l) => l.includes('/assets/')), false);
 assert.equal(versions[0].server_scripts.game.startsWith('export default'), true);
 
 const got = await call('get_game', { id });
