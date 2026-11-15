@@ -13,8 +13,12 @@
 //   GET  /api/games/{id}/cover                                 -> 200 image bytes | 404 (public, no auth)
 //   GET  /api/games/{id}/lobbies                               -> 200 [{code, players: [{id, name}]}] live lobbies
 //   POST /api/games/{id}/versions           NewGameVersion + {listed?, tags?, release_notes?, description?}
-//                                                              -> 201 GameVersion (owner only; 400 when assets[*].sha256 is not stored);
-//                                                                 the listing fields apply in the same call, so one publish lists the game
+//                                                              -> 201 GameVersion + `receipt` (owner only; 400 when assets[*].sha256 is not stored);
+//                                                                 the listing fields apply in the same call, so one publish lists the game.
+//                                                                 Publish gate (13.7): with `listed:true` the version needs a valid `metadata.manifest`
+//                                                                 and a passing `metadata.check` (pear-check report, `ok:true`), else 422.
+//                                                                 Plain saves (no `listed:true`) are not gated. Dev bypass: env PEAR_PUBLISH_GATE=off.
+//                                                                 receipt = {version, check: passed|failed|missing, join: {ws, default_lobby}}
 //   GET  /api/games/{id}/versions/{version} number or "latest" -> 200 GameVersion
 
 use axum::body::Bytes;
@@ -241,17 +245,45 @@ struct PublishRequest {
     listing: Listing,
 }
 
+/// Publish gate (13.7, provisional): listing a version needs a manifest and a passing pear-check report.
+fn gate(v: &NewGameVersion, listing: &Listing, bypass: bool) -> Result<(), &'static str> {
+    if bypass || listing.listed != Some(true) {
+        return Ok(());
+    }
+    if v.metadata.get("manifest").is_none() {
+        return Err("metadata.manifest is required to publish");
+    }
+    match check_status(&v.metadata) {
+        "passed" => Ok(()),
+        "failed" => Err("metadata.check reports failures"),
+        _ => Err("metadata.check (pear-check report) is required to publish"),
+    }
+}
+
+fn check_status(metadata: &serde_json::Value) -> &'static str {
+    match metadata.get("check").and_then(|c| c.get("ok")).and_then(|ok| ok.as_bool()) {
+        Some(true) => "passed",
+        Some(false) => "failed",
+        None => "missing",
+    }
+}
+
 async fn publish_version(
     State(state): State<AppState>,
     headers: HeaderMap,
     Path(game_id): Path<String>,
     Json(req): Json<PublishRequest>,
-) -> Result<(StatusCode, Json<GameVersion>), StatusCode> {
+) -> Result<(StatusCode, Json<serde_json::Value>), StatusCode> {
     let account = require_account(&headers).await?;
     let PublishRequest { version: body, listing } = req;
     if !valid_uuid(&game_id) || !valid_version(&body) || !valid_listing(&listing) {
         return Err(StatusCode::BAD_REQUEST);
     }
+    let bypass = std::env::var("PEAR_PUBLISH_GATE").is_ok_and(|v| v == "off");
+    gate(&body, &listing, bypass).map_err(|e| {
+        eprintln!("games: publish gate: {e}");
+        StatusCode::UNPROCESSABLE_ENTITY
+    })?;
     let pool = state.db.as_ref().ok_or(StatusCode::SERVICE_UNAVAILABLE)?;
     require_editor(pool, &account, &game_id).await?;
     crate::api::assets::check_refs(&body.assets).await?;
@@ -263,7 +295,14 @@ async fn publish_version(
         db::set_listing(pool, &game_id, &trim_tags(listing)).await.map_err(|e| db_err("publish", e))?;
     }
     session::reload(&game_id, &v); // a live session restarts on the new version
-    Ok((StatusCode::CREATED, Json(v)))
+    let receipt = serde_json::json!({
+        "version": v.version,
+        "check": check_status(&v.metadata),
+        "join": { "ws": format!("/play/{game_id}"), "default_lobby": session::OPEN_LOBBY },
+    });
+    let mut out = serde_json::to_value(&v).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    out["receipt"] = receipt;
+    Ok((StatusCode::CREATED, Json(out)))
 }
 
 async fn fetch_version(
@@ -433,6 +472,7 @@ mod tests {
         assert!(!g.listed);
         let path = format!("/api/games/{}/versions", g.id);
         let mut body = serde_json::to_value(nv("device")).unwrap();
+        body["metadata"] = json!({ "manifest": { "format": "pear-game/1", "name": "T" }, "check": { "ok": true } });
         // Without listing fields the game stays unlisted.
         let r = request_with(Some(mem.clone()), &post_json(&path, Some(&t), &body.to_string())).await;
         assert!(r.starts_with("HTTP/1.1 201"), "{r}");
@@ -455,6 +495,48 @@ mod tests {
         let r = request_with(Some(mem.clone()), &put).await;
         assert!(r.starts_with("HTTP/1.1 200"), "{r}");
         assert!(db::list_catalog(&mem).await.unwrap().is_empty());
+    }
+
+    #[test]
+    fn gate_needs_manifest_and_passing_check_only_when_listing() {
+        let l = Listing { listed: Some(true), ..Default::default() };
+        let mut v = nv("screen");
+        assert!(gate(&v, &Listing::default(), false).is_ok(), "plain saves are not gated");
+        assert!(gate(&v, &l, false).is_err());
+        assert!(gate(&v, &l, true).is_ok(), "dev bypass");
+        let m = json!({ "format": "pear-game/1", "name": "T" });
+        v.metadata = json!({ "manifest": m });
+        assert!(gate(&v, &l, false).is_err(), "no check");
+        v.metadata = json!({ "manifest": m, "check": { "ok": false } });
+        assert_eq!(gate(&v, &l, false), Err("metadata.check reports failures"));
+        v.metadata = json!({ "check": { "ok": true } });
+        assert!(gate(&v, &l, false).is_err(), "no manifest");
+        v.metadata = json!({ "manifest": m, "check": { "ok": true } });
+        assert!(gate(&v, &l, false).is_ok());
+    }
+
+    #[tokio::test]
+    async fn gated_publish_rejects_without_check_and_returns_a_receipt() {
+        let mem = db::Db::Mem(crate::memstore::MemStore::default());
+        let t = token();
+        let g = db::create_game(&mem, "games-test-account", "T").await.unwrap();
+        let path = format!("/api/games/{}/versions", g.id);
+        let mut body = serde_json::to_value(nv("device")).unwrap();
+        body["listed"] = json!(true);
+        body["metadata"] = json!({ "manifest": { "format": "pear-game/1", "name": "T" } });
+        let r = request_with(Some(mem.clone()), &post_json(&path, Some(&t), &body.to_string())).await;
+        assert!(r.starts_with("HTTP/1.1 422"), "{r}");
+        assert!(db::list_catalog(&mem).await.unwrap().is_empty());
+        body["metadata"]["check"] = json!({ "ok": true });
+        let r = request_with(Some(mem.clone()), &post_json(&path, Some(&t), &body.to_string())).await;
+        assert!(r.starts_with("HTTP/1.1 201"), "{r}");
+        let v: serde_json::Value = serde_json::from_str(&r[r.find('{').unwrap()..=r.rfind('}').unwrap()]).unwrap();
+        assert_eq!(v["receipt"], json!({ "version": 1, "check": "passed", "join": { "ws": format!("/play/{}", g.id), "default_lobby": "OPEN" } }));
+        // An unlisted save carries a receipt too and needs no check.
+        body["listed"] = json!(false);
+        body["metadata"] = json!({});
+        let r = request_with(Some(mem), &post_json(&path, Some(&t), &body.to_string())).await;
+        assert!(r.starts_with("HTTP/1.1 201") && r.contains("\"check\":\"missing\""), "{r}");
     }
 
     fn token() -> String {
