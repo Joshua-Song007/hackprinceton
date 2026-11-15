@@ -24,7 +24,8 @@
     "@pear/sim": "*",
     "@tauri-apps/plugin-updater": "^2.14.1",
     "codemirror": "^6.0.1",
-    "dockview-core": "^4.0.0"
+    "dockview-core": "^4.0.0",
+    "qrcode-generator": "^1.5.2"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2",
