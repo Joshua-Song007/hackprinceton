@@ -55,7 +55,7 @@ export function createTestPanel(project: Project, run: RunController): PanelView
   let moved = 0;
   let start: [number, number] = [0, 0];
   const msg = el('p', { class: 'pn-empty', role: 'status' });
-  const structureKey = () => [run.running, run.driven, run.players.map((p) => `${p.id}:${p.wander}:${p.run.recording}:${p.run.replaying}:${p.run.clip?.length ?? 0}:${p.source}:${p.botMode}:${[...p.liveDevices]}`).join(), run.rig.join(), run.relay.status, run.relay.devices.map((d) => d.id).join(), run.timeScale, run.status.kind].join('|');
+  const structureKey = () => [run.running, run.driven, run.players.map((p) => `${p.id}:${p.wander}:${p.run.recording}:${p.run.replaying}:${p.run.clip?.length ?? 0}:${p.source}:${p.botMode}:${p.run.role}:${p.run.phoneUp}:${[...p.liveDevices]}`).join(), run.rig.join(), run.relay.status, run.relay.devices.map((d) => d.id).join(), run.timeScale, run.status.kind].join('|');
 
   const slider = (label: string, input: HTMLElement, out: HTMLElement) =>
     el('div', { style: 'display:grid;grid-template-columns:72px minmax(0,1fr) 52px;align-items:center;gap:8px;font-size:11px;color:var(--text-secondary);min-height:var(--row-height)' }, [label, input, out]);
@@ -168,14 +168,18 @@ export function createTestPanel(project: Project, run: RunController): PanelView
         w.setAttribute('aria-pressed', String(p.wander));
         btns.push(w, button('Remove', () => run.removePlayer(p.id), { variant: 'small', ariaLabel: `Remove ${p.name}` }));
       }
+      const role = el('select', { 'aria-label': `Role of ${p.name}` }, [el('option', { value: 'player' }, ['Player']), el('option', { value: 'ref' }, ['Referee'])]);
+      role.value = p.run.role;
+      role.addEventListener('change', () => run.setRole(p.id, role.value as 'player' | 'ref'));
       return el('li', { style: 'grid-template-columns:minmax(0,1fr) 14px auto;gap:4px 8px' }, [
         el('span', { class: 'om-name' }, [i === 0 ? `${p.name} (you)` : p.name, sub]), dot,
-        el('span', { style: 'display:flex;gap:4px' }, btns),
+        el('span', { style: 'display:flex;gap:4px' }, [role, ...btns]),
         clipRow(p),
       ]);
     }));
-    const add = button('Add player', () => { msg.textContent = ''; run.addPlayer().catch((e) => { msg.textContent = e instanceof Error ? e.message : String(e); }); }, { variant: 'small' });
-    return [list, el('div', { style: 'padding:4px 12px' }, [add]), msg];
+    const addRole = el('select', { 'aria-label': 'Role of the new player' }, [el('option', { value: 'player' }, ['Player']), el('option', { value: 'ref' }, ['Referee'])]);
+    const add = button('Add player', () => { msg.textContent = ''; run.addPlayer(addRole.value as 'player' | 'ref').catch((e) => { msg.textContent = e instanceof Error ? e.message : String(e); }); }, { variant: 'small' });
+    return [list, el('div', { style: 'padding:4px 12px;display:flex;gap:8px;align-items:center' }, [addRole, add]), msg];
   };
 
   const mapSection = (): Node[] => {
@@ -272,6 +276,13 @@ export function createTestPanel(project: Project, run: RunController): PanelView
     for (const [label, type] of GESTURES) {
       const b = button(label, () => dev()?.gesture(type, type === 'flick' ? [1, 0, 0] : undefined), { variant: 'small' });
       b.addEventListener('mousedown', (e) => e.preventDefault()); // a mouse click keeps viewport focus, so WASD keeps walking
+      gestures.append(b);
+    }
+    if (run.rig.includes('phone')) {
+      const up = dp.run.phoneUp;
+      const b = button(up ? 'Lower phone (R)' : 'Raise phone (R)', () => run.raisePhone(), { variant: 'small', ariaLabel: up ? 'Lower the phone' : 'Raise the phone' });
+      b.setAttribute('aria-pressed', String(up));
+      b.addEventListener('mousedown', (e) => e.preventDefault());
       gestures.append(b);
     }
     let custom: ReturnType<typeof parseGestures> = {};

@@ -32,6 +32,8 @@ export interface HandlerCall {
   intensity?: number;
   /** `ctx.player.id`: this client's id on the game server (from the `_welcome` frame), null before it arrives. */
   playerId?: string | null;
+  /** `ctx.player.role`: "player" (default) or "ref"; set by Studio's Test panel, the game decides what it means. */
+  role?: 'player' | 'ref';
   /** `ctx.position`: this player's own position, only when the scene grants the location permission; else null. */
   position?: readonly [number, number, number] | null;
   /** `ctx.positionAccuracy`: meters (GPS-style horizontal accuracy), null when unknown or without the location permission. */
@@ -95,13 +97,13 @@ export class ScriptRuntime {
   private scripts = new Map<string, Loaded>();
   private selves = new Map<string, SelfObject>();
   private outputs: ScriptOutput[] = [];
-  private ctx: { intensity: number; player: { id: string | null }; position: number[] | null; positionAccuracy: number | null; remote: { fire(name: string, data?: unknown): void }; spawn(name: string): void; haptic(pattern: string, intensity: number): void };
+  private ctx: { intensity: number; player: { id: string | null; role: 'player' | 'ref' }; position: number[] | null; positionAccuracy: number | null; remote: { fire(name: string, data?: unknown): void }; spawn(name: string): void; haptic(pattern: string, intensity: number): void };
 
   constructor(prelude: string) {
     this.prelude = prelude;
     this.ctx = {
       intensity: 0,
-      player: { id: null },
+      player: { id: null, role: 'player' },
       position: null,
       positionAccuracy: null,
       remote: { fire: (name, data) => this.push({ kind: 'remote', name: String(name), data: data === undefined ? null : JSON.parse(JSON.stringify(data)) }) },
@@ -149,7 +151,7 @@ export class ScriptRuntime {
     const self = this.selfFor(c.entity);
     self.position = [...c.entity.position];
     if (c.intensity !== undefined) this.ctx.intensity = c.intensity;
-    this.ctx.player = { id: c.playerId ?? null };
+    this.ctx.player = { id: c.playerId ?? null, role: c.role ?? 'player' };
     this.ctx.position = c.position ? [...c.position] : null;
     this.ctx.positionAccuracy = c.position && c.positionAccuracy != null ? c.positionAccuracy : null;
     this.outputs = [];

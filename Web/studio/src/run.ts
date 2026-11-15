@@ -34,7 +34,7 @@ export interface LocalRunOptions {
   /** Haptic, remote, audio and spawn effects of client handlers. */
   onOutput?(output: EffectOutput, script: string): void;
   /** Plays `audio` outputs (the creator's player only); without it they are only reported through `onOutput`. */
-  audio?: Pick<ScriptAudio, 'handle'>;
+  audio?: Pick<ScriptAudio, 'handle'> & Partial<Pick<ScriptAudio, 'dispose'>>;
   /** A client script that failed to load (syntax error, unknown handler). */
   onLoadError?(script: string, message: string): void;
   /** Every USIS packet, `source` included (only the debug panel and Packets tab see it). */
@@ -54,6 +54,8 @@ export class LocalRun {
   private pendingSince: number | null = null;
   private lastStep: number;
   private busy = false;
+  /** `ctx.player.role` for this player's scripts; set from the Test panel. */
+  role: 'player' | 'ref' = 'player';
   /** Live source: packets come from `ingest` (the relay), not the manual devices. */
   live = false;
   /** Local Play only: multiplies the dt that events and `onTick` see. */
@@ -102,6 +104,7 @@ export class LocalRun {
   stop(): void {
     if (this.timer) clearInterval(this.timer);
     this.timer = null;
+    this.options.audio?.dispose?.();
     this.player?.stop();
     this.devices.stop();
     this.options.sandbox.dispose();
@@ -129,6 +132,40 @@ export class LocalRun {
     this.player = on && this.clip ? new UsisPlayer(this.clip, (p) => this.ingest(p), { loop: true, now: this.now }) : null;
     this.player?.start();
   }
+  private phoneRaised = false;
+  private phoneSeq = 0;
+  private phoneStart: number | null = null;
+  private phoneSent = false;
+
+  /** Whether the simulated phone is held up (see `raisePhone`). */
+  get phoneUp(): boolean { return this.phoneRaised; }
+
+  /**
+   * Toggles the simulated phone between rest (pitch 0) and held up (pitch 90 degrees, past any gestures.raise angle below 90);
+   * pass `up` to set it instead. The phone streams its orientation through the InputBus like a real one, so scripts get
+   * onGesture raise / lower. Returns the new state, or null when there is no phone in the rig or a replay / live source owns the input.
+   */
+  raisePhone(up: boolean = !this.phoneRaised): boolean | null {
+    if (!this.devices.has('phone') || this.player || this.live) return null;
+    if (!this.phoneSent) this.emitPhoneOrientation(); // the first packet is the rest pose, so send it before the tilt
+    this.phoneRaised = up;
+    this.emitPhoneOrientation();
+    return up;
+  }
+
+  private emitPhoneOrientation(): void {
+    this.phoneSent = true;
+    const at = this.now();
+    this.phoneStart ??= at;
+    const p: UsisPacket = {
+      v: 1, deviceId: 'sim-phone', kind: 'phone', slot: 'hand', source: 'sim',
+      t: Math.max(0, Math.round(at - this.phoneStart)), seq: this.phoneSeq++,
+      ch: { orientation: quat.fromYawPitch(0, this.phoneRaised ? Math.PI / 2 : 0) },
+    };
+    this.rec?.push(p);
+    this.ingest(p);
+  }
+
   ingest(packet: UsisPacket): void {
     const at = this.now();
     this.pendingSince ??= at;
@@ -149,6 +186,7 @@ export class LocalRun {
     if (this.busy) return;
     this.busy = true;
     try {
+      if (this.options.scene.raise && this.devices.has('phone') && !this.player && !this.live) this.emitPhoneOrientation(); // 50 Hz like a real phone, so the slot never goes stale
       const at = this.now();
       const dt = (at - this.lastStep) * this.timeScale;
       this.lastStep = at;
@@ -189,6 +227,7 @@ export class LocalRun {
       const result = await this.options.sandbox.call({
         script, handler, args, entity: { id: e.id, name: e.name, position: e.position },
         playerId: this.playerId,
+        role: this.role,
         position: this.options.scene.permissions.location ? this.position : null,
         positionAccuracy: this.options.scene.permissions.location ? this.accuracy : null,
         ...(intensity !== undefined ? { intensity } : {}),
@@ -257,6 +296,8 @@ export class ViewportHost {
   private flyFast = false;
   /** Markers for the players the creator is not driving, while running. */
   others: () => { id: string; position: readonly [number, number, number] }[] = () => [];
+  /** R while running (outside text fields): raise or lower the driven player's simulated phone. Set by RunController. */
+  onRaise?: () => void;
   /** Click on the canvas while stopped: the entity under the pointer, or null for empty space. */
   onPick?: (id: string | null) => void;
   /** Set by the composition root: the selected entity (left-drag on it slides it on the ground) and where it was dropped. */
@@ -451,8 +492,15 @@ export class ViewportHost {
       run.devices.setHeadLook(yaw + d[0], pitch + d[1]);
     };
     canvas.addEventListener('keydown', onKey);
+    const onRaiseKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (e.code !== 'KeyR' || e.repeat || e.ctrlKey || e.metaKey || e.altKey || t?.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t?.tagName ?? '')) return;
+      this.onRaise?.();
+    };
+    window.addEventListener('keydown', onRaiseKey);
     this.detachInput = [
       attachMouseLook(canvas, run.devices), attachGestureKeys(window, run.devices), () => canvas.removeEventListener('keydown', onKey),
+      () => window.removeEventListener('keydown', onRaiseKey),
     ];
   }
 }
@@ -566,6 +614,7 @@ export class RunController {
     this.relay.onPacket = (device, packet) => {
       for (const p of this.players) if (p.source === 'live' && p.liveDevices.has(device)) p.run.ingest({ ...packet, source: 'live' });
     };
+    deps.viewport.onRaise = () => void this.raisePhone();
     deps.viewport.others = () => this.players.filter((p) => p.id !== this.driven).map((p) => ({ id: p.id, position: p.run.devices.position }));
   }
 
@@ -575,6 +624,21 @@ export class RunController {
     if (!p) return;
     this.driven = id;
     this.deps.viewport.setRunning(p.run.devices);
+    for (const l of this.listeners) l();
+  }
+
+  /** Raises (or lowers) the simulated phone of a player, default the driven one: the R key and the Test panel button. Returns the new state, or null (no such player, no phone in the rig, or a replay / live source). */
+  raisePhone(id: string | null = this.driven, up?: boolean): boolean | null {
+    const p = this.players.find((x) => x.id === id);
+    const r = p ? p.run.raisePhone(up) : null;
+    if (r !== null) for (const l of this.listeners) l();
+    return r;
+  }
+
+  /** Sets what `ctx.player.role` is for one player's scripts. */
+  setRole(id: string, role: 'player' | 'ref'): void {
+    const p = this.players.find((x) => x.id === id);
+    if (p) p.run.role = role;
     for (const l of this.listeners) l();
   }
 
@@ -729,7 +793,7 @@ export class RunController {
       throw new Error('The scene is invalid, see Output.');
     }
     // A game that declares its inputs or lists peripherals gets exactly the devices that provide them (not saved: the browser's own choice stays for games that do not).
-    if (scene.inputs || Object.keys(scene.gestures).length || scene.peripherals.length) this.rig = rigFor(scene.inputs, scene.gestures, scene.peripherals);
+    if (scene.inputs || Object.keys(scene.gestures).length || scene.peripherals.length || scene.raise) this.rig = rigFor(scene.inputs, scene.gestures, scene.peripherals, !!scene.raise);
     const sandbox = new ScriptSandbox({
       onLog: (entry) => {
         debug.addOutput(entry.level, entry.text, entry.script);
@@ -823,7 +887,7 @@ export class RunController {
    * do not overlap, until the creator drives it, drags it on the map or turns on Wander. In Play it joins the in-page
    * server; on the server it opens its own /play socket.
    */
-  async addPlayer(): Promise<void> {
+  async addPlayer(role: 'player' | 'ref' = 'player'): Promise<void> {
     const { project } = this.deps;
     const sess = this.session;
     if (!this.local || !sess) throw new Error('Press Play first, then add a player.');
@@ -858,6 +922,7 @@ export class RunController {
       },
     });
     const run = p.run;
+    run.role = role;
     await run.load();
     if (!this.local || this.session !== sess) return run.stop(); // stopped while loading
     const [ox, oy, oz] = sess.scene.playerOrigin;
@@ -872,7 +937,7 @@ export class RunController {
       p.socket = client.openPlay(sess.gameId, sess.version === undefined ? {} : { version: sess.version });
       p.socket.onMessage = (frame) => { if (frame.name !== '_reload') void this.tracked(p).deliverRemote(frame.name, frame.data); };
     }
-    this.out('log', `Added ${id}.`);
+    this.out('log', `Added ${id}${role === 'ref' ? ' as referee' : ''}.`);
     this.refresh();
   }
 
@@ -1006,7 +1071,7 @@ export function createViewportPanel(host: ViewportHost, run: RunController): Pan
   const root = el('div', { class: 'vp-host', role: 'region', 'aria-label': 'Viewport', tabindex: -1 });
   const canvas = el('canvas', {
     tabindex: 0,
-    'aria-label': 'Viewport. While running: drag to look, arrow keys turn the head, and T, G, F, P and H send tap, double tap, flick, pinch and squeeze from anywhere outside text fields.',
+    'aria-label': 'Viewport. While running: drag to look, arrow keys turn the head, and T, G, F, P and H send tap, double tap, flick, pinch and squeeze, and R raises or lowers the phone, from anywhere outside text fields.',
   });
   const overlay = el('div', { class: 'vp-overlay', 'aria-hidden': 'true' });
   root.append(canvas, overlay);

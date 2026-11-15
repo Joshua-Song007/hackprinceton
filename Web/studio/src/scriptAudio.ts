@@ -61,6 +61,13 @@ export class ScriptAudio {
     this.env.speech.speak(this.env.makeUtterance(text));
   }
 
+  /** Stops everything and releases the AudioContext; a later sound makes a new one. */
+  dispose(): void {
+    this.stop();
+    void this.ctx?.close?.();
+    this.ctx = undefined;
+  }
+
   /** Stops every playing built-in sound and any speech. */
   stop(): void {
     for (const osc of this.playing) osc.stop();

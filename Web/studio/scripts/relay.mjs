@@ -1,20 +1,23 @@
 // Local device relay: phones running the Pear companion find this machine over Bonjour (_pear._tcp), stream newline-delimited
 // JSON (the PearBridge wire protocol: hello, ping/pong, output, raw USIS packets), and Studio reads them over a WebSocket.
-// Both servers stay on this machine's network (Network Rule): the WebSocket binds 127.0.0.1 and nothing is forwarded anywhere else.
-// Run: npm run relay (from Web/studio). Env: PEAR_RELAY_PORT (TCP, default 7777), PEAR_RELAY_WS_PORT (default 8787).
+// Both servers stay on this machine's network (Network Rule): nothing is forwarded anywhere else.
+// Run: npm run relay (from Web/studio). Env: PEAR_RELAY_PORT (TCP, default 7777), PEAR_RELAY_WS_PORT (default 8787),
+// PEAR_RELAY_HOST (WebSocket bind address, default 127.0.0.1; 0.0.0.0 lets other machines on the LAN read the sensor stream).
+// Security: the origin check only stops web pages; anyone on a network you expose it to can read your devices' data.
 import net from 'node:net';
 import { WebSocketServer } from 'ws';
 import { Bonjour } from 'bonjour-service';
 
 const TCP_PORT = Number(process.env.PEAR_RELAY_PORT ?? 7777);
 const WS_PORT = Number(process.env.PEAR_RELAY_WS_PORT ?? 8787);
+const HOST = process.env.PEAR_RELAY_HOST || '127.0.0.1';
 const MAX_LINE = 1 << 20;
 
 /** deviceId -> { socket, name, kind } for every device that has said hello. */
 const devices = new Map();
 // Only Studio pages (localhost dev server or the Tauri shell) may read sensor data.
 const allowedOrigin = (o) => !o || /^(https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?|tauri:\/\/localhost|https?:\/\/tauri\.localhost)$/.test(o);
-const wss = new WebSocketServer({ host: '127.0.0.1', port: WS_PORT, verifyClient: ({ origin }) => allowedOrigin(origin) });
+const wss = new WebSocketServer({ host: HOST, port: WS_PORT, verifyClient: ({ origin }) => allowedOrigin(origin) });
 
 const sendAll = (msg) => { const s = JSON.stringify(msg); for (const c of wss.clients) if (c.readyState === 1) c.send(s); };
 const announce = () => sendAll({ type: 'devices', devices: [...devices].map(([id, d]) => ({ id, name: d.name, kind: d.kind })) });
@@ -69,6 +72,6 @@ const server = net.createServer((socket) => {
 server.listen(TCP_PORT, () => {
   const bonjour = new Bonjour();
   bonjour.publish({ name: 'Pear relay', type: 'pear', port: TCP_PORT });
-  console.log(`relay: devices on tcp ${TCP_PORT} (Bonjour _pear._tcp), Studio on ws://127.0.0.1:${WS_PORT}`);
+  console.log(`relay: devices on tcp ${TCP_PORT} (Bonjour _pear._tcp), Studio on ws://${HOST}:${WS_PORT}`);
   process.on('SIGINT', () => bonjour.unpublishAll(() => process.exit(0)));
 });

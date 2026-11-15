@@ -155,6 +155,17 @@ describe('ScriptSandbox in a worker', () => {
   }, 10_000);
 });
 
+describe('ctx.player.role', () => {
+  const src = `export default script({ onTick(self, ctx) { ctx.remote.fire("r", { role: ctx.player.role }); } });`;
+  it('is "player" by default and "ref" when the call says so', () => {
+    const rt = new ScriptRuntime(prelude);
+    rt.load('t', src);
+    const role = (c: object) => (rt.call({ script: 't', entity: ref('E'), handler: 'onTick', args: [0.2], ...c }).outputs[0] as { data: { role: string } }).data.role;
+    expect(role({})).toBe('player');
+    expect(role({ role: 'ref' })).toBe('ref');
+  });
+});
+
 describe('ctx.player, ctx.position and onTick', () => {
   const src = `export default script({
     onTick(self, ctx, dt) { ctx.remote.fire("tick", { id: ctx.player.id, pos: ctx.position, dt }); },

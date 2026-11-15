@@ -33,6 +33,20 @@ describe('ScriptAudio', () => {
     expect(spoken).toEqual(['cancel', 'hands up']);
   });
 
+  it('dispose stops sounds and closes the AudioContext; the next sound makes a new one', () => {
+    const { ctx, log } = fakeContext();
+    let closed = 0;
+    (ctx as unknown as { close: () => Promise<void> }).close = async () => void closed++;
+    let made = 0;
+    const audio = new ScriptAudio({ createContext: () => (made++, ctx), warn: () => {} });
+    audio.handle({ kind: 'audio', entity: 'E', action: 'play', sound: 'beep' });
+    audio.dispose();
+    expect(closed).toBe(1);
+    expect(log.at(-1)).toBe('stop');
+    audio.handle({ kind: 'audio', entity: 'E', action: 'play', sound: 'beep' });
+    expect(made).toBe(2);
+  });
+
   it('unknown sounds and missing Web Audio or speech warn without throwing', () => {
     const warnings: string[] = [];
     const audio = new ScriptAudio({ createContext: undefined, speech: undefined, makeUtterance: undefined, warn: (m) => warnings.push(m) });
@@ -60,6 +74,7 @@ describe('LocalRun routes script outputs', () => {
     const seen: EffectOutput[] = [];
     let now = 0;
     const run = new LocalRun({ scene, clientScripts: {}, sandbox, now: () => now, audio: { handle: (o) => played.push(o) }, onOutput: (o) => seen.push(o) });
+    run.devices.removeDevice('phone'); // this test feeds its own phone packets
     const pose = (q: Quat) => {
       now += 20;
       run.ingest({ v: 1, deviceId: 'p', kind: 'phone', slot: 'hand', source: 'sim', t: now, seq: now, ch: { orientation: q } });

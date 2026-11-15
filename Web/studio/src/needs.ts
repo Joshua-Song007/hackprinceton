@@ -20,11 +20,12 @@ export function inferInputs(clientScripts: Record<string, string>): SceneInputs 
  * Devices that provide the inputs in the simulator, plus every device the scene lists as a peripheral. Head rides on
  * the AirPods head device, position is a phone GPS fix, gestures also on the phone, heart rate on the watch.
  */
-export function rigFor(inputs: SceneInputs | null | undefined, custom: Record<string, CustomGesture> = {}, peripherals: readonly PeripheralKind[] = []): SimDeviceKind[] {
+export function rigFor(inputs: SceneInputs | null | undefined, custom: Record<string, CustomGesture> = {}, peripherals: readonly PeripheralKind[] = [], raise = false): SimDeviceKind[] {
   const kinds = new Set<SimDeviceKind>(peripherals);
   if (inputs?.head) kinds.add('airpods');
   if (inputs?.gestures.length || inputs?.position) kinds.add('phone');
   if (inputs?.heartRate) kinds.add('watch');
+  if (raise) kinds.add('phone'); // gestures.raise is measured on the phone's orientation
   for (const g of Object.values(custom)) kinds.add(slotDevice(g.slot));
   return (['airpods', 'phone', 'watch'] as const).filter((k) => kinds.has(k));
 }

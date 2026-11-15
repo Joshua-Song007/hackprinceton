@@ -80,6 +80,7 @@ onTick(self, ctx, dt) { self.speed = Math.max(0, self.speed - dt); }
 | `self.calibrate()` | Makes this player's current device orientation the rest pose that gestures.raise measures from. Call it when the player holds the device in their starting position. |
 | `ctx.intensity: number` | Normalized heart rate, 0..1. Set on heart-rate calls. |
 | `ctx.player.id: string | null` | This player's id from the game server; null until the server welcome arrives. |
+| `ctx.player.role: "player" | "ref"` | The role picked for this player in the Studio Test panel (Add player: Player or Referee; your own player defaults to "player" and can be switched). Test-only: the game decides what it means, e.g. send its own "role" remote event. "player" when nothing was picked. |
 | `ctx.positionAccuracy: number | null` | Horizontal accuracy of ctx.position in meters. null without the location permission or a fix. |
 | `ctx.position: [x, y, z] | null` | This player's position. Only set when scene.permissions.location is true, else null. |
 | `ctx.remote.fire(name: string, data?: any)` | Sends a remote event to the server. The only way off the client. |
@@ -139,6 +140,12 @@ const d = ctx.intensity;
 
 ```js
 if (ctx.player.id) console.log(ctx.player.id);
+```
+
+`ctx.player.role`
+
+```js
+ctx.remote.fire("role", { role: ctx.player.role });
 ```
 
 `ctx.positionAccuracy`
@@ -224,6 +231,7 @@ onTimer(ctx, tag, data) { if (tag === "roundEnd") ctx.state.round = "over"; }
 | `ctx.now(): number` | Current time in milliseconds. |
 | `ctx.after(ms: number, tag: string, data?: any): number` | Fires onTimer after 50 ms to 1 h; at most 64 pending. Returns an id for ctx.cancel. |
 | `ctx.cancel(id: number)` | Cancels a pending ctx.after timer. |
+| `ctx.agent.run(prompt: string): Promise<string>` | Asks the hosted game agent and resolves with its reply. Server scripts only. Needs the hosted runtime: the backend must set PEAR_RUNTIME_SECRET plus the operator key env PEAR_GAME_AGENT_PROVIDER and PEAR_GAME_AGENT_KEY (operator-paid, the game never sees the key). Limits: 4000-character prompt, 10 calls per minute per game, 20 s timeout. Rejects with Error "agent runtime not configured" (any env missing, and always in Studio local runs), "agent prompt too long (max 4000 characters)", "agent rate limit exceeded (max 10 calls per minute per game)" or "agent timed out after 20s". |
 | `console.log(...args)` | Writes to the Server tab. console.warn and console.error work too. |
 
 `ctx.state`
@@ -260,6 +268,12 @@ ctx.state.id = ctx.after(1000, "roundEnd", { n: 1 });
 
 ```js
 ctx.cancel(ctx.state.id);
+```
+
+`ctx.agent.run`
+
+```js
+ctx.agent.run("Describe the winner in one line").then((t) => ctx.remote.fireAll("said", { t })).catch((e) => console.warn(String(e)));
 ```
 
 `console.log`

@@ -28,6 +28,10 @@ function inputChecks(scene: SceneJson, clientScripts: Record<string, string>): C
   const allowed = (scene.permissions as { location?: unknown } | undefined)?.location === true;
   if (position) checks.push(allowed ? { ok: true, label: 'Location permission on' } : { ok: false, label: 'Position needs the location permission', hint: 'ctx.position is null without it', fix: { label: 'Turn on', setting: 'permissions.location', value: true } });
   for (const name of Object.keys((scene.gestures as object | undefined) ?? {})) {
+    if (name === 'raise') { // not a motion gesture: it is the phone's tilt, read through onGesture
+      if (!Object.values(clientScripts).some((s) => /["']raise["']|["']lower["']/.test(s))) checks.push({ ok: true, label: 'Motion gesture raise is not used', hint: 'No client script mentions "raise" or "lower"' });
+      continue;
+    }
     if (!Object.values(clientScripts).some((s) => new RegExp(`["']${name}["']`).test(s))) checks.push({ ok: true, label: `Motion gesture ${name} is not used`, hint: `No client script mentions "${name}"` });
   }
   return checks;

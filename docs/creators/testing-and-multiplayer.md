@@ -16,6 +16,12 @@ Test > Add player (or Run > Add player) joins another simulated player (`player-
 
 Other players appear as markers in the viewport.
 
+## Raise the phone and referee
+
+A scene with `gestures.raise` gets a simulated phone. Press **R** (or the Test panel's **Raise phone** button) to tilt the phone of the player you are driving up past the threshold, then press again to lower it: it is a toggle, so `onGesture` gets `raise` then `lower`. Driving another player raises that player's phone.
+
+Each player row has a **Role** select, and Add player has one next to the button: **Player** or **Referee**. Client scripts read it as `ctx.player.role` (`"player"` or `"ref"`, default `"player"`). The game decides what it means, usually by sending its own `role` remote event. Nothing changes on the server.
+
 ## Play on server
 
 Publishes a new version and joins the hosted session (needs sign-in; see [publishing.md](publishing.md)). The server script runs in the backend, not in the page. Add player works here too; each added player signs in as its own dev account (`<your name>-p2`, `-p3`, ...) and opens its own connection, so it stays alongside player 1. If that sign-in fails, the Test panel shows the error and the player is not added.
@@ -30,7 +36,11 @@ The **Source** select picks Manual (your devices, the default) or Replay. Replay
 
 ## Live devices via relay
 
-The Source select also has **Live**. Run `npm run relay` in `Web/studio`; it advertises `_pear._tcp` for the iOS companion and passes each phone's USIS packets to Studio over `ws://127.0.0.1:8787`. Pick Live on a player, then tick the devices that feed it. That player's manual devices go silent, and a script `ctx.haptic` goes back to its phones. Without the relay the row says "Relay not running: npm run relay". Nothing leaves your machine. See [real-world-input.md](real-world-input.md).
+The Source select also has **Live**. Run `npm run relay` in `Web/studio`; it advertises `_pear._tcp` for the iOS companion and passes each phone's USIS packets to Studio over `ws://127.0.0.1:8787`. Pick Live on a player, then tick the devices that feed it. That player's manual devices go silent, and a script `ctx.haptic` goes back to its phones. Without the relay the row says "Relay not running: npm run relay". Nothing leaves your machine unless you set `PEAR_RELAY_HOST=0.0.0.0` to bind the WebSocket on the LAN (default `127.0.0.1`), so another computer's Studio can read your phones. Security: anyone on that network can then read your devices' sensor data; use it only on a network you trust. See [real-world-input.md](real-world-input.md).
+
+## Agent calls
+
+Server `ctx.agent.run(prompt)` returns a `Promise<string>` on the hosted backend (it needs the operator's `PEAR_GAME_AGENT_PROVIDER` and `PEAR_GAME_AGENT_KEY`). In local Play it always rejects with `agent runtime not configured`, so handle `.catch`. Play on server uses the real agent.
 
 ## Bots
 

@@ -50,6 +50,14 @@ describe('LocalServer', () => {
     expect(fired).toEqual([[null, 'hit', { from: 'p2', dir: [1, 0, 0] }]]);
   });
 
+  it('ctx.agent.run rejects with "agent runtime not configured" in a local run', async () => {
+    const { s, logs } = make([`export default serverScript({ onRemote(ctx) { ctx.agent.run("hi").catch((e) => console.log("err", String(e.message))); } });`]);
+    s.remote('a', 'x', null);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(logs).toEqual(['log:err agent runtime not configured']);
+  });
+
   it('after / cancel / onTimer, clamped delay, player name', () => {
     const src = `export default serverScript({
       onPlayerJoin(ctx, p) { ctx.state.who = [p.id, p.name]; },
@@ -89,14 +97,14 @@ describe('LocalServer', () => {
     expect(state(s).ok).toBe(true);
   });
 
-  it('ctx is frozen with only state, remote, now, after, cancel; no IO globals', () => {
+  it('ctx is frozen with only state, remote, now, after, cancel, agent; no IO globals', () => {
     const src = `export default serverScript({ onRemote(ctx) {
       ctx.remote.fireAll("probe", { keys: Object.keys(ctx).sort(), frozen: Object.isFrozen(ctx),
         io: [typeof fetch, typeof document, typeof WebSocket, typeof window] });
     } });`;
     const { s, fired } = make([src]);
     s.remote('a', 'x', null);
-    expect(fired[0]![2]).toEqual({ keys: ['after', 'cancel', 'now', 'remote', 'state'], frozen: true, io: ['undefined', 'undefined', 'undefined', 'undefined'] });
+    expect(fired[0]![2]).toEqual({ keys: ['after', 'agent', 'cancel', 'now', 'remote', 'state'], frozen: true, io: ['undefined', 'undefined', 'undefined', 'undefined'] });
   });
 
   it('rejects scripts that do not load', () => {

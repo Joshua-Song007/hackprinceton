@@ -56,6 +56,8 @@ export class LocalServer {
       now: () => (this.options.now ?? Date.now)(),
       after: (ms: unknown, tag: unknown, data?: unknown) => this.after(Number(ms), String(tag), clone(data)),
       cancel: (id: unknown) => this.cancel(Number(id)),
+      // The agent runtime is hosted-only: a local run rejects so the script's await fails clearly.
+      agent: Object.freeze({ run: (_prompt: unknown) => Promise.reject(new Error('agent runtime not configured')) }),
     });
   }
 
