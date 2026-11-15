@@ -98,7 +98,9 @@ fi
 
 # Server keys for the marketplace, generated on this box once.
 for key in PEAR_PLUGIN_SIGNING_KEY PEAR_SECRET_KEY PEAR_RUNTIME_SECRET; do
-  if ! grep -q "^$key=" .env; then
+  if ! grep -q "^$key=." .env; then
+    # ponytail: an empty "KEY=" line would win over the appended one in compose; drop it first.
+    sed -i "/^$key=[[:space:]]*$/d" .env
     echo "$key=$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')" >> .env
   fi
 done
