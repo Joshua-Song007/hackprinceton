@@ -108,7 +108,7 @@ const url = process.env.PEAR_E2E_URL;
 describe.skipIf(!url)('Run on server against a live backend', () => {
   it('signs in, publishes, joins /play and banish x3 gives round: won in the debug state', async () => {
     const client = new CloudClient({ baseUrl: url });
-    await client.signIn({ provider: 'dev', subject: `e2e-${Date.now()}`, display_name: 'e2e' });
+    await client.signIn({ provider: 'dev', subject: `sim-e2e-${Date.now()}`, display_name: 'e2e' });
     const game = await client.createGame('E2E Hollow Choir');
     const version = await client.publish(game.id, new Project(templateSnapshot('flagship')).toVersion());
     expect(version.version).toBeGreaterThan(0);

@@ -1384,7 +1384,7 @@ export class RunController {
       name = `${account.account?.display_name || account.account?.subject || 'player'}-p${n}`;
       try {
         client = new CloudClient({ baseUrl: account.serverUrl });
-        await client.signIn({ provider: 'dev', subject: name, display_name: name });
+        await client.signIn({ provider: 'dev', subject: `sim-${name}`, display_name: name });
       } catch (e) {
         throw new Error(`Could not sign in ${name}: ${describeError(e, account.serverUrl)}`);
       }

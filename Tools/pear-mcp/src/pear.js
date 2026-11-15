@@ -14,7 +14,7 @@ export async function authToken() {
   const { PEAR_DEV_USER: user, PEAR_DEV_PASSWORD: password } = process.env;
   const body = user && password
     ? { provider: 'developer', subject: user, password }
-    : { provider: 'dev', subject: `pear-mcp-${process.pid}`, display_name: 'Pear MCP' };
+    : { provider: 'dev', subject: `sim-mcp-${process.pid}`, display_name: 'Pear MCP' };
   const r = await fetch(`${cloudUrl()}/api/accounts/signin`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
   if (!r.ok) throw new Error(`sign-in failed: HTTP ${r.status}`);
   return (token = (await r.json()).token);

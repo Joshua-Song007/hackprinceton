@@ -45,7 +45,7 @@ export class DeviceSession {
     this.set('signing-in');
     try {
       const run = this.opts.run ?? Date.now().toString(36);
-      const res = await this.client.signIn({ provider: 'dev', subject: `preview-${kind}-${run}`, display_name: name });
+      const res = await this.client.signIn({ provider: 'dev', subject: `sim-preview-${kind}-${run}`, display_name: name });
       this.token = res.token;
     } catch (e) {
       this.fail(`Sign-in failed: ${e instanceof Error ? e.message : String(e)}`);

@@ -28,7 +28,7 @@ const scripts = (names) => Object.fromEntries(names.map((n) => [n, read(`scripts
 
 const owner = process.env.PEAR_DEV_USER && process.env.PEAR_DEV_PASSWORD
   ? await api("POST", "/api/accounts/signin", null, { provider: "developer", subject: process.env.PEAR_DEV_USER, password: process.env.PEAR_DEV_PASSWORD })
-  : await api("POST", "/api/accounts/signin", null, { provider: "dev", subject: "quickdraw-owner", display_name: "Quick Draw" });
+  : await api("POST", "/api/accounts/signin", null, { provider: "dev", subject: "sim-quickdraw-owner", display_name: "Quick Draw" });
 const id = existing || (await api("POST", "/api/games", owner.token, { title: process.env.PEAR_GAME_TITLE || "Quick Draw" })).id;
 // ui.json (PearUI screens, plan.md Phase 14 C1) travels as an inline version asset {contentType, data(base64)}, the
 // format PearCloud (iOS) and Studio decode. PEAR_NO_UI=1 publishes without it, so the player app keeps its built-in
