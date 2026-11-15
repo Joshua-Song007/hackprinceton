@@ -4,6 +4,7 @@ from pathlib import Path
 SCRIPT_TOOLS = {"write_file", "edit_file"}
 # The instructions agent's own tool: it validates, writes /instructions.json itself and answers "Saved" or "Error: ...".
 INSTRUCTIONS_TOOL = "submit_instructions"
+GAME_FILES = ("scene.json", "ui.json", "controller.json", "cues.json", "instructions.json")
 
 
 def new_state() -> dict:
@@ -46,12 +47,12 @@ def _status(name: str, status: str, detail: str) -> dict:
 
 
 def _in_scripts(project_dir: Path, file_path) -> bool:
-    """True for files the panel applies: anything under /scripts/, /scene.json, and /instructions.json (a proposal)."""
+    """True for files the panel applies: anything under /scripts/ or /assets/, /scene.json, /ui.json, /controller.json, /cues.json, and /instructions.json (a proposal)."""
     if not isinstance(file_path, str) or not file_path.startswith("/"):
         return False
     target = (project_dir / file_path.lstrip("/")).resolve()
-    return (target in ((project_dir / "scene.json").resolve(), (project_dir / "instructions.json").resolve())
-            or target.is_relative_to((project_dir / "scripts").resolve()))
+    return (target in [(project_dir / name).resolve() for name in GAME_FILES]
+            or any(target.is_relative_to((project_dir / folder).resolve()) for folder in ("scripts", "assets")))
 
 
 def _message_events(namespace, message, project_dir: Path, state: dict) -> list[dict]:
