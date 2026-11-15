@@ -270,3 +270,35 @@ async fn ghost_kick_needs_owner_or_developer_and_a_silent_player() {
     assert!(ends(s_a).await);
     assert_eq!(call(addr, "DELETE", &path, Some(&dev), None).await.0, 404);
 }
+
+#[tokio::test]
+async fn version_is_public_and_lists_migrations() {
+    let addr = serve().await;
+    let (st, b) = call(addr, "GET", "/api/version", None, None).await;
+    assert_eq!(st, 200);
+    assert_eq!(b["crate"], env!("CARGO_PKG_VERSION"));
+    assert_eq!(call(addr, "GET", "/api/status", None, None).await.1["version"], b["version"]);
+    assert!(b["version"].as_str().unwrap().ends_with(b["build"].as_str().unwrap()));
+    assert_eq!(b["database"], "memory");
+    assert_eq!(b["migrations"]["known"].as_array().unwrap().len(), 7);
+    // The memory store has no schema: nothing applied or pending to report.
+    assert!(b["migrations"]["applied"].is_null() && b["migrations"]["pending"].is_null());
+}
+
+// Postgres path: after `migrate` every known migration reads as applied. Skips when DATABASE_URL is unset.
+#[tokio::test]
+async fn version_reports_applied_migrations_on_postgres() {
+    let Ok(url) = std::env::var("DATABASE_URL") else { return };
+    let pool = pear_backend::db::connect_lazy(&url).expect("DATABASE_URL invalid");
+    pear_backend::db::migrate(&pool).await.expect("migrate");
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    let router = app_with_studio(Some(Db::Pg(pool)), None);
+    tokio::spawn(async move {
+        let _ = axum::serve(listener, router).await;
+    });
+    let (_, b) = call(addr, "GET", "/api/version", None, None).await;
+    assert_eq!(b["database"], "postgres");
+    assert_eq!(b["migrations"]["applied"], b["migrations"]["known"], "{b}");
+    assert_eq!(b["migrations"]["pending"], json!([]));
+}

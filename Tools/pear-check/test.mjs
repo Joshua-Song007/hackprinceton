@@ -6,7 +6,7 @@ import { filesFromDir } from '../pear-mcp/src/devtools.js';
 
 const G = (n) => new URL(`../../Games/${n}`, import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1');
 
-for (const n of ['QuickDraw', 'HotPotato']) {
+for (const n of ['QuickDraw', 'HotPotato', 'Flagship']) {
   const r = checkDir(G(n));
   assert.equal(r.ok, true, `${n}: ${JSON.stringify(r.errors)}`);
   assert.ok(r.tested.some((t) => t.startsWith('scenario ')) && r.untested.length > 0, `${n} lists tested and untested`);
