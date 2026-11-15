@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>Quick Draw - phone</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #111; color: #fff; font-family: -apple-system, system-ui, sans-serif; text-align: center; }
+  body { display: flex; flex-direction: column; padding: 12px; box-sizing: border-box; gap: 10px; transition: background .05s; }
+  body.fire { background: #d00; }
+  #conn { font-size: 14px; color: #f66; } #conn.ok { color: #6c6; }
+  #phase { font-size: 40px; font-weight: 700; text-transform: uppercase; }
+  #pitch { font-size: 96px; font-weight: 800; font-variant-numeric: tabular-nums; }
+  #needs, #scores, #result, #loc { font-size: 24px; }
+  #loc { font-size: 14px; color: #9cf; }
+  #go { flex: 1; min-height: 140px; font-size: 44px; font-weight: 800; border: 0; border-radius: 24px; background: #2a7; color: #fff; }
+</style>
+</head>
+<body>
+<div id="conn">starting…</div>
+<div id="phase">lobby</div>
+<div id="pitch">--°</div>
+<div id="needs"></div>
+<div id="scores"></div>
+<div id="result"></div>
+<div id="loc"></div>
+<button id="go">Calibrate / Ready</button>
+<script src="qd-client.js"></script>
+<script>
+const RAISE_DEG = 80; // degrees of rise from the calibrated rest pose that count as "raised"; tune on the day
+const LOWER_DEG = RAISE_DEG - 10; // hysteresis
+
+const $ = (id) => document.getElementById(id);
+let myId = null, players = [], phase = "lobby", fireAt = null, raised = false;
+let gravity = null, rest = null, usingMotion = false, lastPos = null;
+
+// Pitch = angle between the current and the rest gravity vector. A vector angle has no
+// gimbal-lock singularity near 90 degrees, unlike beta/gamma Euler angles.
+// shortcut: turning about the vertical axis alone is invisible, fine for an arm raise.
+const norm = (v) => { const l = Math.hypot(v[0], v[1], v[2]) || 1; return [v[0] / l, v[1] / l, v[2] / l]; };
+function feedGravity(v) {
+  v = norm(v);
+  gravity = gravity ? norm([0.8 * gravity[0] + 0.2 * v[0], 0.8 * gravity[1] + 0.2 * v[1], 0.8 * gravity[2] + 0.2 * v[2]]) : v;
+  onPitch();
+}
+addEventListener("devicemotion", (e) => {
+  const a = e.accelerationIncludingGravity;
+  if (!a || a.x == null || a.y == null || a.z == null) return;
+  usingMotion = true;
+  feedGravity([a.x, a.y, a.z]);
+});
+addEventListener("deviceorientation", (e) => {
+  if (usingMotion || e.beta == null || e.gamma == null) return;
+  const b = e.beta * Math.PI / 180, g = e.gamma * Math.PI / 180;
+  feedGravity([-Math.cos(b) * Math.sin(g), Math.sin(b), Math.cos(b) * Math.cos(g)]); // "up" in device axes
+});
+
+function onPitch() {
+  if (!rest) return;
+  const dot = Math.max(-1, Math.min(1, rest[0] * gravity[0] + rest[1] * gravity[1] + rest[2] * gravity[2]));
+  const deg = Math.acos(dot) * 180 / Math.PI;
+  $("pitch").textContent = Math.round(deg) + "°";
+  if (!raised && deg >= RAISE_DEG) {
+    raised = true;
+    qd.send("raised", { sinceFireMs: fireAt === null ? null : Math.round(performance.now() - fireAt) });
+  } else if (raised && deg <= LOWER_DEG) {
+    raised = false;
+    qd.send("lowered", {});
+  }
+}
+
+const nameOf = (id) => (players.find((p) => p.id === id) || {}).name || "?";
+
+function render(s) {
+  const prev = phase;
+  phase = s.phase;
+  players = s.players || players;
+  $("phase").textContent = phase;
+  $("needs").textContent = s.needs || "";
+  $("scores").textContent = players.filter((p) => p.role === "phone").map((p) => `${p.id === myId ? "YOU" : p.name} ${s.scores && s.scores[p.id] || 0}`).join("  -  ");
+  if (phase === "lobby" || phase === "ready" || phase === "arming" || phase === "roundOver") {
+    document.body.classList.remove("fire");
+  }
+  if (phase === "lobby" || phase === "ready" || phase === "arming") fireAt = null;
+  if (phase === "arming" && prev !== "arming") $("result").textContent = "";
+  // Already raised when arming starts: the server only sees transitions, so report it as a foul.
+  if (phase === "arming" && raised) qd.send("raised", { sinceFireMs: null });
+}
+
+const qd = QD.connect({
+  role: "phone",
+  onStatus: (t, ok) => { $("conn").textContent = t; $("conn").className = ok ? "ok" : ""; },
+  onEvent(name, data) {
+    if (name === "_welcome") myId = data.id;
+    else if (name === "state") render(data);
+    else if (name === "fire") {
+      fireAt = performance.now();
+      document.body.classList.add("fire");
+      if (navigator.vibrate) navigator.vibrate(200);
+    } else if (name === "roundResult") {
+      const times = Object.entries(data.reactionMs || {}).map(([id, ms]) => `${id === myId ? "you" : nameOf(id)} ${ms === null ? "-" : ms + "ms"}`).join(", ");
+      $("result").textContent = `Round ${data.round}: ${data.winnerId === myId ? "YOU WIN" : nameOf(data.winnerId) + " wins"}${data.reason === "foul" ? " (foul)" : ""}. ${times}`;
+    } else if (name === "matchOver") {
+      $("result").textContent = data.winnerId === myId ? "MATCH WON!" : nameOf(data.winnerId) + " won the match";
+    }
+  },
+});
+
+let wakeLock = null;
+async function keepAwake() {
+  try { if (navigator.wakeLock) wakeLock = await navigator.wakeLock.request("screen"); } catch {}
+}
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && wakeLock) keepAwake(); });
+
+function startLocation() {
+  if (!navigator.geolocation || startLocation.on) return;
+  startLocation.on = true;
+  navigator.geolocation.watchPosition(
+    (p) => { lastPos = p.coords; $("loc").textContent = "sharing location"; },
+    (e) => { $("loc").textContent = "location unavailable: " + e.message; },
+    { enableHighAccuracy: true },
+  );
+  setInterval(() => { if (lastPos) qd.send("pos", { lat: lastPos.latitude, lon: lastPos.longitude, acc: lastPos.accuracy }); }, 1000);
+}
+
+$("go").addEventListener("click", async () => {
+  // Both permission prompts are started synchronously inside the tap (iOS requires the gesture).
+  const asks = [DeviceOrientationEvent, DeviceMotionEvent]
+    .filter((E) => typeof E.requestPermission === "function")
+    .map((E) => E.requestPermission());
+  keepAwake();
+  startLocation();
+  try {
+    const answers = await Promise.all(asks);
+    if (answers.includes("denied")) { $("needs").textContent = "motion permission denied: allow it in Safari settings"; return; }
+  } catch (e) { $("needs").textContent = "motion permission error: " + e.message; return; }
+  $("needs").textContent = "hold still at your side...";
+  await new Promise((r) => setTimeout(r, 700)); // let the low-pass settle on the rest pose
+  if (!gravity) { $("needs").textContent = "no motion data from this device"; return; }
+  rest = gravity;
+  raised = false;
+  $("go").textContent = "Recalibrate";
+  qd.send("ready", {});
+});
+</script>
+</body>
+</html>
