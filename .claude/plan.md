@@ -328,7 +328,7 @@ Not planned: multiple developer roles or audit log (one developer role for the h
 
 ## Phase 14: Agent-built games: PearUI, headless sim, Pear MCP (MAJOR SYSTEMATIC UPDATE, agreed 2026-11-15)
 
-### Status: PAUSED (2026-11-15 03:30, by user). Do not resume without the user saying so.
+### Status: RESUMED 2026-11-15 03:40 (user): remote Windows workers (Jacob, Tien) implement every non-Swift item fully polished, tested, judge-ready; this Mac laptop merges Swift, reviews, runs and gives feedback. (Paused 03:30–03:40.)
 - Built on main: 14.1 (`07b267f`), 14.3 (`f62b61f`), 14.5 (`a434312`). Built on a pushed branch, not merged: 14.2 `feat/pearui-swift` (`72cf8d2`, iOS Simulator build passes, not run on a device).
 - Not built: 14.4, 14.6, 14.7, plus `Schema/pearui.schema.json`. Partial, uncommitted work from stopped workers: `.claude/worktrees/agent-afb58de7c51f3c48b` (14.4), `agent-a0ae30f8a66da0dad` (14.6), `agent-a075703c3defe4511` (14.7, game.js edit started). Local only; inspect before reuse, else restart from the briefs below.
 - Resume order: merge `feat/pearui-swift` → 14.4 (unblocks 14.5 end to end) → 14.7 (needs the `aim` server path) → 14.6 → schema file.
