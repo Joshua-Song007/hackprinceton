@@ -9,7 +9,7 @@ is PEAR_PROJECTS_ROOT/<X-Pear-Account>/<X-Pear-Project>, and the model key comes
 X-Pear-Model-Provider / X-Pear-Model-Key headers (that account's key): env keys are never used.
 Bind address: PEAR_RUNTIME_HOST (default 127.0.0.1).
 
-Messages: `prompt` (with `mode` "scripts" or "instructions"; the instructions agent answers with one `file_written` for
+Messages: `prompt` (with `mode` "scripts", "instructions" or "game" (Pear MCP self-iterating loop); the instructions agent answers with one `file_written` for
 instructions.json), and the agent players' `decide` -> `plan` and `report` -> `report_result`, which run beside a prompt and never
 touch the project (see players.py). Agent players use PEAR_PLAYER_MODEL (not in hosted mode) and PEAR_PLAYER_CALL_CAP.
 """
@@ -32,6 +32,7 @@ from websockets.asyncio.server import serve
 from websockets.exceptions import ConnectionClosed
 
 import instructions as game_instructions
+import pear_tools
 import players
 from translate import new_state, translate
 
@@ -115,16 +116,28 @@ def player_model(model=None):
     return resolve_model(model)
 
 
-MODES = ("scripts", "instructions")
+MODES = ("scripts", "instructions", "game")
+
+GAME_PROMPT = """You build a complete Pear game through the Pear MCP tools and iterate until it passes.
+Loop:
+1. Call kit_reference first (PearUI ui.json, script API, scenario format). Never guess the formats.
+2. create_game (or get_game to load the one asked for).
+3. Write the files: scene.json, scripts/game.js, scripts/player.js, ui.json (PearUI) and scenario.json (devices, scripted inputs, expect list).
+4. save_version {id, files} with all of them, then run_scenario with the scenario.
+5. If report.ok is false, read the failing expects and the report logs (read_logs if needed), fix the files, save_version and run again.
+Stop when report.ok is true or after 6 iterations. Never call publish unless the user asked for it.
+Finish with a short summary of which expects pass, which still fail, and the saved version number."""
 
 
-def build_agent(project_dir: Path, model=None, mode: str = "scripts"):
+def build_agent(project_dir: Path, model=None, mode: str = "scripts", tools=None):
     """The deep agent for one project. `model` (a chat model instance) is injected by tests; otherwise the env picks it."""
     model = resolve_model(model)
     if mode == "instructions":
         return game_instructions.build_agent(project_dir, model)
+    extra = {"tools": tools or [], "system_prompt": GAME_PROMPT} if mode == "game" else {}
     # The subagents specs carry no model, so they inherit this one.
     return create_deep_agent(
+        **extra,
         model=model,
         skills=["/.pear/skills/"],
         memory=["/AGENTS.md"],
@@ -166,7 +179,7 @@ async def run_prompt(message: dict, project_dir: Path, model=None, env_model=Tru
     """
     mode = message.get("mode") or "scripts"
     if mode not in MODES:
-        yield {"type": "error", "message": f"unknown mode '{mode}': use {' or '.join(MODES)}"}
+        yield {"type": "error", "message": f"unknown mode '{mode}': use {', '.join(MODES[:-1])} or {MODES[-1]}"}
         return
     if model is None and (not env_model or choose_model(os.environ) is None):
         yield {"type": "error", "message": NO_KEY_MESSAGE}
@@ -178,7 +191,8 @@ async def run_prompt(message: dict, project_dir: Path, model=None, env_model=Tru
         try:
             async with PROJECT_LOCKS.setdefault(project_dir, asyncio.Lock()):
                 prepare_project(project_dir, message.get("project") or {}, mode)
-                agent = build_agent(project_dir, model, mode)
+                tools = await pear_tools.load_tools() if mode == "game" else None
+                agent = build_agent(project_dir, model, mode, tools)
                 state = new_state()
                 async for chunk in agent.astream(
                     {"messages": [{"role": "user", "content": message["text"]}]},
