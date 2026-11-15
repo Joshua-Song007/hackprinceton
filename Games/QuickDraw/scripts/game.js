@@ -4,7 +4,7 @@
 export default (function () {
   // Tuned on the day: degrees of rise from the calibrated rest pose. The phone page owns the pitch maths and mirrors
   // this value; the server never sees orientation, so it does not use it.
-  const RAISE_DEG = 80;
+  const RAISE_DEG = 60;
   const ARM_MIN_MS = 2000;
   const ARM_MAX_MS = 6000;
   const WINS_NEEDED = 2;

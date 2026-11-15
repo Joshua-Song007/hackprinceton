@@ -35,8 +35,8 @@
 <div id="pitch"></div>
 <script src="qd-client.js"></script>
 <script>
-const RAISE_DEG = 80; // degrees of rise from the calibrated rest pose that count as "raised"; tune on the day
-const LOWER_DEG = RAISE_DEG - 10; // hysteresis
+const RAISE_DEG = 60; // degrees of rise from the calibrated rest pose that count as "raised"; tune on the day
+const LOWER_DEG = RAISE_DEG - 15; // hysteresis
 
 const $ = (id) => document.getElementById(id);
 // round is the server's stale-input token: ready and raised carry the round last seen, anything older is dropped.
