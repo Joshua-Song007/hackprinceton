@@ -15,14 +15,18 @@ const NAME = /^[A-Za-z0-9_-]+$/;
 
 function templateFiles(name) {
   if (!NAME.test(name) || !existsSync(join(GAMES, name, 'scene.json'))) throw new Error(`no template "${name}" (see list_templates)`);
-  const dir = join(GAMES, name);
+  return filesFromDir(join(GAMES, name));
+}
+
+/** A game folder (scene.json + scripts/<n>.js) as a save_version-layout files map; pear-check reads any folder through this. */
+export function filesFromDir(dir) {
   const read = (rel) => readFileSync(join(dir, rel), 'utf8');
   const scene = JSON.parse(read('scene.json'));
   const files = { 'scene.json': read('scene.json') };
   for (const n of scene.serverScripts ?? []) files[`scripts/server/${n}.js`] = read(`scripts/${n}.js`);
   for (const n of scene.clientScripts ?? []) files[`scripts/client/${n}.js`] = read(`scripts/${n}.js`);
   if (existsSync(join(dir, 'pear-game.json'))) files['metadata.json'] = JSON.stringify({ manifest: JSON.parse(read('pear-game.json')) }, null, 2);
-  for (const f of readdirSync(dir)) if (f === 'ui.json' || /^scenario.*\.json$/.test(f)) files[f] = read(f);
+  for (const f of readdirSync(dir)) if (f === 'ui.json' || f === 'check.json' || /^scenario.*\.json$/.test(f)) files[f] = read(f);
   return files;
 }
 
@@ -35,7 +39,7 @@ function listTemplates() {
 }
 
 /** Offline checks of a files map (same layout as save_version). */
-function validateGame(files) {
+export function validateGame(files) {
   const errors = [], warnings = [];
   let scene = null;
   try { scene = JSON.parse(files['scene.json'] ?? ''); } catch (e) { errors.push(`scene.json: ${e.message}`); }
@@ -101,6 +105,13 @@ export function registerDevTools(server, tool) {
   server.tool('list_templates', 'Curated reference games to start from (e.g. QuickDraw = motion duel, Manhunt = GPS chase). Start new games from the closest one.', {}, tool(async () => listTemplates()));
   server.tool('get_template', 'Files of a reference game in save_version layout. Change titles/ids before saving; scenario files reference the template game id, replace it with yours.', { name: z.string() }, tool(async ({ name }) => templateFiles(name)));
   server.tool('validate_game', 'Offline check of a files map before save_version: scene.json, script syntax (node --check, not executed), ui.json against PearUI v1, scenario shape. Fix every error first.', { files: z.record(z.string()) }, tool(async ({ files }) => validateGame(files)));
+  server.tool('check_game', 'Full offline check (pear-check): schema, fake-ctx self-check and the scenarios in check.json (N simulated phones in one lobby, virtual clock, scripted gestures). Pass `files` (save_version layout incl. check.json) or `name` of a reference game. Returns {ok, tested, untested, errors}; errors name the file. Slower than validate_game (~10 s).', {
+    files: z.record(z.string()).optional(), name: z.string().optional(), full: z.boolean().optional(),
+  }, tool(async ({ files, name, full }) => {
+    if (!files === !name) throw new Error('pass exactly one of files or name');
+    const { checkFiles } = await import('../../pear-check/check.mjs');
+    return name ? checkFiles(templateFiles(name), { dir: join(GAMES, name), full }) : checkFiles(files, { full });
+  }));
   server.tool('geo_path', 'Realistic GPS walk for scenarios: from start, follow legs [{bearingDeg (0=N,90=E), meters, pauseMs?}] at speedMps (1.4 walk, 3 jog). Returns scenario steps [{at, gps}] to paste into a device script.', {
     start: ll, legs: z.array(z.object({ bearingDeg: z.number(), meters: z.number().positive(), pauseMs: z.number().int().min(0).optional() })).min(1),
     speedMps: z.number().positive().max(12).optional(), everyMs: z.number().int().min(200).max(10000).optional(), startAt: z.number().int().min(0).optional(),
