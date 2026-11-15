@@ -45,9 +45,12 @@ assert.equal(got.files['ui.json'], ui);
 assert.ok(got.files['scripts/server/game.js']);
 
 await call('save_version', { id, files: { 'scene.json': '{"entities":[1]}' } });
-const pub = await call('publish', { id, version: 1 });
+const pub = await call('publish', { id, version: 1, description: 'Tap fast', tags: ['party'], releaseNotes: 'v1' });
 assert.deepEqual(pub, { published: 1, version: 3 });
 assert.deepEqual(versions[2].scene, { entities: [] });
+assert.equal(versions[2].listed, true);
+assert.deepEqual([versions[2].description, versions[2].tags, versions[2].release_notes], ['Tap fast', ['party'], 'v1']);
+assert.equal(versions[1].listed, undefined);
 
 const noScene = await client.callTool({ name: 'save_version', arguments: { id, files: { 'ui.json': ui } } });
 assert.ok(noScene.isError && /scene\.json/.test(noScene.content[0].text));
