@@ -1,6 +1,6 @@
 # Build Plan
 
-Product name is Pear; code keeps the Pear prefix. Phases 1-5, 8-10 and Cross-Cutting are compressed (full text in planHistory/, read via grep). Only Phase 6 (stretch), 7 and 11 are open here.
+Product name is Pear; code keeps the Pear prefix. Phases 1-5, 8-10 and Cross-Cutting are compressed (full text in planHistory/, read via grep). Only Phase 6 (stretch), 7, 11 and 12 are open here.
 
 - Checklist, worked top-to-bottom. Each item is exactly one file with a single responsibility — `stage`/`apply` should be able to touch one checklist item without needing to also change any other file. Phases are ordered by dependency (later phases consume earlier ones).
 - Paths are relative to the repo root. Packages use SwiftPM layout: `Packages/<Pkg>/Package.swift`, `Sources/<Pkg>/`, `Tests/<Pkg>Tests/`. Dependency rules come from the package table in `overview.md`; any item that bends them carries a parenthetical note.
@@ -387,6 +387,60 @@ Not built from the Projects screen v2 work (see planHistory/phase-08.md, Later c
 - [ ] `Web/studio/src/theme.css` — style `dialog.sheet` and menus outside `.scr` in the dark Pear tone while open over the gallery.
 - [ ] `Web/studio/src/studio-tokens.css` — move the editor tokens and the light theme (Paper) to the Pear palette; keep the darker tone chosen for the gallery.
 - [ ] `Web/studio/index.html` — bundle or link Fraunces and Geist (none are in the repo) and use Fraunces for the 28 px "Projects" heading.
+
+---
+
+## Phase 12: Instructions and agent players
+
+Not in overview.md; added at user request 2026-11-14 (overview.md stays unchanged until the user asks). Games are played in the real world, so a game carries written instructions (setup, roles, phases) and Studio can playtest them with simulated players driven by LangChain Deep Agents. Order is 12.1 to 12.5; local Play only (no server or join agent runners). Decisions: the instructions win over `scene.json` (lint flags the scene as out of sync); the simulation pauses while any agent is deciding; an agent sees only what a person would perceive; agents test the instructions and do not replace real players. Cloud saves keep the instructions in the version's `metadata.instructions` (no backend change). The Deep Agents plugin still runs in Studio only, never inside a running game (overview.md unchanged on that).
+
+### 12.1 Instructions data
+
+- [ ] `Web/packages/pear-runtime/src/instructions.ts` — `Instructions` type (title, summary, players {min,max}, space, setup[], roles[{id,name,brief,kind}], devices {kind: own/free/passed}, phases[{id,title,text,steps[{role,do}]}], win), lenient `parseInstructions`, and `lintInstructions(instructions, scene)` warnings: player count vs `inputs.players`, gestures vs `inputs.gestures`, devices vs `ownership`, step role undeclared, phase without steps; the scene is the side flagged out of sync. Role `kind` is `player` or `ref` and sets `ctx.player.role`.
+- [ ] `Web/packages/pear-runtime/src/index.ts` — export instructions.
+- [ ] `Web/packages/pear-runtime/test/instructions.test.ts` — parse, bad input dropped not thrown, each lint code.
+- [ ] `Web/studio/src/project.ts` — `ProjectSnapshot.instructions?` (optional); `snapshot`, `load` and `setInstructions` (one undo step); `toVersion` writes `metadata.instructions`, `snapshotOfVersion` reads it; a pending proposal with accept and reject.
+- [ ] `Web/studio/src/projectFile.ts` — serialize and parse the optional `instructions` (validated by `parseInstructions`); `FILE_VERSION` unchanged, files without it still open.
+- [ ] `Web/studio/test/menu-save.test.ts` — round trip with instructions; an old file without the field; bad instructions refused with a sentence.
+
+### 12.2 Plugin (Plugins/langchain-deepagents)
+
+- [ ] `Plugins/langchain-deepagents/runtime/translate.py` — forward `/instructions.json` writes as `file_written` (today only `/scripts/**` and `/scene.json` pass).
+- [ ] `Plugins/langchain-deepagents/tests/test_translate.py` — instructions.json forwarded; other paths still dropped.
+- [ ] `Plugins/langchain-deepagents/runtime/instructions.py` — prompts and schema check; modes `author` (plain text to instructions) and `revise` (current instructions plus a chat message to a full proposal). Prompts live in code, no new .md.
+- [ ] `Plugins/langchain-deepagents/runtime/players.py` — a deep agent per (run, player) thread; personas (follows rules, skims, cheats, confused); `decide` (instructions, role, persona, observation) returns actions plus `unsure` notes; `report`; filesystem tools denied (or a plain structured-output call if the deny form is unavailable).
+- [ ] `Plugins/langchain-deepagents/runtime/server.py` — `prepare_project` also writes `instructions.json`; `prompt` with `mode: 'instructions'`; `decide` to `plan` and `report` outside `PROJECT_LOCKS`; every reply keeps the id; per-run call cap on the server side.
+- [ ] `Plugins/langchain-deepagents/tests/test_instructions.py` — scripted model: author, revise, invalid output rejected.
+- [ ] `Plugins/langchain-deepagents/tests/test_players.py` — scripted model: valid actions, memory per player thread, persona applied, invalid action dropped, no file access.
+- [ ] `Plugins/langchain-deepagents/pear-plugin.json` — version 0.7.42 (a seed at the same version fails); permission `filesystem:project_instructions`.
+- [ ] `Web/studio/src/panels/deep-agent.ts` — send `instructions` in the project; mode selector (Scripts / Instructions); a `file_written` of `instructions.json` becomes a pending proposal, never applied directly.
+- [ ] `Web/studio/test/deep-agent.test.ts` — proposal not applied until accepted; scripts and `scene.json` unchanged.
+
+### 12.3 Agent players
+
+- [ ] `Web/packages/pear-runtime/src/observation.ts` — pure `buildObservation` from an `AvatarView`-style input plus a cue list: own haptics, audio and speech cues heard, device in hand, phase and clock, other players inside 8 m and in front (distance, bearing, gaze); no scene or server state. `Action` union (walk_to, look_at, gesture, give_device, say, wait) and `parseActions` (valid only, max 5, walk clamped to the arena).
+- [ ] `Web/packages/pear-runtime/src/index.ts` — export observation (second change to this file; do it with the 12.1 item if built together).
+- [ ] `Web/packages/pear-runtime/test/observation.test.ts` — visible vs hidden, behind and out of range, invalid actions, clamps.
+- [ ] `Web/studio/src/pauseClock.ts` — pure pausable clock: `now`, `setTimer`, `clearTimer`, `hold`, `release`; time and timers stand still while held.
+- [ ] `Web/studio/test/pauseClock.test.ts` — now frozen while held, timers fire after release with the remaining time, clear works.
+- [ ] `Web/studio/src/run.ts` — `RunController.hold()` and `release()` (the pause clock goes into LocalRun, SimDevices and `createPlayServer`; wander, walk and bots skip while held); per-player control `human | agent | idle`; per-player cue log (speak, beep, haptic); `observationFor(id)`. Local Play only. (`timeScale` alone cannot pause: it only scales `dt` in `LocalRun.step` and `walk`.)
+- [ ] `Web/studio/src/agentPlayers.ts` — a driver per agent player: decide every 1.5 s of game time; apply actions through the run (stepToward, SimDevices gesture and heart rate, holdDevice, say to Output); `hold()` while any request is in flight; 20 s timeout to wait; call cap per player (default 60); calls and cost counter; transport injected.
+- [ ] `Web/studio/src/testPanel.ts` — per-player Agent toggle, persona select, Thinking indicator, calls counter; the role select keeps `player | ref` and follows the instructions role kind; `structureKey` includes control and persona.
+- [ ] `Web/studio/test/agentPlayers.test.ts` — fake transport: run held while thinking and released after, timeout, call cap, actions applied, observation holds no hidden state.
+
+### 12.4 Playtest report
+
+- [ ] `Web/studio/src/playtestReport.ts` — pure: collect `unsure` notes (phase, line, why) and the run outcome into a report; prefill text for a revise prompt.
+- [ ] `Web/studio/src/playtestView.ts` — renders the report; "Send to chat" button.
+- [ ] `Web/studio/test/playtestReport.test.ts` — grouping, empty run, prefill text.
+
+### 12.5 Panel
+
+- [ ] `Web/studio/src/instructionsPanel.ts` — edit fields, lint list, proposal diff with Accept and Reject, playtest report; direct edits stay the creator's.
+- [ ] `Web/studio/src/main.ts` — register the panel and its menu entry.
+- [ ] `Web/studio/test/instructions.test.ts` — save and load, undo, lint shown, proposal accept and reject, report shown.
+
+Not planned: server or join agent runners; a how-to-play screen in the Player app; published games carrying instructions beyond `metadata` (Phase 11 backend items).
 
 ---
 
