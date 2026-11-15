@@ -44,7 +44,7 @@ async fn player(addr: std::net::SocketAddr, name: &str) -> String {
 }
 
 fn version() -> Value {
-    json!({"scene": {}, "client_scripts": {}, "server_scripts": {}, "assets": {}, "metadata": {}, "run_mode": "screen"})
+    json!({"scene": {}, "client_scripts": {}, "server_scripts": {}, "assets": {}, "metadata": {}, "run_mode": "screen", "listed": true})
 }
 
 #[tokio::test]

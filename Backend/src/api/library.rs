@@ -4,7 +4,7 @@
 // Auth is `accounts::authenticate`; queries go through db.rs only. Order per request: auth, db, query.
 //
 // Routes:
-//   GET /api/library -> 200 [CatalogEntry] (any signed-in account)
+//   GET /api/library -> 200 [CatalogEntry] (any signed-in account; only games their owner has listed)
 
 use axum::extract::State;
 use axum::http::{HeaderMap, StatusCode};
@@ -29,6 +29,8 @@ pub struct CatalogEntry {
     pub description: String,
     /// "/api/games/{id}/cover?v=<version>" when the game has a cover, else null.
     pub cover_url: Option<String>,
+    pub tags: Vec<String>,
+    pub release_notes: String,
 }
 
 impl From<CatalogRow> for CatalogEntry {
@@ -36,6 +38,8 @@ impl From<CatalogRow> for CatalogEntry {
         CatalogEntry {
             cover_url: r.cover_version.map(|v| format!("/api/games/{}/cover?v={v}", r.id)),
             description: r.description,
+            tags: r.tags,
+            release_notes: r.release_notes,
             id: r.id,
             title: r.title,
             author: r.author,
@@ -68,7 +72,7 @@ pub fn routes() -> Router<AppState> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::db::{Db, NewGameVersion};
+    use crate::db::{Db, Listing, NewGameVersion};
     use crate::memstore::MemStore;
     use serde_json::json;
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -105,11 +109,13 @@ mod tests {
             required_tier: 2,
             description: "d".into(),
             cover_version: Some(7),
+            tags: vec!["gps".into()],
+            release_notes: "n".into(),
         });
         assert_eq!(
             serde_json::to_value(&e).unwrap(),
             json!({"id":"i","title":"t","author":"a","latestVersion":3,"runMode":"device","requiredTier":2,
-                   "description":"d","coverUrl":"/api/games/i/cover?v=7"})
+                   "description":"d","coverUrl":"/api/games/i/cover?v=7","tags":["gps"],"releaseNotes":"n"})
         );
     }
 
@@ -127,23 +133,23 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn signed_in_lists_published_games() {
+    async fn signed_in_lists_only_listed_published_games() {
         let m = MemStore::default();
         let owner = m.upsert_account("dev", "s", "Ann");
         let g = m.create_game(&owner.id, "Mine");
         m.create_game(&owner.id, "Draft");
-        m.insert_game_version(
-            &g.id,
-            &NewGameVersion {
-                scene: json!({"requiredTier": 2}),
-                client_scripts: json!({}),
-                server_scripts: json!({}),
-                assets: json!({}),
-                metadata: json!({}),
-                run_mode: "device".into(),
-            },
-        )
-        .unwrap();
+        let hidden = m.create_game(&owner.id, "Hidden fixture");
+        let nv = NewGameVersion {
+            scene: json!({"requiredTier": 2}),
+            client_scripts: json!({}),
+            server_scripts: json!({}),
+            assets: json!({}),
+            metadata: json!({}),
+            run_mode: "device".into(),
+        };
+        m.insert_game_version(&g.id, &nv).unwrap();
+        m.insert_game_version(&hidden.id, &nv).unwrap(); // published but never listed
+        m.set_listing(&g.id, &Listing { listed: Some(true), tags: Some(vec!["gps".into()]), release_notes: Some("first".into()), description: None });
         let t = crate::api::accounts::test_token("library-test-200");
         let r = request(AppState { db: Some(Db::Mem(m)) }, &get_req(Some(&t))).await;
         assert!(r.starts_with("HTTP/1.1 200"), "{r}");
@@ -151,7 +157,7 @@ mod tests {
         let rows: serde_json::Value = serde_json::from_str(body).unwrap();
         assert_eq!(
             rows,
-            json!([{"id": g.id, "title": "Mine", "author": "Ann", "latestVersion": 1, "runMode": "device", "requiredTier": 2, "description": "", "coverUrl": null}])
+            json!([{"id": g.id, "title": "Mine", "author": "Ann", "latestVersion": 1, "runMode": "device", "requiredTier": 2, "description": "", "coverUrl": null, "tags": ["gps"], "releaseNotes": "first"}])
         );
     }
 }

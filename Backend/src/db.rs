@@ -26,6 +26,7 @@ const MIGRATION_0003: &str = include_str!("../migrations/0003_marketplace_cloud.
 const MIGRATION_0004: &str = include_str!("../migrations/0004_friends.sql");
 const MIGRATION_0005: &str = include_str!("../migrations/0005_developer.sql");
 const MIGRATION_0006: &str = include_str!("../migrations/0006_sessions.sql");
+const MIGRATION_0007: &str = include_str!("../migrations/0007_listing.sql");
 
 /// Lazy pool: no connection is made until a query runs.
 pub fn connect_lazy(url: &str) -> DbResult<PgPool> {
@@ -36,6 +37,7 @@ pub fn connect_lazy(url: &str) -> DbResult<PgPool> {
 /// skipped when its table (`accounts`, `plugins`, `plugin_versions`) already exists.
 /// 0005_developer.sql only adds columns, so it is skipped when `accounts.role` already exists.
 /// 0006_sessions.sql is skipped when the `sessions` table already exists.
+/// 0007_listing.sql is skipped when `games.listed` already exists (its UPDATE lists the rows present at that moment).
 pub async fn migrate(pool: &PgPool) -> DbResult<()> {
     // One transaction under an advisory lock: two processes (or parallel tests) migrating a fresh database would
     // otherwise both see a table missing and race on CREATE. Released at commit.
@@ -68,6 +70,16 @@ pub async fn migrate(pool: &PgPool) -> DbResult<()> {
     if !has_sessions {
         sqlx::raw_sql(MIGRATION_0006).execute(&mut *tx).await?;
     }
+    let has_listed: bool = sqlx::query(
+        "SELECT EXISTS (SELECT 1 FROM information_schema.columns \
+         WHERE table_schema = 'public' AND table_name = 'games' AND column_name = 'listed')",
+    )
+    .fetch_one(&mut *tx)
+    .await?
+    .try_get(0)?;
+    if !has_listed {
+        sqlx::raw_sql(MIGRATION_0007).execute(&mut *tx).await?;
+    }
     tx.commit().await?;
     Ok(())
 }
@@ -97,8 +109,21 @@ pub struct Game {
     pub title: String,
     pub description: String,
     pub has_cover: bool,
+    /// Shown in the player catalog (false until the owner lists it).
+    pub listed: bool,
+    pub tags: Vec<String>,
+    pub release_notes: String,
     pub created_at: String,
     pub updated_at: String,
+}
+
+/// Listing fields an owner sets (on publish or PUT /api/games/{id}); None leaves a field as is.
+#[derive(Debug, Clone, Default, Deserialize, PartialEq)]
+pub struct Listing {
+    pub listed: Option<bool>,
+    pub tags: Option<Vec<String>>,
+    pub release_notes: Option<String>,
+    pub description: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -240,7 +265,7 @@ pub async fn purge_expired_sessions(pool: &PgPool) -> DbResult<u64> {
 
 /// Game columns for a query over `games g LEFT JOIN accounts a ON a.id = g.owner_id`.
 const GAME_COLS: &str = "g.id::text AS id, g.owner_id::text AS owner_id, COALESCE(a.display_name, '') AS owner_name, \
-    g.title, g.description, (g.cover IS NOT NULL) AS has_cover, \
+    g.title, g.description, (g.cover IS NOT NULL) AS has_cover, g.listed, g.tags, g.release_notes, \
     g.created_at::text AS created_at, g.updated_at::text AS updated_at";
 const GAME_FROM: &str = "games g LEFT JOIN accounts a ON a.id = g.owner_id";
 
@@ -252,6 +277,9 @@ fn game_from_row(r: &sqlx::postgres::PgRow) -> DbResult<Game> {
         title: r.try_get("title")?,
         description: r.try_get("description")?,
         has_cover: r.try_get("has_cover")?,
+        listed: r.try_get("listed")?,
+        tags: r.try_get("tags")?,
+        release_notes: r.try_get("release_notes")?,
         created_at: r.try_get("created_at")?,
         updated_at: r.try_get("updated_at")?,
     })
@@ -393,6 +421,30 @@ pub async fn update_game_meta(db: &Db, game_id: &str, title: Option<&str>, descr
     .bind(game_id)
     .bind(title)
     .bind(description)
+    .execute(pool)
+    .await?;
+    if done.rows_affected() == 0 {
+        return Ok(None);
+    }
+    get_game(db, game_id).await
+}
+
+/// Applies the given listing fields and bumps `updated_at`; None when the game does not exist.
+pub async fn set_listing(db: &Db, game_id: &str, l: &Listing) -> DbResult<Option<Game>> {
+    let pool = match db {
+        Db::Pg(pool) => pool,
+        Db::Mem(m) => return Ok(m.set_listing(game_id, l)),
+    };
+    let done = sqlx::query(
+        "UPDATE games SET listed = COALESCE($2, listed), tags = COALESCE($3::text[], tags), \
+         release_notes = COALESCE($4, release_notes), description = COALESCE($5, description), updated_at = now() \
+         WHERE id = $1::uuid",
+    )
+    .bind(game_id)
+    .bind(l.listed)
+    .bind(l.tags.as_ref())
+    .bind(l.release_notes.as_deref())
+    .bind(l.description.as_deref())
     .execute(pool)
     .await?;
     if done.rows_affected() == 0 {
@@ -577,6 +629,8 @@ pub struct CatalogRow {
     pub description: String,
     /// Cache-busting version of the cover (microseconds of `updated_at`); None when the game has no cover.
     pub cover_version: Option<i64>,
+    pub tags: Vec<String>,
+    pub release_notes: String,
 }
 
 /// Tier a scene asks for: its `requiredTier` when that is a JSON integer, clamped to 1..=3;
@@ -585,7 +639,7 @@ pub fn catalog_tier(v: &Value) -> i32 {
     v.as_i64().map_or(1, |n| n.clamp(1, 3) as i32)
 }
 
-/// Every game that has at least one published version, newest-updated first. The tier comes from the
+/// Every listed game that has at least one published version, newest-updated first. The tier comes from the
 /// newest version's scene; the scene itself is not returned.
 pub async fn list_catalog(db: &Db) -> DbResult<Vec<CatalogRow>> {
     let pool = match db {
@@ -594,12 +648,12 @@ pub async fn list_catalog(db: &Db) -> DbResult<Vec<CatalogRow>> {
     };
     let rows = sqlx::query(
         "SELECT g.id::text AS id, g.title, a.display_name AS author, v.version AS latest_version, \
-         v.run_mode, (v.scene->'requiredTier')::text AS required_tier, g.description, \
+         v.run_mode, (v.scene->'requiredTier')::text AS required_tier, g.description, g.tags, g.release_notes, \
          CASE WHEN g.cover IS NULL THEN NULL ELSE (EXTRACT(EPOCH FROM g.updated_at) * 1000000)::bigint END AS cover_version \
          FROM games g JOIN accounts a ON a.id = g.owner_id \
          JOIN LATERAL (SELECT version, run_mode, scene FROM game_versions \
          WHERE game_id = g.id ORDER BY version DESC LIMIT 1) v ON true \
-         ORDER BY g.updated_at DESC, g.id",
+         WHERE g.listed ORDER BY g.updated_at DESC, g.id",
     )
     .fetch_all(pool)
     .await?;
@@ -619,6 +673,8 @@ pub async fn list_catalog(db: &Db) -> DbResult<Vec<CatalogRow>> {
                 required_tier: catalog_tier(&tier),
                 description: r.try_get("description")?,
                 cover_version: r.try_get("cover_version")?,
+                tags: r.try_get("tags")?,
+                release_notes: r.try_get("release_notes")?,
             })
         })
         .collect()
@@ -1035,6 +1091,15 @@ mod tests {
     }
 
     #[test]
+    fn listing_migration_lists_existing_games_and_defaults_new_ones_to_unlisted() {
+        let sql = MIGRATION_0007;
+        assert!(sql.contains("ADD COLUMN listed BOOLEAN NOT NULL DEFAULT false"));
+        let add = sql.find("ADD COLUMN listed").unwrap();
+        let backfill = sql.find("UPDATE games SET listed = true").unwrap();
+        assert!(backfill > add, "rows present before the migration are backfilled after the column exists");
+    }
+
+    #[test]
     fn catalog_tier_rules() {
         for (v, want) in [
             (json!(1), 1),
@@ -1091,12 +1156,18 @@ mod tests {
         assert_eq!(first.id, v1.id);
         assert!(fetch_game_version(&db, &g.id, Some(9)).await.unwrap().is_none());
         let unpublished = create_game(&db, &a.id, "Draft").await.unwrap();
+        assert!(!g.listed);
+        assert!(list_catalog(&db).await.unwrap().iter().all(|r| r.id != g.id), "unlisted games stay out of the catalog");
+        let listing = Listing { listed: Some(true), tags: Some(vec!["gps".into()]), release_notes: Some("v2".into()), description: None };
+        let listed = set_listing(&db, &g.id, &listing).await.unwrap().unwrap();
+        assert_eq!((listed.listed, listed.tags.clone(), listed.release_notes.as_str()), (true, vec!["gps".to_string()], "v2"));
         let catalog = list_catalog(&db).await.unwrap();
         let row = catalog.iter().find(|r| r.id == g.id).expect("published game is listed");
         assert_eq!(
             (row.latest_version, row.run_mode.as_str(), row.author.as_str(), row.required_tier),
             (2, "device", "A", 1)
         );
+        assert_eq!((row.tags.clone(), row.release_notes.as_str()), (vec!["gps".to_string()], "v2"));
         assert!(catalog.iter().all(|r| r.id != unpublished.id));
         assert!(delete_game(&db, &unpublished.id).await.unwrap());
         assert!(delete_game(&db, &g.id).await.unwrap());

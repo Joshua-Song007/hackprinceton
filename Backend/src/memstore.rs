@@ -10,7 +10,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::db::{catalog_tier, friend_code, normalize_code, FriendRef, RequestOutcome, Account, CatalogRow, Game, GameVersion, InstallRecord, NewGameVersion, PluginSummary, PluginVersion};
+use crate::db::{catalog_tier, friend_code, normalize_code, FriendRef, Listing, RequestOutcome, Account, CatalogRow, Game, GameVersion, InstallRecord, NewGameVersion, PluginSummary, PluginVersion};
 
 #[derive(Default)]
 struct Inner {
@@ -174,6 +174,9 @@ impl MemStore {
             title: title.into(),
             description: String::new(),
             has_cover: false,
+            listed: false,
+            tags: Vec::new(),
+            release_notes: String::new(),
             created_at: now.clone(),
             updated_at: now,
         };
@@ -214,6 +217,26 @@ impl MemStore {
         }
         if let Some(d) = description {
             g.description = d.into();
+        }
+        g.updated_at = now_rfc3339();
+        let g = g.clone();
+        Some(Self::decorate(&s, &g))
+    }
+
+    pub fn set_listing(&self, game_id: &str, l: &Listing) -> Option<Game> {
+        let mut s = self.lock();
+        let g = s.games.iter_mut().find(|g| g.id == game_id)?;
+        if let Some(v) = l.listed {
+            g.listed = v;
+        }
+        if let Some(t) = &l.tags {
+            g.tags = t.clone();
+        }
+        if let Some(n) = &l.release_notes {
+            g.release_notes = n.clone();
+        }
+        if let Some(d) = &l.description {
+            g.description = d.clone();
         }
         g.updated_at = now_rfc3339();
         let g = g.clone();
@@ -445,7 +468,7 @@ impl MemStore {
         self.lock().model_keys.remove(account_id);
     }
 
-    /// Same result as the SQL in `db::list_catalog`: games with at least one version, newest-updated
+    /// Same result as the SQL in `db::list_catalog`: listed games with at least one version, newest-updated
     /// first (then id). An owner with no account row gets an empty author (Postgres has a foreign key).
     pub fn list_catalog(&self) -> Vec<CatalogRow> {
         let s = self.lock();
@@ -454,6 +477,9 @@ impl MemStore {
         games
             .into_iter()
             .filter_map(|g| {
+                if !g.listed {
+                    return None;
+                }
                 let latest = s.versions.iter().filter(|v| v.game_id == g.id).max_by_key(|v| v.version)?;
                 Some(CatalogRow {
                     id: g.id.clone(),
@@ -469,6 +495,8 @@ impl MemStore {
                     required_tier: catalog_tier(&latest.scene["requiredTier"]),
                     description: g.description.clone(),
                     cover_version: s.covers.contains_key(&g.id).then(|| epoch_micros(&g.updated_at)),
+                    tags: g.tags.clone(),
+                    release_notes: g.release_notes.clone(),
                 })
             })
             .collect()
@@ -549,12 +577,36 @@ mod tests {
         NewGameVersion { scene, run_mode: run_mode.into(), ..nv("x") }
     }
 
+    fn list(m: &MemStore, id: &str) {
+        m.set_listing(id, &Listing { listed: Some(true), ..Default::default() }).unwrap();
+    }
+
+    #[test]
+    fn catalog_shows_only_listed_games_and_new_games_default_to_unlisted() {
+        let m = MemStore::default();
+        let g = m.create_game("o", "G");
+        assert!((g.listed, g.tags.is_empty(), g.release_notes.is_empty()) == (false, true, true));
+        m.insert_game_version(&g.id, &nv("a")).unwrap();
+        assert!(m.list_catalog().is_empty(), "published but unlisted");
+        let l = Listing { listed: Some(true), tags: Some(vec!["gps".into()]), release_notes: Some("n".into()), description: Some("d".into()) };
+        let got = m.set_listing(&g.id, &l).unwrap();
+        assert_eq!((got.listed, got.description.as_str()), (true, "d"));
+        let rows = m.list_catalog();
+        assert_eq!((rows.len(), rows[0].tags.clone(), rows[0].release_notes.as_str()), (1, vec!["gps".to_string()], "n"));
+        // None fields leave values alone; listed=false hides the game again.
+        m.set_listing(&g.id, &Listing { listed: Some(false), ..Default::default() }).unwrap();
+        assert_eq!(m.get_game(&g.id).unwrap().tags, vec!["gps".to_string()]);
+        assert!(m.list_catalog().is_empty());
+        assert!(m.set_listing("missing", &l).is_none());
+    }
+
     #[test]
     fn catalog_skips_unpublished_and_latest_version_wins() {
         let m = MemStore::default();
         let ann = m.upsert_account("dev", "s1", "Ann");
         let g = m.create_game(&ann.id, "Mine");
         m.create_game(&ann.id, "Draft");
+        list(&m, &g.id);
         assert!(m.list_catalog().is_empty());
         m.insert_game_version(&g.id, &nvs(json!({"requiredTier": 1}), "screen")).unwrap();
         m.insert_game_version(&g.id, &nvs(json!({"requiredTier": 2}), "device")).unwrap();
@@ -571,6 +623,8 @@ mod tests {
                 required_tier: 2,
                 description: String::new(),
                 cover_version: None,
+                tags: Vec::new(),
+                release_notes: String::new(),
             }
         );
     }
@@ -580,6 +634,8 @@ mod tests {
         let m = MemStore::default();
         let g1 = m.create_game("no-account", "A");
         let g2 = m.create_game("no-account", "B");
+        list(&m, &g1.id);
+        list(&m, &g2.id);
         m.insert_game_version(&g1.id, &nvs(json!({}), "screen")).unwrap();
         m.insert_game_version(&g2.id, &nvs(json!({"requiredTier": 9}), "screen")).unwrap();
         let rows = m.list_catalog();
@@ -593,6 +649,8 @@ mod tests {
         let m = MemStore::default();
         let g1 = m.create_game("o", "G1");
         let g2 = m.create_game("o", "G2");
+        list(&m, &g1.id);
+        list(&m, &g2.id);
         let ids = |m: &MemStore| m.list_catalog().into_iter().map(|r| r.id).collect::<Vec<_>>();
         m.insert_game_version(&g1.id, &nv("a")).unwrap();
         std::thread::sleep(std::time::Duration::from_millis(2)); // timestamps are microseconds; keep them distinct
@@ -614,6 +672,7 @@ mod tests {
         assert_eq!(p.role, "player");
         assert!(m.developer_credentials("nope").is_none());
         let g = m.create_game(&p.id, "G");
+        list(&m, &g.id);
         assert_eq!((g.owner_name.as_str(), g.has_cover), ("Player", false));
         m.insert_game_version(&g.id, &nv("a")).unwrap();
         assert_eq!(m.list_catalog()[0].cover_version, None);
