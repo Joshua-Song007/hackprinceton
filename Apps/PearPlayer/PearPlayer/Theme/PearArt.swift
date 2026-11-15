@@ -37,6 +37,8 @@ enum PearArt {
 /// A game cover: a mesh gradient in one of the Pear palettes with a large decorative symbol.
 struct CoverArt: View {
     let seed: String
+    /// The game's real cover picture; the generated art below shows while it loads, fails, or when nil.
+    var url: URL?
 
     var body: some View {
         let h = PearArt.hash(seed)
@@ -56,6 +58,13 @@ struct CoverArt: View {
                 : [c[1], c[0], c[0], c[2], c[1], c[0], c[2], c[2], c[1]]
         )
         .overlay { PosterMotif(hash: h, colors: c) }
+        .overlay {
+            if let url {
+                AsyncImage(url: url) { phase in
+                    if let image = phase.image { image.resizable().scaledToFill() }
+                }
+            }
+        }
         .clipped()
         .accessibilityHidden(true)
     }
@@ -158,13 +167,14 @@ struct AvatarView: View {
 /// fading into a canvas that darkens toward the bottom. `seed` nil draws the gradient alone.
 struct PearBackdrop: View {
     let seed: String?
+    var cover: URL?
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
         LinearGradient(colors: [PearTheme.bgField, PearTheme.bgDeep], startPoint: .top, endPoint: .bottom)
             .overlay(alignment: .top) {
                 if let seed {
-                    CoverArt(seed: seed)
+                    CoverArt(seed: seed, url: cover)
                         .frame(height: 720)
                         .blur(radius: 70)
                         .opacity(scheme == .dark ? 0.7 : 0.4)
