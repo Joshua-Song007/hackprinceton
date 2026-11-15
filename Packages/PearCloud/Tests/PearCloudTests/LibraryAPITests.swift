@@ -163,6 +163,21 @@ struct LibraryAPITests {
         #expect(req.httpBody == nil)
     }
 
+    @Test func listCatalogDescriptionAndCover() async throws {
+        let body = Data(#"""
+        [{"id":"g1","title":"T","author":"A","latestVersion":1,"runMode":"screen","requiredTier":1,
+          "description":"Run!","coverUrl":"/api/games/g1/cover?v=1731650000"},
+         {"id":"g2","title":"U","author":"A","latestVersion":1,"runMode":"screen","requiredTier":1,"coverUrl":null}]
+        """#.utf8)
+        let client = try await signedInClient { _ in (200, body) }
+        let entries = try await client.listCatalog()
+        #expect(entries[0].description == "Run!")
+        #expect(entries[0].coverURL?.absoluteString.hasSuffix("/api/games/g1/cover?v=1731650000") == true)
+        #expect(entries[0].coverURL?.host == client.baseURL.host)
+        #expect(entries[1].description == "")
+        #expect(entries[1].coverURL == nil)
+    }
+
     @Test func listCatalogEmptyArray() async throws {
         let client = try try await signedInClient { _ in (200, Data("[]".utf8)) }
         #expect(try await client.listCatalog().isEmpty)

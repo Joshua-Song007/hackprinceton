@@ -203,15 +203,40 @@ public struct CatalogEntry: Codable, Sendable, Equatable, Hashable, Identifiable
     public var runMode: String
     /// 1...3, the capability tier the game needs.
     public var requiredTier: Int
+    /// What the game is about; "" when the server sends none.
+    public var description: String
+    /// The cover picture (`coverUrl` on the wire); `listCatalog` makes it absolute against the server, nil when none.
+    public var coverURL: URL?
     public init(
-        id: String, title: String, author: String, latestVersion: Int, runMode: String, requiredTier: Int
+        id: String, title: String, author: String, latestVersion: Int, runMode: String, requiredTier: Int,
+        description: String = "", coverURL: URL? = nil
     ) {
+        self.description = description
+        self.coverURL = coverURL
         self.id = id
         self.title = title
         self.author = author
         self.latestVersion = latestVersion
         self.runMode = runMode
         self.requiredTier = requiredTier
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, title, author, latestVersion, runMode, requiredTier, description
+        case coverURL = "coverUrl"
+    }
+
+    /// Hand-written so an older server without `description` or `coverUrl` still decodes.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id)
+        title = try c.decode(String.self, forKey: .title)
+        author = try c.decode(String.self, forKey: .author)
+        latestVersion = try c.decode(Int.self, forKey: .latestVersion)
+        runMode = try c.decode(String.self, forKey: .runMode)
+        requiredTier = try c.decode(Int.self, forKey: .requiredTier)
+        description = try c.decodeIfPresent(String.self, forKey: .description) ?? ""
+        coverURL = try c.decodeIfPresent(String.self, forKey: .coverURL).flatMap { URL(string: $0) }
     }
 }
 
@@ -359,7 +384,12 @@ public actor CloudClient {
 
     /// The public library: every published game, newest publish first (`GET /api/library`).
     public func listCatalog() async throws -> [CatalogEntry] {
-        try await send("GET", ["api", "library"], body: Optional<GameBundle>.none)
+        let entries: [CatalogEntry] = try await send("GET", ["api", "library"], body: Optional<GameBundle>.none)
+        return entries.map { entry in
+            var entry = entry
+            entry.coverURL = entry.coverURL.flatMap { URL(string: $0.relativeString, relativeTo: baseURL)?.absoluteURL }
+            return entry
+        }
     }
 
     /// The signed-in account with its friend code (`GET /api/accounts/me`).
