@@ -1,5 +1,6 @@
 // Login page: required before the editor. Dev sign-in (a name) until real auth exists; the server URL lives in Settings because a wrong one blocks everything.
 import { announce, button, el } from './ui';
+import { ApiError } from '@pear/cloud';
 import { describeError, type AccountController } from './account';
 import { openSettingsSheet, type PreferenceStore } from './preferences';
 
@@ -25,6 +26,22 @@ export function renderLoginScreen(root: HTMLElement, account: AccountController,
       announce(error.textContent);
     }
   };
+  const devUser = el('input', { type: 'text', 'aria-label': 'Developer username', placeholder: 'Username', spellcheck: 'false', autocomplete: 'username' });
+  const devPass = el('input', { type: 'password', 'aria-label': 'Developer password', placeholder: 'Password', autocomplete: 'current-password' });
+  const devError = el('p', { class: 'sheet-error', role: 'alert' });
+  const goDev = async () => {
+    devError.textContent = '';
+    try {
+      await account.signInDeveloper(devUser.value.trim(), devPass.value);
+      devPass.value = '';
+      onDone();
+    } catch (e) {
+      devPass.value = '';
+      devError.textContent = e instanceof ApiError && e.kind === 'unauthorized' ? 'Wrong username or password' : describeError(e, account.serverUrl);
+      announce(devError.textContent);
+    }
+  };
+  for (const f of [devUser, devPass]) f.addEventListener('keydown', (e) => e.key === 'Enter' && void goDev());
   name.addEventListener('keydown', (e) => e.key === 'Enter' && void go());
   root.replaceChildren(el('div', { class: 'scr-card scr-login' }, [
     el('img', { src: '/pear-lockup.svg', alt: 'Pear', width: '160', class: 'scr-logo scr-logo-dark' }),
@@ -34,6 +51,11 @@ export function renderLoginScreen(root: HTMLElement, account: AccountController,
     error,
     el('div', { class: 'sheet-actions' }, [button('Sign in', () => void go(), { variant: 'default' })]),
     el('p', { class: 'sheet-note' }, ['Dev sign-in uses your name as the account.']),
+    el('h2', {}, ['Developer sign-in']),
+    el('div', { class: 'om-prop' }, [el('label', {}, ['Username']), el('div', { class: 'om-field' }, [devUser])]),
+    el('div', { class: 'om-prop' }, [el('label', {}, ['Password']), el('div', { class: 'om-field' }, [devPass])]),
+    devError,
+    el('div', { class: 'sheet-actions' }, [button('Sign in as developer', () => void goDev())]),
     server,
   ]));
   queueMicrotask(() => name.focus());
