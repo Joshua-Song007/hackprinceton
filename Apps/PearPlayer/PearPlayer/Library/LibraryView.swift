@@ -21,6 +21,12 @@ struct LibraryView: View {
                 // Screenshots: `PEAR_DEV_OPEN=<title>` opens that game's page after the library loads.
                 if let title = ProcessInfo.processInfo.environment["PEAR_DEV_OPEN"],
                    let entry = model.library.entries.first(where: { $0.title == title }) { path.append(entry) }
+                // Smoke test: `PEAR_DEV_PLAY=<title>` runs Play on that game (same path as the Play button).
+                if let title = ProcessInfo.processInfo.environment["PEAR_DEV_PLAY"],
+                   let entry = model.library.entries.first(where: { $0.title == title }) {
+                    do { try await model.play(entry); print("PEAR_DEV_PLAY ok: \(title)") }
+                    catch { print("PEAR_DEV_PLAY failed: \(error)") }
+                }
                 #endif
             }
             .onChange(of: model.library.state) { _, state in
