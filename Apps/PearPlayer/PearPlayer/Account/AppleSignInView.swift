@@ -4,6 +4,10 @@ import SwiftUI
 struct AppleSignInView: View {
     let model: PlayerModel
     @Environment(\.colorScheme) private var colorScheme
+    @State private var username = ""
+    @State private var password = ""
+    @State private var displayName = ""
+    @State private var creating = false
     #if DEBUG
     @State private var devName = ""
     #endif
@@ -25,6 +29,8 @@ struct AppleSignInView: View {
                 .signInWithAppleButtonStyle(colorScheme == .dark ? .white : .black)
                 .frame(maxWidth: 320, minHeight: 48, maxHeight: 48)
                 .disabled(model.isWorking)
+
+            passwordSection
 
             if model.hasSavedSession {
                 Button("Try again") { Task { await model.start() } }
@@ -68,6 +74,46 @@ struct AppleSignInView: View {
         }
     }
 
+    // Username + password: signup accounts and developer accounts (e.g. the team's pear-dev).
+    private var passwordSection: some View {
+        VStack(spacing: 8) {
+            Text("or").font(.caption).foregroundStyle(PearTheme.textSecondary)
+            field("Username", text: $username)
+            if creating { field("Display name", text: $displayName) }
+            SecureField("Password", text: $password)
+                .textContentType(creating ? .newPassword : .password)
+                .textFieldStyle(.plain)
+                .font(PearTheme.sans(16))
+                .padding(.horizontal, PearTheme.Space.s3)
+                .frame(maxWidth: 320, minHeight: PearTheme.controlHeight)
+                .overlay(RoundedRectangle(cornerRadius: PearTheme.radiusTag).strokeBorder(PearTheme.lineControl))
+            Button(creating ? "Create account" : "Sign in") {
+                Task {
+                    if creating { await model.signUp(username: username, password: password, displayName: displayName) }
+                    else { await model.signInPassword(username: username, password: password) }
+                }
+            }
+            .buttonStyle(PearSecondaryButtonStyle())
+            .disabled(model.isWorking || username.isEmpty || password.isEmpty)
+            Button(creating ? "I have an account" : "Create an account") { creating.toggle() }
+                .font(PearTheme.sans(14))
+                .foregroundStyle(PearTheme.textSecondary)
+        }
+    }
+
+    private func field(_ title: String, text: Binding<String>) -> some View {
+        TextField(title, text: text)
+            .textFieldStyle(.plain)
+            .font(PearTheme.sans(16))
+            .autocorrectionDisabled()
+            #if os(iOS)
+            .textInputAutocapitalization(.never)
+            #endif
+            .padding(.horizontal, PearTheme.Space.s3)
+            .frame(maxWidth: 320, minHeight: PearTheme.controlHeight)
+            .overlay(RoundedRectangle(cornerRadius: PearTheme.radiusTag).strokeBorder(PearTheme.lineControl))
+    }
+
     #if DEBUG
     // Simulator and ad-hoc Mac builds cannot use Sign in with Apple; the server needs PEAR_DEV_SIGNIN=1.
     private var devSection: some View {
@@ -87,7 +133,10 @@ struct AppleSignInView: View {
         }
         // Screenshots and demos: `PEAR_DEV_NAME=Maya` signs in on launch without typing.
         .task {
-            if let name = ProcessInfo.processInfo.environment["PEAR_DEV_NAME"], !name.isEmpty { await model.signInDev(name: name) }
+            let env = ProcessInfo.processInfo.environment
+            if let user = env["PEAR_DEV_USER"], let pass = env["PEAR_DEV_PASSWORD"], !user.isEmpty {
+                await model.signInPassword(username: user, password: pass)
+            } else if let name = env["PEAR_DEV_NAME"], !name.isEmpty { await model.signInDev(name: name) }
         }
     }
     #endif

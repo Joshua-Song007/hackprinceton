@@ -117,6 +117,28 @@ final class PlayerModel {
         }
     }
 
+    func signInPassword(username: String, password: String) async {
+        let user = username.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !user.isEmpty, !password.isEmpty else { message = "Enter your username and password."; return }
+        await signIn(notFoundMessage: nil) {
+            do { return try await self.client.signInPassword(username: user, password: password) }
+            catch CloudError.unauthorized { throw CloudError.server(status: 401, message: "Wrong username or password.") }
+        }
+    }
+
+    func signUp(username: String, password: String, displayName: String) async {
+        let user = username.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard user.range(of: "^[a-z0-9_-]{3,32}$", options: .regularExpression) != nil else {
+            message = "Username: 3 to 32 letters, digits, _ or -."; return
+        }
+        guard password.count >= 10 else { message = "Password: at least 10 characters."; return }
+        let name = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+        await signIn(notFoundMessage: nil) {
+            do { return try await self.client.signUp(username: user, password: password, displayName: name.isEmpty ? user : name) }
+            catch CloudError.server(let status, _) where status == 409 { throw CloudError.server(status: 409, message: "That username is taken.") }
+        }
+    }
+
     #if DEBUG
     func signInDev(name: String) async {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -196,6 +218,17 @@ final class PlayerModel {
         #endif
         if let scene = try? SceneLoader.decode(JSONEncoder().encode(result.game.bundle.scene)), Self.isPhoneOnly(scene) {
             #if os(iOS)
+            // The native screens are Quick Draw's own (2 guns, "hold your phone down"); every other phone game without a
+            // ui.json gets the generic PearUI lobby driven by its own events, so nothing Quick Draw-specific leaks into it.
+            if scene.name != "Quick Draw" {
+                guard let doc = PearUIDoc.fallback(title: entry.title),
+                      let session = PearUISession(
+                        base: client.baseURL, gameId: result.game.gameId, token: token, version: result.game.version,
+                        lobby: lobby, title: entry.title, doc: doc, bundle: result.game.bundle)
+                else { throw CloudError.invalidResponse }
+                pearUI = session
+                return
+            }
             guard let session = QuickDrawSession(
                 base: client.baseURL, gameId: result.game.gameId, token: token, version: result.game.version,
                 lobby: lobby, title: entry.title, isReferee: refereeDevice)

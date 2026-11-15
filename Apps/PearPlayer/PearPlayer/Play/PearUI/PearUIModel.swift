@@ -25,6 +25,26 @@ struct PearUIDoc: Equatable {
         return nil
     }
 
+    /// Generic lobby for a phone game that ships no ui.json: title, lobby code, the game's own status and player list
+    /// (`view`/`state` events, whatever the script sends), a Ready button, and motion + location streams the game may use.
+    /// Game-agnostic on purpose: no player count, pose or rules are assumed.
+    static func fallback(title: String) -> PearUIDoc? {
+        let name = (try? String(data: JSONEncoder().encode(title), encoding: .utf8)) ?? "\"Game\""
+        let json = """
+        {"pearui":1,"route":[{"screen":"main"}],"screens":{"main":{"type":"column","style":{"pad":2},"children":[
+          {"type":"text","value":\(name),"style":{"size":"xl","align":"center","fit":true}},
+          {"type":"text","value":"Lobby {{me.lobby}}","style":{"size":"s","caps":true,"align":"center"}},
+          {"type":"text","value":"{{ev.view.status || ev.state.status || ev.state.needs || ev.state.phase || 'Waiting for players'}}","style":{"align":"center"}},
+          {"type":"list","items":"ev.view.players || ev.state.players","item":{"type":"text","value":"{{item.name}}","style":{"card":true}}},
+          {"type":"spacer"},
+          {"type":"sensor","kind":"motion","event":"aim","hz":10},
+          {"type":"sensor","kind":"location","event":"location","hz":1},
+          {"type":"button","label":"Ready","action":{"send":"ready","data":{}}}
+        ]}}}
+        """
+        return PearUIDoc(data: Data(json.utf8))
+    }
+
     /// The `ui.json` of a version: a file shipped next to scene.json/scripts, stored with the assets.
     static func find(in bundle: GameBundle) -> PearUIDoc? {
         bundle.assets.first { $0.name == "ui.json" || $0.name.hasSuffix("/ui.json") }.flatMap { PearUIDoc(data: $0.data) }

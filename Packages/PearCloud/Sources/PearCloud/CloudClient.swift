@@ -368,6 +368,40 @@ public actor CloudClient {
         return response.account.account
     }
 
+    /// Username + password sign-in (`POST /api/accounts/signin`). Accounts made by signup use provider `password`;
+    /// developer accounts use `developer`. Both answer an identical 401 on a wrong password, so try one, then the other.
+    @discardableResult
+    public func signInPassword(username: String, password: String) async throws -> Account {
+        struct Request: Encodable { let provider: String; let subject: String; let password: String }
+        var lastError: Error = CloudError.unauthorized
+        for provider in ["password", "developer"] {
+            do {
+                let response: SignInWire = try await send(
+                    "POST", ["api", "accounts", "signin"],
+                    body: Request(provider: provider, subject: username, password: password), authorized: false)
+                sessionToken = response.token
+                account = response.account.account
+                return response.account.account
+            } catch CloudError.unauthorized {
+                lastError = CloudError.unauthorized
+            }
+        }
+        throw lastError
+    }
+
+    /// Creates a username + password account (`POST /api/accounts/signup`) and signs in. 409 = username taken,
+    /// 400 = rules not met (username 3-32 of a-z 0-9 _ -, password at least 10 characters).
+    @discardableResult
+    public func signUp(username: String, password: String, displayName: String) async throws -> Account {
+        struct Request: Encodable { let username: String; let password: String; let display_name: String }
+        let response: SignInWire = try await send(
+            "POST", ["api", "accounts", "signup"],
+            body: Request(username: username, password: password, display_name: displayName), authorized: false)
+        sessionToken = response.token
+        account = response.account.account
+        return response.account.account
+    }
+
     /// Sign in with Apple: exchanges Apple's identity token for a session (`POST /api/accounts/apple`).
     /// Apple sends the name only at first authorization, so pass it when you have it; the backend keeps the
     /// stored name when this is nil or blank. Uses the backend's real routes, not the provisional `/v1` ones.
