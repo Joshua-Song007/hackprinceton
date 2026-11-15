@@ -16,8 +16,10 @@ const srv = createServer(async (req, res) => {
   if (req.method === 'POST' && req.url === '/api/games') return json(201, { id: GID, title: JSON.parse(body).title });
   if (req.method === 'POST' && req.url === `/api/games/${GID}/versions`) {
     const v = { ...JSON.parse(body), version: versions.length + 1 };
+    // Mirrors the backend publish gate (13.7): listing needs metadata.manifest and a passing metadata.check.
+    if (v.listed && !(v.metadata?.manifest && v.metadata?.check?.ok)) return json(422, {});
     versions.push(v);
-    return json(201, v);
+    return json(201, { ...v, receipt: { version: v.version, check: v.metadata?.check ? 'passed' : 'missing', join: { ws: `/play/${GID}`, default_lobby: 'OPEN' } } });
   }
   if ((m = /^\/api\/games\/[^/]+\/versions\/(\w+)$/.exec(req.url))) return json(200, versions[m[1] === 'latest' ? versions.length - 1 : m[1] - 1]);
   json(404, {});
@@ -46,7 +48,9 @@ assert.ok(got.files['scripts/server/game.js']);
 
 await call('save_version', { id, files: { 'scene.json': '{"entities":[1]}' } });
 const pub = await call('publish', { id, version: 1, description: 'Tap fast', tags: ['party'], releaseNotes: 'v1' });
-assert.deepEqual(pub, { published: 1, version: 3 });
+assert.deepEqual(pub, { published: 1, version: 3, receipt: { version: 3, check: 'passed', join: { ws: `/play/${GID}`, default_lobby: 'OPEN' } } });
+assert.equal(versions[2].metadata.check.ok, true);
+assert.equal(versions[2].metadata.manifest.format, 'pear-game/1');
 assert.deepEqual(versions[2].scene, { entities: [] });
 assert.equal(versions[2].listed, true);
 assert.deepEqual([versions[2].description, versions[2].tags, versions[2].release_notes], ['Tap fast', ['party'], 'v1']);

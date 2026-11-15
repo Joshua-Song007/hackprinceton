@@ -66,5 +66,5 @@ SCENARIO (run_scenario: headless, real sockets against the hosted server)
   Timed motion/gps steps send "aim"/"location" (override with scenario motionEvent / gpsEvent). A device role sends role {role} after _welcome.
   Report: {"ok","expect":[{...,"pass","actual"}],"frames":[{t,device,dir,name,data}],"logs":[],"final":{device:viewState}}.
   The scenario runs against the LATEST saved version unless "version" is set. Logs need an owner/developer token.
-  Loop: save_version -> run_scenario -> read the report -> fix -> repeat until ok is true; then publish (publish = list: sets listed:true; optional description/tags/releaseNotes).
+  Loop: save_version -> run_scenario -> read the report -> fix -> repeat until ok is true; then publish (publish = list: sets listed:true; optional description/tags/releaseNotes; it runs pear-check and attaches the report, a failing check blocks it).
 `;
