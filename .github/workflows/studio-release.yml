@@ -73,3 +73,23 @@ jobs:
           releaseDraft: false
           includeUpdaterJson: true
           args: ${{ matrix.args }}
+  # Pear Player for Mac, attached to the same release. iOS needs a signed App Store/TestFlight build, so it is not here.
+  player-mac:
+    needs: release
+    if: ${{ !cancelled() }}
+    runs-on: macos-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build
+        # shortcut: unsigned (no Apple certificate in CI), so Gatekeeper blocks it and Sign in with Apple fails; add signing secrets to ship it properly.
+        run: |
+          echo "::warning::Pear Player for Mac is unsigned: right-click > Open to run it; Sign in with Apple will not work."
+          xcodebuild -project Apps/PearPlayer/PearPlayer.xcodeproj -scheme PearPlayer -configuration Release \
+            -destination 'generic/platform=macOS' -derivedDataPath build CODE_SIGNING_ALLOWED=NO build
+          ditto -c -k --keepParent build/Build/Products/Release/PearPlayer.app PearPlayer-macOS.zip
+      - name: Upload
+        run: |
+          gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 || gh release create "$GITHUB_REF_NAME" --title "Pear $GITHUB_REF_NAME" --notes ""
+          gh release upload "$GITHUB_REF_NAME" PearPlayer-macOS.zip --clobber
