@@ -1,0 +1,21 @@
+{
+  "game": "8ae4ccaf-a6aa-4622-8146-73fc2cd33021",
+  "durationMs": 60000,
+  "devices": [
+    { "name": "Ada", "kind": "phone", "role": "phone", "rules": [
+      { "on": "state", "when": "data.phase == 'lobby' || data.phase == 'roundOver'", "after": 50, "send": { "name": "ready", "data": { "round": "{{data.round}}" } } },
+      { "on": "fire", "after": 180, "send": { "name": "raised", "data": { "round": "{{data.round}}", "sinceFireMs": 180 } } },
+      { "on": "fire", "after": 600, "send": { "name": "lowered", "data": {} } }
+    ] },
+    { "name": "Bo", "kind": "phone", "role": "phone", "rules": [
+      { "on": "state", "when": "data.phase == 'lobby' || data.phase == 'roundOver'", "after": 50, "send": { "name": "ready", "data": { "round": "{{data.round}}" } } },
+      { "on": "fire", "after": 260, "send": { "name": "raised", "data": { "round": "{{data.round}}", "sinceFireMs": 260 } } },
+      { "on": "fire", "after": 600, "send": { "name": "lowered", "data": {} } }
+    ] },
+    { "name": "Ref", "kind": "ipad", "role": "referee" }
+  ],
+  "expect": [
+    { "by": 30000, "device": "Ref", "expr": "ev.roundResult.winnerId" },
+    { "by": 60000, "device": "Ada", "expr": "ev.matchOver.winnerId == me.id" }
+  ]
+}

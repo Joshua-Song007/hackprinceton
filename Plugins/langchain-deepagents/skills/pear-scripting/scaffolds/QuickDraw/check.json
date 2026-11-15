@@ -1,0 +1,372 @@
+{
+ "version": 1,
+ "selfcheck": "selfcheck.mjs",
+ "scenarios": [
+  {
+   "name": "offset clocks, delayed and duplicate raised",
+   "durationMs": 60000,
+   "devices": [
+    {
+     "name": "Ada",
+     "kind": "phone",
+     "role": "phone",
+     "rules": [
+      {
+       "on": "state",
+       "when": "data.phase == 'lobby' || data.phase == 'roundOver'",
+       "after": 50,
+       "send": {
+        "name": "ready",
+        "data": {
+         "round": "{{data.round}}"
+        }
+       }
+      },
+      {
+       "on": "fire",
+       "after": 180,
+       "send": {
+        "name": "raised",
+        "data": {
+         "round": "{{data.round}}",
+         "sinceFireMs": 180
+        }
+       }
+      },
+      {
+       "on": "fire",
+       "after": 200,
+       "send": {
+        "name": "raised",
+        "data": {
+         "round": "{{data.round}}",
+         "sinceFireMs": 50
+        }
+       }
+      },
+      {
+       "on": "fire",
+       "after": 600,
+       "send": {
+        "name": "lowered",
+        "data": {}
+       }
+      }
+     ]
+    },
+    {
+     "name": "Bo",
+     "kind": "phone",
+     "role": "phone",
+     "rules": [
+      {
+       "on": "state",
+       "when": "data.phase == 'lobby' || data.phase == 'roundOver'",
+       "after": 50,
+       "send": {
+        "name": "ready",
+        "data": {
+         "round": "{{data.round}}"
+        }
+       }
+      },
+      {
+       "on": "fire",
+       "after": 400,
+       "send": {
+        "name": "raised",
+        "data": {
+         "round": "{{data.round}}",
+         "sinceFireMs": 260
+        }
+       }
+      },
+      {
+       "on": "fire",
+       "after": 600,
+       "send": {
+        "name": "lowered",
+        "data": {}
+       }
+      }
+     ]
+    },
+    {
+     "name": "Ref",
+     "kind": "ipad",
+     "role": "referee"
+    }
+   ],
+   "expect": [
+    {
+     "by": 30000,
+     "device": "Ref",
+     "expr": "ev.roundResult.winnerId"
+    },
+    {
+     "by": 60000,
+     "device": "Ada",
+     "expr": "ev.matchOver.winnerId == me.id"
+    }
+   ]
+  },
+  {
+   "name": "ghost player leaves before the match",
+   "durationMs": 60000,
+   "devices": [
+    {
+     "name": "Ghost",
+     "kind": "phone",
+     "role": "phone",
+     "script": [
+      {
+       "at": 300,
+       "leave": true
+      }
+     ]
+    },
+    {
+     "name": "Ada",
+     "kind": "phone",
+     "role": "phone",
+     "rules": [
+      {
+       "on": "state",
+       "when": "data.phase == 'lobby' || data.phase == 'roundOver'",
+       "after": 50,
+       "send": {
+        "name": "ready",
+        "data": {
+         "round": "{{data.round}}"
+        }
+       }
+      },
+      {
+       "on": "fire",
+       "after": 180,
+       "send": {
+        "name": "raised",
+        "data": {
+         "round": "{{data.round}}",
+         "sinceFireMs": 180
+        }
+       }
+      },
+      {
+       "on": "fire",
+       "after": 600,
+       "send": {
+        "name": "lowered",
+        "data": {}
+       }
+      }
+     ]
+    },
+    {
+     "name": "Bo",
+     "kind": "phone",
+     "role": "phone",
+     "rules": [
+      {
+       "on": "state",
+       "when": "data.phase == 'lobby' || data.phase == 'roundOver'",
+       "after": 50,
+       "send": {
+        "name": "ready",
+        "data": {
+         "round": "{{data.round}}"
+        }
+       }
+      },
+      {
+       "on": "fire",
+       "after": 260,
+       "send": {
+        "name": "raised",
+        "data": {
+         "round": "{{data.round}}",
+         "sinceFireMs": 260
+        }
+       }
+      },
+      {
+       "on": "fire",
+       "after": 600,
+       "send": {
+        "name": "lowered",
+        "data": {}
+       }
+      }
+     ]
+    }
+   ],
+   "expect": [
+    {
+     "by": 60000,
+     "device": "Ada",
+     "expr": "ev.matchOver.winnerId == me.id"
+    }
+   ]
+  },
+  {
+   "name": "PearUI aim gestures (60/45 degree raise)",
+   "durationMs": 60000,
+   "devices": [
+    {
+     "name": "Ada",
+     "kind": "phone",
+     "role": "phone",
+     "rules": [
+      {
+       "on": "state",
+       "when": "data.phase == 'lobby' || data.phase == 'roundOver'",
+       "after": 50,
+       "send": {
+        "name": "ready",
+        "data": {
+         "round": "{{data.round}}"
+        }
+       }
+      },
+      {
+       "on": "fire",
+       "after": 180,
+       "send": {
+        "name": "aim",
+        "data": {
+         "pitch": 75
+        }
+       }
+      },
+      {
+       "on": "fire",
+       "after": 600,
+       "send": {
+        "name": "aim",
+        "data": {
+         "pitch": 10
+        }
+       }
+      },
+      {
+       "on": "fire",
+       "after": 600,
+       "send": {
+        "name": "lowered",
+        "data": {}
+       }
+      }
+     ]
+    },
+    {
+     "name": "Bo",
+     "kind": "phone",
+     "role": "phone",
+     "rules": [
+      {
+       "on": "state",
+       "when": "data.phase == 'lobby' || data.phase == 'roundOver'",
+       "after": 50,
+       "send": {
+        "name": "ready",
+        "data": {
+         "round": "{{data.round}}"
+        }
+       }
+      },
+      {
+       "on": "fire",
+       "after": 260,
+       "send": {
+        "name": "aim",
+        "data": {
+         "pitch": 70
+        }
+       }
+      },
+      {
+       "on": "fire",
+       "after": 600,
+       "send": {
+        "name": "aim",
+        "data": {
+         "pitch": 10
+        }
+       }
+      },
+      {
+       "on": "fire",
+       "after": 600,
+       "send": {
+        "name": "lowered",
+        "data": {}
+       }
+      }
+     ]
+    }
+   ],
+   "expect": [
+    {
+     "by": 60000,
+     "device": "Ada",
+     "expr": "ev.matchOver.winnerId == me.id"
+    }
+   ]
+  },
+  {
+   "name": "four phones, two queued, equal times tie",
+   "durationMs": 30000,
+   "devices": [
+    {
+     "name": "P",
+     "kind": "phone",
+     "role": "phone",
+     "rules": [
+      {
+       "on": "state",
+       "when": "data.phase == 'lobby' || data.phase == 'roundOver'",
+       "after": 50,
+       "send": {
+        "name": "ready",
+        "data": {
+         "round": "{{data.round}}"
+        }
+       }
+      },
+      {
+       "on": "fire",
+       "after": 250,
+       "send": {
+        "name": "raised",
+        "data": {
+         "round": "{{data.round}}",
+         "sinceFireMs": 250
+        }
+       }
+      },
+      {
+       "on": "fire",
+       "after": 600,
+       "send": {
+        "name": "lowered",
+        "data": {}
+       }
+      }
+     ],
+     "count": 4
+    }
+   ],
+   "expect": [
+    {
+     "by": 30000,
+     "device": "P1",
+     "expr": "ev.roundResult.reason == 'tie'"
+    }
+   ]
+  }
+ ],
+ "untested": [
+  "real sockets and the hosted server clock (Deploy/smoke-quickdraw.mjs)",
+  "ui.json rendering (PearUI renderers)"
+ ]
+}
