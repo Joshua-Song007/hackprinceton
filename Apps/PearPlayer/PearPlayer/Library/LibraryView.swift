@@ -644,6 +644,10 @@ private struct PlaySurface: ViewModifier {
     private var quickDraw: Binding<QuickDrawSession?> {
         Binding(get: { model.quickDraw }, set: { if $0 == nil { model.leaveGame() } })
     }
+
+    private var pearUI: Binding<PearUISession?> {
+        Binding(get: { model.pearUI }, set: { if $0 == nil { model.leaveGame() } })
+    }
     #endif
 
     func body(content: Content) -> some View {
@@ -651,6 +655,7 @@ private struct PlaySurface: ViewModifier {
         content
             .fullScreenCover(item: session) { PlayView(session: $0, onLeave: model.leaveGame).gameChrome(title: $0.gameName, onLeave: model.leaveGame) }
             .fullScreenCover(item: quickDraw) { QuickDrawView(session: $0, onLeave: model.leaveGame).gameChrome(title: $0.title, onLeave: model.leaveGame) }
+            .fullScreenCover(item: pearUI) { PearUIView(session: $0).gameChrome(title: $0.title, onLeave: model.leaveGame) }
         #else
         content.sheet(item: session) { PlayView(session: $0, onLeave: model.leaveGame).gameChrome(title: $0.gameName, onLeave: model.leaveGame) }
         #endif
