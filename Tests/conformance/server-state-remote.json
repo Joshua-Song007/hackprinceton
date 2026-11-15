@@ -1,0 +1,14 @@
+{
+  "name": "server state and remote events",
+  "runtime": "server",
+  "scripts": [
+    "export default serverScript({\n  onPlayerJoin(ctx, player) { ctx.state.health = ctx.state.health || {}; ctx.state.health[player.id] = 100; ctx.remote.fire(player.id, \"welcome\", { name: player.name }); },\n  onPlayerLeave(ctx, player) { delete ctx.state.health[player.id]; },\n  onRemote(ctx, player, name, data) {\n    if (name === \"punch\") ctx.remote.fireAll(\"hit\", { from: player.id, dir: data.dir });\n    if (name === \"boom\") throw new Error(\"bad\");\n  }\n});"
+  ],
+  "steps": [
+    { "op": "join", "id": "p1", "name": "Ada", "fired": [["p1", "welcome", { "name": "Ada" }]], "state": { "health": { "p1": 100 } } },
+    { "op": "join", "id": "p2", "fired": [["p2", "welcome", { "name": "" }]], "state": { "health": { "p1": 100, "p2": 100 } } },
+    { "op": "remote", "id": "p2", "name": "punch", "data": { "dir": [1, 0, 0] }, "fired": [[null, "hit", { "from": "p2", "dir": [1, 0, 0] }]] },
+    { "op": "remote", "id": "p2", "name": "boom", "data": null, "errors": ["onRemote: Error: bad"] },
+    { "op": "leave", "id": "p1", "state": { "health": { "p2": 100 } } }
+  ]
+}

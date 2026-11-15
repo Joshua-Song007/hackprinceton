@@ -1,0 +1,13 @@
+{
+  "name": "server timers",
+  "runtime": "server",
+  "scripts": [
+    "export default serverScript({\n  onRemote(ctx, p, name) {\n    if (name === \"arm\") { ctx.state.a = ctx.after(1, \"boom\", { n: 1 }); ctx.state.b = ctx.after(2000, \"x\"); }\n    if (name === \"disarm\") ctx.cancel(ctx.state.b);\n  },\n  onTimer(ctx, tag, data) { ctx.state.fired = [tag, data]; }\n});"
+  ],
+  "steps": [
+    { "op": "remote", "id": "a", "name": "arm", "data": null, "timers": [50, 2000], "state": { "a": 1, "b": 2 } },
+    { "op": "remote", "id": "a", "name": "disarm", "data": null, "pending": 1 },
+    { "op": "timer", "index": 1, "pending": 1, "state": { "a": 1, "b": 2 } },
+    { "op": "timer", "index": 0, "pending": 0, "state": { "a": 1, "b": 2, "fired": ["boom", { "n": 1 }] } }
+  ]
+}
