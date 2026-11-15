@@ -60,7 +60,7 @@ Full text: planHistory/phase-05.md
 
 ## Phase 8: Pear Web Studio & Live Hosting (compressed)
 
-Built: backend live integration (CORS, static Studio, /debug, memstore, migrations); Web SDK packages (pear-core / runtime / script / sim / cloud); Web Studio app (dockview layout, editor, explorer, inspector, run, debug panel, account); Tauri 2 desktop shell + release workflow; Vultr deploy files; blank template and demo script. (Changed 2026-11-15: the Test panel gained a status header with Play and Playtest, a readable readiness summary and plain device captions; see planHistory/phase-08.md.) (Changed 2026-11-15: Studio UX fixes from a screenshot critique: active tab underline, peripheral card text, console filter state, explorer headers, editor empty text; see planHistory/phase-08.md.)
+Built: backend live integration (CORS, static Studio, /debug, memstore, migrations); Web SDK packages (pear-core / runtime / script / sim / cloud); Web Studio app (dockview layout, editor, explorer, inspector, run, debug panel, account); Tauri 2 desktop shell + release workflow; Vultr deploy files; blank template and demo script. (Changed 2026-11-15: the Test panel gained a status header with Play and Playtest, a readable readiness summary and plain device captions; see planHistory/phase-08.md.) (Changed 2026-11-15: Studio UX fixes from a screenshot critique: active tab underline, peripheral card text, console filter state, explorer headers, editor empty text; see planHistory/phase-08.md.) (Changed 2026-11-15: Pear Studio has its own app icon (charcoal tile, outlined pear with vertex handles, orange leaf) in the macOS app, the Tauri bundle and the Web favicon; see planHistory/phase-08.md.) (Changed 2026-11-15: Projects screen polish: Back to editor in the header, the draft shows its project name, compact statistics, today/yesterday dates, fixed search and sort fields; see planHistory/phase-08.md.)
 
 Still open: demo run on the Vultr box from the desktop executable; two people in one server session; brand-kit UI review; Vite watch ignore for src-tauri; macOS desktop untested. Web Studio is now acknowledged in overview.md (no longer a mismatch).
 
@@ -110,7 +110,7 @@ Not built from the Projects screen v2 work (see planHistory/phase-08.md, Later c
 - [ ] `Backend/src/api/games.rs` — return the new fields from the games list and accept sharing a game with another account.
 - [ ] `Web/packages/pear-cloud/src/client.ts` — `Game` gains the new fields; client method for sharing.
 - [ ] `Web/studio/src/projectsScreen.ts` — Published stat, a "New project" tile in the grid, Shared section fed by real data.
-- [ ] `Web/studio/src/recent.ts` — relative dates in `formatWhen` ("Today, 8:16 PM", "Yesterday").
+- [x] `Web/studio/src/recent.ts` — relative dates in `formatWhen` ("Today, 8:16 PM", "Yesterday"). (Changed 2026-11-15: built as an opt-in `now` argument that reads "Edited today, 5:02 AM" / "Edited yesterday, ..."; older dates keep the date; see planHistory/phase-08.md.)
 - [ ] `Web/studio/src/theme.css` — style `dialog.sheet` and menus outside `.scr` in the dark Pear tone while open over the gallery.
 - [ ] `Web/studio/src/studio-tokens.css` — move the editor tokens and the light theme (Paper) to the Pear palette; keep the darker tone chosen for the gallery.
 - [ ] `Web/studio/index.html` — bundle or link Fraunces and Geist (none are in the repo) and use Fraunces for the 28 px "Projects" heading.
