@@ -23,6 +23,8 @@ ROOT = HERE.parent.parent
 LOGS = Path(os.environ.get('PEAR_LOGS', str(ROOT.parent / (ROOT.name + '.worktrees') / 'nightly')))
 TTL = int(os.environ.get('CLAIM_TTL', '900'))
 MODELS = {'orch': 'claude-opus-5-5', 'worker': 'claude-sonnet-5-5', 'reviewer': 'claude-sonnet-5-5'}
+# PEAR_REVIEWER_MODEL: run reviews on another model when the orchestrator account's Sonnet window is spent.
+MODELS['reviewer'] = os.environ.get('PEAR_REVIEWER_MODEL', MODELS['reviewer'])
 
 
 def terminate_tree(process):
