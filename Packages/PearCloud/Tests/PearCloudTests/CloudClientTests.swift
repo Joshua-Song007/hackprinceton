@@ -75,7 +75,7 @@ struct CloudClientTests {
         #expect(req.url?.path == Self.signInPath)
         #expect(req.value(forHTTPHeaderField: "Authorization") == nil)
         let sent = try JSONSerialization.jsonObject(with: req.httpBody ?? Data()) as? [String: String]
-        #expect(sent == ["provider": "dev", "subject": "Ada", "display_name": "Ada"])
+        #expect(sent == ["provider": "dev", "subject": "sim-Ada", "display_name": "Ada"])
     }
 
     @Test func pastedTokenIsCheckedWithMe() async throws {

@@ -361,7 +361,8 @@ public actor CloudClient {
             let display_name: String
         }
         let response: SignInWire = try await send(
-            "POST", ["api", "accounts", "signin"], body: Request(subject: name, display_name: name), authorized: false)
+            // The server only accepts passwordless subjects with its dev prefix (`sim-` by default, PEAR_DEV_SIGNIN_PREFIX).
+            "POST", ["api", "accounts", "signin"], body: Request(subject: name.hasPrefix("sim-") ? name : "sim-\(name)", display_name: name), authorized: false)
         sessionToken = response.token
         account = response.account.account
         return response.account.account
