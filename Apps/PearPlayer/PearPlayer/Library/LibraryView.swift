@@ -39,7 +39,9 @@ struct LibraryView: View {
             // Smoke test: `PEAR_DEV_PLAY=<title>` runs Play on that game (same path as the Play button).
             if let title = ProcessInfo.processInfo.environment["PEAR_DEV_PLAY"],
                let entry = model.library.entries.first(where: { $0.title == title }) {
-                do { try await model.play(entry); print("PEAR_DEV_PLAY ok: \(title)") }
+                // `PEAR_DEV_LOBBY=<code>` picks the lobby for a lobby-based game (Quick Draw).
+                let lobby = ProcessInfo.processInfo.environment["PEAR_DEV_LOBBY"]
+                do { try await model.play(entry, lobby: lobby); print("PEAR_DEV_PLAY ok: \(title)") }
                 catch { print("PEAR_DEV_PLAY failed: \(error)") }
             }
             #endif
