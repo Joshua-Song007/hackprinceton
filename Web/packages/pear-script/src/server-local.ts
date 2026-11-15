@@ -18,6 +18,8 @@ export interface LocalServerOptions {
   onError?(message: string): void;
   /** `ctx.state` as JSON text, after a handler changed it. */
   onState?(json: string): void;
+  /** Lobby code shown as `ctx.lobby` (default "OPEN"). */
+  lobby?: string;
   now?(): number;
   setTimer?(fn: () => void, ms: number): unknown;
   clearTimer?(handle: unknown): void;
@@ -36,7 +38,10 @@ const clone = (v: unknown): unknown => (v === undefined ? null : JSON.parse(JSON
 export class LocalServer {
   private scripts: Record<string, unknown>[] = [];
   private names = new Map<string, string>();
-  private timers = new Map<number, { handle: unknown }>();
+  private timers = new Map<number, { handle: unknown; player: string | null }>();
+  private seen = new Map<string, number>();
+  private phases = new Map<string, number>();
+  private phase: string | null = null;
   private nextTimer = 1;
   private lastState = '{}';
   private state: Record<string, unknown> = {};
@@ -53,8 +58,17 @@ export class LocalServer {
         fire: (player: unknown, name: unknown, data?: unknown) => this.options.onFire(String(player), String(name), clone(data)),
         fireAll: (name: unknown, data?: unknown) => this.options.onFire(null, String(name), clone(data)),
       }),
-      now: () => (this.options.now ?? Date.now)(),
-      after: (ms: unknown, tag: unknown, data?: unknown) => this.after(Number(ms), String(tag), clone(data)),
+      lobby: this.options.lobby ?? 'OPEN',
+      now: () => this.now(),
+      players: () => [...this.seen].map(([id, lastSeen]) => ({ id, name: this.names.get(id) ?? '', lastSeen })),
+      enterPhase: (name: unknown) => {
+        this.phase = String(name);
+        this.phases.set(this.phase, this.now());
+        return this.phases.get(this.phase);
+      },
+      phaseEnteredAt: (name?: unknown) => this.phases.get(name == null ? (this.phase ?? '') : String(name)) ?? null,
+      after: (ms: unknown, tag: unknown, data?: unknown, player?: unknown) =>
+        this.after(Number(ms), String(tag), clone(data), player == null ? null : String(player)),
       cancel: (id: unknown) => this.cancel(Number(id)),
       // The agent runtime is hosted-only: a local run rejects so the script's await fails clearly.
       agent: Object.freeze({ run: (_prompt: unknown) => Promise.reject(new Error('agent runtime not configured')) }),
@@ -82,15 +96,19 @@ export class LocalServer {
 
   join(id: string, name = ''): void {
     this.names.set(id, name);
+    this.seen.set(id, this.now());
     this.dispatch('onPlayerJoin', this.player(id));
   }
 
   leave(id: string): void {
+    this.seen.delete(id);
     this.dispatch('onPlayerLeave', this.player(id));
+    for (const [tid, t] of [...this.timers]) if (t.player === id) this.cancel(tid);
     this.names.delete(id);
   }
 
   remote(id: string, name: string, data: unknown): void {
+    if (this.seen.has(id)) this.seen.set(id, this.now());
     this.dispatch('onRemote', this.player(id), name, data === undefined ? null : data);
   }
 
@@ -107,11 +125,15 @@ export class LocalServer {
     this.timers.clear();
   }
 
+  private now(): number {
+    return (this.options.now ?? Date.now)();
+  }
+
   private player(id: string) {
     return Object.freeze({ id, name: this.names.get(id) ?? '' });
   }
 
-  private after(ms: number, tag: string, data: unknown): number {
+  private after(ms: number, tag: string, data: unknown, player: string | null): number {
     const id = this.nextTimer++;
     if (this.timers.size >= MAX_TIMERS) {
       this.options.onError?.(`ctx.after: at most ${MAX_TIMERS} timers pending, this one was dropped`);
@@ -120,17 +142,19 @@ export class LocalServer {
     const delay = Math.min(MAX_TIMER_MS, Math.max(MIN_TIMER_MS, Number.isFinite(ms) ? ms : 0));
     const handle = this.setTimer(() => {
       this.timers.delete(id);
-      this.dispatch('onTimer', tag, data);
+      this.dispatch('onTimer', tag, data, ...(player === null ? [] : [player]));
     }, delay);
-    this.timers.set(id, { handle });
+    this.timers.set(id, { handle, player });
     return id;
   }
 
-  private cancel(id: number): void {
+  /** True when a pending timer was cancelled; a fired, cancelled or unknown handle is a quiet false. */
+  private cancel(id: number): boolean {
     const t = this.timers.get(id);
-    if (!t) return;
+    if (!t) return false;
     this.clearTimer(t.handle);
     this.timers.delete(id);
+    return true;
   }
 
   /** Runs `handler(ctx, ...args)` on every script that has it; a throw is reported and the next script still runs. */
