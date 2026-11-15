@@ -27,17 +27,18 @@ jobs:
             rust_targets: aarch64-apple-darwin,x86_64-apple-darwin
             args: --target universal-apple-darwin
     runs-on: ${{ matrix.os }}
+    # Staged as S_*: Tauri treats a defined-but-empty APPLE_CERTIFICATE as a cert to import, so only non-empty ones are exported below.
     env:
-      TAURI_SIGNING_PRIVATE_KEY: ${{ !inputs.unsigned && secrets.TAURI_SIGNING_PRIVATE_KEY || '' }}
-      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ !inputs.unsigned && secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD || '' }}
-      WINDOWS_CERTIFICATE: ${{ !inputs.unsigned && secrets.WINDOWS_CERTIFICATE || '' }}
-      WINDOWS_CERTIFICATE_PASSWORD: ${{ !inputs.unsigned && secrets.WINDOWS_CERTIFICATE_PASSWORD || '' }}
-      APPLE_CERTIFICATE: ${{ !inputs.unsigned && secrets.APPLE_CERTIFICATE || '' }}
-      APPLE_CERTIFICATE_PASSWORD: ${{ !inputs.unsigned && secrets.APPLE_CERTIFICATE_PASSWORD || '' }}
-      APPLE_SIGNING_IDENTITY: ${{ !inputs.unsigned && secrets.APPLE_SIGNING_IDENTITY || '' }}
-      APPLE_ID: ${{ !inputs.unsigned && secrets.APPLE_ID || '' }}
-      APPLE_PASSWORD: ${{ !inputs.unsigned && secrets.APPLE_PASSWORD || '' }}
-      APPLE_TEAM_ID: ${{ !inputs.unsigned && secrets.APPLE_TEAM_ID || '' }}
+      S_TAURI_SIGNING_PRIVATE_KEY: ${{ !inputs.unsigned && secrets.TAURI_SIGNING_PRIVATE_KEY || '' }}
+      S_TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ !inputs.unsigned && secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD || '' }}
+      S_WINDOWS_CERTIFICATE: ${{ !inputs.unsigned && secrets.WINDOWS_CERTIFICATE || '' }}
+      S_WINDOWS_CERTIFICATE_PASSWORD: ${{ !inputs.unsigned && secrets.WINDOWS_CERTIFICATE_PASSWORD || '' }}
+      S_APPLE_CERTIFICATE: ${{ !inputs.unsigned && secrets.APPLE_CERTIFICATE || '' }}
+      S_APPLE_CERTIFICATE_PASSWORD: ${{ !inputs.unsigned && secrets.APPLE_CERTIFICATE_PASSWORD || '' }}
+      S_APPLE_SIGNING_IDENTITY: ${{ !inputs.unsigned && secrets.APPLE_SIGNING_IDENTITY || '' }}
+      S_APPLE_ID: ${{ !inputs.unsigned && secrets.APPLE_ID || '' }}
+      S_APPLE_PASSWORD: ${{ !inputs.unsigned && secrets.APPLE_PASSWORD || '' }}
+      S_APPLE_TEAM_ID: ${{ !inputs.unsigned && secrets.APPLE_TEAM_ID || '' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -53,9 +54,14 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: Web/studio/src-tauri -> target
-      - name: Warn about unsigned artifacts
+      - name: Export signing secrets that are set; warn about unsigned artifacts
         shell: bash
         run: |
+          for v in TAURI_SIGNING_PRIVATE_KEY TAURI_SIGNING_PRIVATE_KEY_PASSWORD WINDOWS_CERTIFICATE WINDOWS_CERTIFICATE_PASSWORD                    APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID; do
+            s="S_$v"; val="${!s}"
+            if [ -n "$val" ]; then { echo "$v<<SECRET_EOF"; echo "$val"; echo "SECRET_EOF"; } >> "$GITHUB_ENV"; fi
+            printf -v "$v" '%s' "$val"
+          done
           if [ -z "$TAURI_SIGNING_PRIVATE_KEY" ]; then
             echo "::warning::TAURI_SIGNING_PRIVATE_KEY is not set: updater artifacts are unsigned and installed apps will reject this update."
           fi
