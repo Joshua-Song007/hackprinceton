@@ -17,7 +17,7 @@ const call = async (name, args = {}) => {
 
 const names = (await client.listTools()).tools.map((t) => t.name).sort();
 console.log('tools:', names.join(', '));
-assert.deepEqual(names, ['create_game', 'get_game', 'kit_reference', 'list_games', 'publish', 'read_logs', 'run_scenario', 'save_version']);
+assert.deepEqual(names, ['create_game', 'geo_measure', 'geo_path', 'get_game', 'get_template', 'kit_reference', 'list_games', 'list_templates', 'publish', 'read_logs', 'run_scenario', 'save_version', 'validate_game']);
 
 const kit = await call('kit_reference');
 assert.match(kit, /PEARUI v1/);

@@ -10,6 +10,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
 import { KIT_REFERENCE } from './kit.js';
+import { registerDevTools } from './devtools.js';
 import { api, authToken, buildVersion, cloudUrl, versionFiles } from './pear.js';
 
 const WEB_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', 'Web');
@@ -90,5 +91,7 @@ server.tool('read_logs', 'Read the live /debug stream (snapshot with recent logs
 server.tool('run_scenario', 'Run a headless multi-device scenario against a saved game; returns the report ({ok, expect, frames, logs, final}).', {
   scenario: z.record(z.any()).describe('scenario JSON, see kit_reference'),
 }, tool(async ({ scenario }) => runScenario(scenario, await authToken())));
+
+registerDevTools(server, tool);
 
 await server.connect(new StdioServerTransport());

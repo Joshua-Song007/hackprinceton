@@ -5,7 +5,7 @@
   "type": "module",
   "description": "Pear MCP server: the closed API boundary for agents that build Pear games (stdio)",
   "bin": { "pear-mcp": "src/index.js" },
-  "scripts": { "start": "node src/index.js", "test": "node test.mjs && node test-write.mjs" },
+  "scripts": { "start": "node src/index.js", "test": "node test.mjs && node test-write.mjs && node test-devtools.mjs" },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.0",
     "zod": "^3.23.8"

@@ -29,7 +29,8 @@ def test_game_mode_wires_prompt_and_tools(tmp_path):
     agent = server.build_agent(tmp_path, Spy(replies=[say("done")]), "game", [kit_reference])
     asyncio.run(agent.ainvoke({"messages": [{"role": "user", "content": "make a game"}]}))
     assert "kit_reference" in seen
-    assert any("Call kit_reference first" in s for s in seen)
+    assert any("kit_reference first" in s for s in seen)
+    assert any("get_template" in s and "validate_game" in s and "geo_path" in s for s in seen)
     assert any("Never call publish" in s for s in seen)
     assert "game" in server.MODES
 

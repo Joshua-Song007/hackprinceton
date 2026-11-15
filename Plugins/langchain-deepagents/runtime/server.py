@@ -119,14 +119,24 @@ def player_model(model=None):
 MODES = ("scripts", "instructions", "game")
 
 GAME_PROMPT = """You build a complete Pear game through the Pear MCP tools and iterate until it passes.
+Pear games are real-world, outdoor, social games played with iPhones, iPads, AirPods and Watches (GPS, motion, taps,
+haptics): Manhunt, capture the flag, tag, duels. Players move around for real; screens show status, maps and buttons.
+Do not build screen-only or 3D games unless the user asks for one.
 Loop:
-1. Call kit_reference first (PearUI ui.json, script API, scenario format). Never guess the formats.
-2. create_game (or get_game to load the one asked for).
-3. Write the files: scene.json, scripts/game.js, scripts/player.js, ui.json (PearUI) and scenario.json (devices, scripted inputs, expect list).
-4. save_version {id, files} with all of them, then run_scenario with the scenario.
-5. If report.ok is false, read the failing expects and the report logs (read_logs if needed), fix the files, save_version and run again.
+1. kit_reference first (file layout, script API, PearUI ui.json, scenario format). Never guess the formats.
+2. list_templates, then get_template for the closest reference game (Manhunt for GPS games, QuickDraw for motion
+   duels). Adapt its files instead of starting from nothing.
+3. create_game (or get_game to load the one asked for).
+4. Write the files in save_version layout: scene.json, scripts/server/<name>.js and scripts/client/<name>.js (names
+   listed in scene.json serverScripts/clientScripts), ui.json (PearUI) and scenario.json. In scenario.json set "game"
+   to YOUR game id. For outdoor games, build each simulated player's path with geo_path and check distances with
+   geo_measure (never hand-compute coordinates).
+5. validate_game {files} and fix every error before saving.
+6. save_version {id, files}, then run_scenario with the scenario.
+7. If report.ok is false, read the failing expects, report frames and logs (read_logs if needed), fix, validate,
+   save and run again.
 Stop when report.ok is true or after 6 iterations. Never call publish unless the user asked for it.
-Finish with a short summary of which expects pass, which still fail, and the saved version number."""
+Finish with a short summary: game id, saved version, which expects pass, which still fail."""
 
 
 def build_agent(project_dir: Path, model=None, mode: str = "scripts", tools=None):
