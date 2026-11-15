@@ -21,7 +21,9 @@ html, body { height: 100%; overflow: hidden; }
 
 /* Window shell: toolbar, dock area, status bar. Zoom implements the 90-200% UI scale. */
 #studio { display: grid; grid-template-rows: auto auto minmax(0, 1fr) auto; zoom: var(--ui-scale); width: calc(100vw / var(--ui-scale)); height: calc(100vh / var(--ui-scale)); background: var(--bg-panel); }
-#dock { min-height: 0; min-width: 0; position: relative; }
+/* Dockview uses viewport pointer deltas: keep its geometry unzoomed and scale the panel contents instead. */
+#dock { min-height: 0; min-width: 0; position: relative; overflow: hidden; zoom: calc(1 / var(--ui-scale)); }
+.dockview-theme-pear .studio-panel { zoom: var(--ui-scale); width: calc(100% / var(--ui-scale)); height: calc(100% / var(--ui-scale)); }
 .om-toolbar { flex-wrap: nowrap; overflow-x: auto; }
 .om-toolbar .om-sep { width: 1px; align-self: stretch; margin: 10px 2px; background: var(--line); }
 .om-toolbar > :not(.om-activity) { flex-shrink: 0; }
@@ -36,9 +38,9 @@ html, body { height: 100%; overflow: hidden; }
 .dockview-theme-pear {
   --dv-group-view-background-color: var(--bg-panel);
   --dv-tabs-and-actions-container-background-color: var(--bg-window);
-  --dv-tabs-and-actions-container-height: 28px;
-  --dv-tabs-and-actions-container-font-size: 11px;
-  --dv-tab-font-size: 11px;
+  --dv-tabs-and-actions-container-height: calc(28px * var(--ui-scale));
+  --dv-tabs-and-actions-container-font-size: calc(11px * var(--ui-scale));
+  --dv-tab-font-size: calc(11px * var(--ui-scale));
   --dv-activegroup-visiblepanel-tab-background-color: var(--bg-panel);
   --dv-inactivegroup-visiblepanel-tab-background-color: var(--bg-panel);
   --dv-activegroup-hiddenpanel-tab-background-color: var(--bg-window);

@@ -6,6 +6,8 @@ import type { AccountController } from '../account';
 import type { PanelSpec, PanelView } from '../layout';
 import { button, el } from '../ui';
 import { RelayClient } from '../relay';
+import { qrDataUrl } from '../publishView';
+import { companionMotion, needsPreviewSession, phoneReachable, physicalPlayerUrl, type PreviewSource } from './physical';
 import { debugRow, normalizeLobby, randomLobby, sensorHz, sysRow, type LogRow, type PreviewKind } from './helpers';
 import { DEFAULT_CENTER, PreviewMap, type LatLng } from './map';
 import { DeviceSession } from './session';
@@ -31,6 +33,7 @@ interface Device {
   motion: number;
   locEvent: string | null;
   raf: number;
+  sensors: Set<{ node: Node; emit: (data: unknown) => void; last: number }>;
 }
 
 export const livePreviewPanel = (account: AccountController, openHostedGame?: () => void): PanelSpec => ({ id: 'livePreview', title: 'Live Preview', create: () => createLivePreviewPanel(account, openHostedGame) });
@@ -59,7 +62,7 @@ export function createLivePreviewPanel(account: AccountController, openHostedGam
   buffered.splice(0).forEach((row) => terminal.add(row));
   const map = new PreviewMap((id, at) => {
     const d = devices.find((x) => x.spec.id === id);
-    d?.session.send(d.locEvent ?? 'location', { lat: at.lat, lng: at.lng, acc: 5 });
+    if (d && sources[d.spec.id] === 'simulator') d.session.send(d.locEvent ?? 'location', { lat: at.lat, lng: at.lng, acc: 5 });
   });
   DEVICES.forEach((s) => map.addDevice(s.id, s.label, s.color, { lat: DEFAULT_CENTER.lat + s.offset.lat, lng: DEFAULT_CENTER.lng + s.offset.lng }));
 
@@ -70,7 +73,8 @@ export function createLivePreviewPanel(account: AccountController, openHostedGam
   };
   const lobbyInput = el('input', { type: 'text', class: 'lp-lobby', value: randomLobby(), maxlength: 12, 'aria-label': 'Lobby code', spellcheck: 'false', autocomplete: 'off' }) as HTMLInputElement;
   const statusEl = el('span', { class: 'lp-status', role: 'status' });
-  const connectBtn = button('Reconnect simulators', () => connect());
+  const sources: Record<string, PreviewSource> = { iphone: 'simulator', ipad: 'simulator' };
+  const connectBtn = button('Apply lobby / reconnect', () => connect());
   const newCode = button('New code', () => {
     lobbyInput.value = randomLobby();
     connect();
@@ -100,32 +104,98 @@ export function createLivePreviewPanel(account: AccountController, openHostedGam
       void d.session.loadUi();
     });
   }
-  const toolbar = el('div', { class: 'lp-toolbar' }, [el('label', { class: 'lp-lobby-label' }, ['Lobby ', lobbyInput]), newCode, connectBtn, localBtn, filePick, statusEl]);
+  const toolbar = el('div', { class: 'lp-toolbar' }, [...(openHostedGame ? [button('Open hosted game…', openHostedGame, { variant: 'small' })] : []), el('label', { class: 'lp-lobby-label' }, ['Lobby ', lobbyInput]), newCode, connectBtn, localBtn, filePick, statusEl]);
   const devicesEl = el('div', { class: 'lp-devices' });
   const side = el('div', { class: 'lp-side' }, [el('div', { class: 'lp-map-wrap' }, [map.element]), terminal.element]);
   const body = el('div', { class: 'lp-body' }, [devicesEl, side]);
   const relay = new RelayClient();
-  const relayStatus = el('p', { role: 'status' }, ['Physical devices: disconnected.']);
-  const relayDevices = el('ul');
-  const relayConnect = button('Connect device relay', () => relay.connect(), { variant: 'small' });
+  const assignments = new Map<string, string>();
+  const relayStatus = el('p', { role: 'status' });
+  const relayDevices = el('ul', { class: 'lp-relay-devices' });
+  const consent = el('input', { type: 'checkbox' });
+  consent.addEventListener('change', () => {
+    if (!consent.checked) assignments.clear();
+    renderRelay();
+  });
+  const relayConnect = button('Connect local relay', () => relay.connect(), { variant: 'small' });
   const relayDisconnect = button('Disconnect relay', () => { relay.close(); renderRelay(); }, { variant: 'small' });
   function renderRelay(): void {
+    const liveIds = new Set(relay.devices.map((d) => d.id));
+    for (const [slot, id] of assignments) if (!liveIds.has(id)) assignments.delete(slot);
+    if (relay.status !== 'open') { assignments.clear(); consent.checked = false; }
     relayStatus.textContent = relay.status === 'open'
-      ? `Relay connected · ${relay.devices.length} physical device(s). Not the simulated players below.`
+      ? `Local relay open · ${relay.devices.length} companion device(s). Choose a bridge slot below to forward motion.`
       : relay.status === 'connecting' ? 'Connecting to local device relay…'
-      : relay.status === 'failed' ? 'Device relay unavailable. Start the relay, then retry.' : 'Physical devices: disconnected.';
+      : relay.status === 'failed' ? 'Local relay unavailable. Browser pairing above works without it. Companion relay is not bundled or started by this app.' : 'Local relay disconnected.';
     relayConnect.disabled = relay.status === 'open' || relay.status === 'connecting';
     relayDisconnect.disabled = relay.status === 'idle';
-    relayDevices.replaceChildren(...relay.devices.map((d) => el('li', {}, [`${d.name} (${d.kind}) · connected to relay`])));
+    relayDevices.replaceChildren(...relay.devices.map((device) => {
+      const select = el('select', { 'aria-label': `Assign ${device.name} to preview slot` }, [el('option', { value: '' }, ['Not forwarding']),
+        ...DEVICES.filter((s) => sources[s.id] === 'companion').map((s) => el('option', { value: s.id }, [`${s.label} bridge`])),
+      ]);
+      select.disabled = !consent.checked;
+      select.value = [...assignments].find(([, id]) => id === device.id)?.[0] ?? '';
+      select.addEventListener('change', () => {
+        for (const [slot, id] of assignments) if (id === device.id) assignments.delete(slot);
+        if (select.value && consent.checked) assignments.set(select.value, device.id);
+        renderRelay();
+      });
+      return el('li', {}, [el('span', {}, [`${device.name} (${device.kind})`]), select]);
+    }));
   }
   relay.onChange = renderRelay;
-  const pairing = el('details', {}, [
-    el('summary', {}, ['Connect real peripherals']),
-    el('p', {}, ['Run npm run relay from Web/studio on this computer. On the same Wi-Fi, open the Pear companion app and connect to “Pear relay” (Bonjour _pear._tcp, TCP port 7777). Allow Local Network access and the required sensor permissions. Watch and AirPods connect through the companion, not browser Bluetooth.']),
-    el('p', {}, ['This connection lists real devices; their sensor packets feed the local Test runner, not these cloud UI simulators. Start a local test to use them. A connected relay with no listed devices means no companion has joined.']),
-    relayConnect, relayDisconnect, relayStatus, relayDevices,
+  const pairingLinks = el('div', { class: 'lp-pair-links' });
+  const pairingSummary = el('p', { role: 'status' });
+  function renderPairing(gameId: string | null, lobby: string): void {
+    pairingSummary.textContent = gameId ? `Pair to lobby ${lobby}. Choose Browser device before scanning: its simulator leaves, keeping the role free. Each physical browser joins as its own player.` : 'Open a cloud game to create pairing links.';
+    pairingLinks.replaceChildren(...(gameId ? DEVICES.map((spec) => {
+      const role = spec.kind === 'ipad' ? 'referee' : 'phone';
+      let url = '';
+      try { url = physicalPlayerUrl(base(), { gameId, lobby, kind: spec.kind, role }); } catch { /* The visible server warning below is the recovery. */ }
+      const source = el('select', { 'aria-label': `${spec.label} input source` }, [
+        el('option', { value: 'simulator' }, ['Simulator']), el('option', { value: 'browser' }, ['Browser device']), el('option', { value: 'companion' }, ['Companion motion bridge']),
+      ]);
+      source.value = sources[spec.id];
+      source.addEventListener('change', () => { sources[spec.id] = source.value as PreviewSource; connect(); });
+      const reachable = phoneReachable(url);
+      const row = el('section', { class: 'lp-pair-row' }, [
+        el('div', { class: 'lp-pair-heading' }, [el('strong', {}, [`${spec.label} · ${role}`]), source]),
+        el('p', {}, [sources[spec.id] === 'browser' ? 'Slot reserved for a real browser. Studio does not assert connection; check the device screen and server frames in the terminal.' : sources[spec.id] === 'companion' ? 'A cloud preview participant receives assigned companion motion only. Sliders and simulated GPS are off.' : 'Simulator occupies this role. Switch to Browser device to make room for a real participant.']),
+      ]);
+      if (url) row.append(el('div', { class: 'lp-pair-link' }, [
+        ...(reachable ? [el('img', { src: qrDataUrl(url), alt: `Scan to join ${spec.label} in lobby ${lobby}`, width: 112, height: 112 })] : []),
+        el('div', {}, [el('a', { href: url, target: '_blank', rel: 'noreferrer' }, ['Open player']), button('Copy link', () => {
+          void navigator.clipboard.writeText(url).then(() => { pairingSummary.textContent = `Copied ${spec.label} link · lobby ${lobby}`; }).catch(() => { pairingSummary.textContent = `Clipboard unavailable. Copy this link: ${url}`; });
+        }, { variant: 'small' }), el('code', {}, [url])]),
+      ]));
+      if (!reachable) row.append(el('p', { role: 'alert' }, ['Phones need a reachable HTTPS server. Set the server URL in Account and publishing; localhost, HTTP and the desktop app origin cannot be scanned.']));
+      return row;
+    }) : []));
+  }
+  const pairing = el('details', { class: 'lp-pairing', open: true }, [
+    el('summary', {}, ['Pair a phone or iPad']), pairingSummary, pairingLinks,
+    el('p', {}, ['The game server must deploy this Studio build, including player.html, and allow preview sign-in (PEAR_DEV_SIGNIN=1). A missing player page may open Studio instead; ask the host to deploy the player entry. Local ui.json previews are not shared with browsers: publish the UI first. Map markers are Studio simulator positions, not paired-browser tracking.']),
+    el('p', {}, ['On the device, tap Join lobby, then enable only the inputs you want to share. Touch and Pencil taps work on game buttons. The optional Touch / Pencil pad sends pointer events only to games scripted for them; pressure/tilt vary by browser and hardware. No native Pencil hover, roll, squeeze or double-tap is claimed. For two phone players, open the phone link on two different phones.']),
+    el('details', { class: 'lp-companion' }, [el('summary', {}, ['Optional: companion motion bridge']),
+      el('p', {}, ['For an already running local relay: choose Companion motion bridge for a slot, connect, opt in below, then assign a device. Companion motion is converted from USIS orientation to pitch/roll/yaw in degrees for the game’s active motion nodes. Native touch/Pencil, watch and AirPods channels are not forwarded; USIS positions are metres, not GPS.']),
+      el('p', {}, ['Relay setup is separate and currently not included in packaged Studio. Developers can run npm run relay in Web/studio; the Pear companion discovers “Pear relay” on the same Wi-Fi (Bonjour _pear._tcp, TCP 7777). Allow Local Network access. Browser pairing above needs no relay or terminal.']),
+      relayConnect, relayDisconnect, relayStatus, el('label', { class: 'lp-relay-consent' }, [consent, ' I allow assigned local companion motion to be sent to this game’s cloud server.']), relayDevices,
+    ]),
   ]);
-  relay.onPacket = (id, packet) => terminal.add(sysRow('device relay', `${id}: ${JSON.stringify(packet)}`));
+  relay.onPacket = (id, packet) => {
+    if (!consent.checked || relay.status !== 'open') return;
+    const data = companionMotion(id, packet);
+    if (!data) return;
+    for (const d of devices) {
+      if (sources[d.spec.id] !== 'companion' || assignments.get(d.spec.id) !== id || d.session.status !== 'open') continue;
+      const now = performance.now();
+      for (const sensor of d.sensors) {
+        if (sensor.node.kind !== 'motion' || now - sensor.last < 1000 / sensorHz(sensor.node)) continue;
+        sensor.last = now;
+        sensor.emit(data);
+      }
+    }
+  };
   renderRelay();
   root.append(toolbar, pairing, body);
 
@@ -154,7 +224,7 @@ export function createLivePreviewPanel(account: AccountController, openHostedGam
   function setStatus(): void {
     if (!account.gameId) return void (statusEl.textContent = 'No cloud game open.');
     const open = devices.filter((d) => d.session.status === 'open').length;
-    statusEl.textContent = `${gameTitle()} · ${open}/${devices.length} simulated cloud sessions open · not physical devices`;
+    statusEl.textContent = `${gameTitle()} · ${open}/${devices.length} Studio cloud sessions open · not physical devices`;
   }
 
   function emptyState(text: string, detail?: string): HTMLElement {
@@ -163,7 +233,7 @@ export function createLivePreviewPanel(account: AccountController, openHostedGam
 
   function renderDevice(d: Device): void {
     const s = d.session;
-    d.status.textContent = s.status === 'open' ? 'Simulator online'  : s.status === 'failed' ? 'Sign-in failed' : s.status === 'idle' ? 'Idle' : 'Connecting…';
+    d.status.textContent = s.status === 'open' ? (sources[d.spec.id] === 'companion' ? 'Companion bridge online' : 'Simulator online') : s.status === 'failed' ? 'Sign-in failed' : s.status === 'idle' ? 'Idle' : 'Connecting…';
     d.status.dataset.state = s.status;
     d.slider.disabled = d.motion === 0;
     const ui = s.uiState;
@@ -207,6 +277,11 @@ export function createLivePreviewPanel(account: AccountController, openHostedGam
   function hooksFor(d: Device): Hooks {
     return {
       sensor(node: Node, emit) {
+        if (sources[d.spec.id] === 'companion') {
+          const sensor = { node, emit, last: -Infinity };
+          d.sensors.add(sensor);
+          return () => { d.sensors.delete(sensor); };
+        }
         if (node.kind === 'motion') {
           d.motion++;
           d.slider.disabled = false;
@@ -236,7 +311,7 @@ export function createLivePreviewPanel(account: AccountController, openHostedGam
     const status = el('span', { class: 'lp-dev-status' });
     const sliderValue = el('output', { class: 'lp-pitch-value' }, ['0°']);
     const slider = el('input', { type: 'range', min: -90, max: 90, step: 1, value: 0, class: 'lp-pitch', 'aria-label': `${spec.label} pitch`, disabled: true }) as HTMLInputElement;
-    const d: Device = { spec, session, screen, status, slider, sliderValue, handle: null, uiRef: null, pitch: 0, motion: 0, locEvent: null, raf: 0 };
+    const d: Device = { spec, session, screen, status, slider, sliderValue, handle: null, uiRef: null, pitch: 0, motion: 0, locEvent: null, raf: 0, sensors: new Set() };
     slider.addEventListener('input', () => {
       d.pitch = Number(slider.value);
       sliderValue.textContent = `${d.pitch}°`;
@@ -255,15 +330,16 @@ export function createLivePreviewPanel(account: AccountController, openHostedGam
   function connect(): void {
     teardown();
     const gameId = account.gameId;
-    if (!gameId) {
-      devicesEl.append(emptyState('Open a cloud game first', 'Pick or create a game in File > Account and publishing, then come back to Live Preview.'));
-      if (openHostedGame) devicesEl.append(button('Open hosted game', openHostedGame));
-      return setStatus();
-    }
     const lobby = normalizeLobby(lobbyInput.value) || randomLobby();
     lobbyInput.value = lobby;
-    const run = Date.now().toString(36);
-    devices = DEVICES.map((spec) => {
+    renderPairing(gameId, lobby);
+    renderRelay();
+    if (!gameId) {
+      devicesEl.append(emptyState('Open a cloud game first', 'Pick or create a game in File > Account and publishing, then come back to Live Preview.'));
+      return setStatus();
+    }
+    const run = crypto.randomUUID();
+    devices = DEVICES.filter((spec) => needsPreviewSession(sources[spec.id])).map((spec) => {
       const session = new DeviceSession({ name: spec.name, kind: spec.kind, baseUrl: base(), gameId, lobby, run });
       return deviceEl(spec, session);
     });
@@ -272,6 +348,7 @@ export function createLivePreviewPanel(account: AccountController, openHostedGam
       renderDevice(d);
       void d.session.start();
     });
+    setStatus();
     terminal.add(sysRow('preview', `connecting ${gameTitle()} lobby ${lobby} on ${base() || 'this origin'}`));
     openDebug(gameId);
   }

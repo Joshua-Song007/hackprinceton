@@ -4,7 +4,7 @@
 // Ctrl+Alt+arrows move the active panel into the neighbour as a tab, Ctrl+Alt+Shift+arrows split it beside the neighbour,
 // Alt+PageUp/PageDown switch tabs, Ctrl+Alt+M maximizes, Ctrl+Alt+C collapses or expands the active panel's group.
 import { createDockview, type DockviewApi, type DockviewGroupPanel, type IDockviewPanel, type SerializedDockview } from 'dockview-core';
-import { announce, openMenu, type MenuItem } from './ui';
+import { announce, openMenu, uiScale, type MenuItem } from './ui';
 
 export interface PanelView {
   element: HTMLElement;
@@ -78,6 +78,7 @@ export class LayoutManager {
       disableFloatingGroups: true,
       createComponent: ({ id, name }) => {
         const view = this.specs.get(name)!.create();
+        view.element.classList.add('studio-panel');
         this.views.set(id, view);
         return {
           element: view.element,
@@ -172,7 +173,8 @@ export class LayoutManager {
     if (this.collapsed.has(group.id)) return;
     const ids = group.panels.map((p) => p.id);
     const primary = ids.some((id) => id === 'editor' || id === 'livePreview' || id === 'viewport');
-    group.api.setConstraints({ minimumWidth: primary ? 280 : 180, minimumHeight: primary ? 220 : ids.includes('inspector') ? 180 : 100 });
+    const scale = uiScale();
+    group.api.setConstraints({ minimumWidth: (primary ? 280 : 180) * scale, minimumHeight: (primary ? 220 : ids.includes('inspector') ? 180 : 100) * scale });
   }
 
   private add(id: string, position?: { referencePanel?: string; direction?: 'left' | 'right' | 'above' | 'below' | 'within' }, size: { initialWidth?: number; initialHeight?: number } = {}, inactive = false) {
@@ -213,13 +215,16 @@ export class LayoutManager {
       b('explorer', { referencePanel: 'livePreview', direction: 'left' });
       b('peripherals', { referencePanel: 'explorer', direction: 'within' }, {}, true);
       b('test', { referencePanel: 'explorer', direction: 'within' }, {}, true);
-      const compact = this.host.clientHeight < 700 || this.host.clientWidth < 1100;
+      const compact = this.host.clientHeight / uiScale() < 700 || this.host.clientWidth / uiScale() < 1100;
       b('inspector', { referencePanel: compact ? 'explorer' : 'livePreview', direction: compact ? 'within' : 'below' }, {}, compact);
       b('console', compact ? { referencePanel: 'livePreview', direction: 'within' } : { direction: 'below' }, {}, compact);
       sizes = { explorer: { width: 220 }, inspector: compact ? {} : { height: 220 }, console: compact ? {} : { height: 140 } };
     }
     // The panel that holds the rest keeps its size; sidebars, inspector and debug area get theirs.
-    for (const [id, size] of Object.entries(sizes)) this.api.getPanel(id)?.api.setSize(size);
+    for (const [id, size] of Object.entries(sizes)) this.api.getPanel(id)?.api.setSize({
+      ...(size.width === undefined ? {} : { width: size.width * uiScale() }),
+      ...(size.height === undefined ? {} : { height: size.height * uiScale() }),
+    });
     for (const group of this.api.groups) this.constrainGroup(group);
     if (this.api.getPanel('console')?.group !== this.api.getPanel('livePreview')?.group) this.api.getPanel('console')?.api.setActive();
     this.api.getPanel(preset === 'default' ? 'livePreview' : 'viewport')?.api.setActive();

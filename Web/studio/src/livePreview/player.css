@@ -1,0 +1,30 @@
+/* The hosted player uses the same restrained dark game surface as PearUI, without Studio chrome. */
+:root { color-scheme: dark; font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; color: #f5f5f7; background: #090d0b; }
+* { box-sizing: border-box; }
+body { margin: 0; }
+#player { max-width: 1180px; margin: auto; padding: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(24px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left)); }
+p { line-height: 1.5; max-width: 72ch; color: #b8c5bd; }
+h1 { font-size: 28px; margin: 0 0 8px; letter-spacing: -.02em; }
+h2 { font-size: 20px; margin: 0 0 8px; }
+.player-header { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; border-bottom: 1px solid #304038; padding-bottom: 16px; }
+.player-header span { margin-left: auto; color: #b8c5bd; font-size: 14px; }
+.player-welcome { padding: 24px 0; }
+.player-welcome > p { margin: 0 0 16px; }
+.player-actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+button, input { min-height: 44px; padding: 10px 14px; font: inherit; border-radius: 8px; border: 1px solid #52675c; background: #17261d; color: #f5f5f7; }
+input { width: min(100%, 220px); background: #0c1510; }
+button { cursor: pointer; }
+button:hover:enabled { background: #284735; }
+button:disabled { opacity: .5; cursor: default; }
+:focus-visible { outline: 3px solid #c8f58a; outline-offset: 3px; }
+::selection { color: #090d0b; background: #c8f58a; }
+.player-screen { min-height: 380px; height: 65dvh; max-height: 900px; border: 1px solid #304038; border-radius: 12px; overflow: auto; background: #000; }
+.player-screen:empty { display: none; }
+.player-inputs { padding-top: 28px; }
+.player-pad { display: grid; place-items: center; min-height: 240px; margin: 20px 0; padding: 20px; border: 1px dashed #8daf9a; border-radius: 8px; background: #13251a; touch-action: none; user-select: none; -webkit-user-select: none; color: #d2e7da; }
+.player-pad[hidden] { display: none; }
+.player-evidence { display: block; padding: 12px 0; overflow-wrap: anywhere; color: #c8f58a; font: 13px/1.5 ui-monospace, monospace; font-variant-numeric: tabular-nums; }
+details { margin-top: 18px; padding-top: 16px; border-top: 1px solid #304038; }
+summary { cursor: pointer; min-height: 44px; }
+pre { padding: 16px; background: #111b15; overflow: auto; line-height: 1.5; }
+@media (max-width: 520px) { .player-header span { margin-left: 0; flex-basis: 100%; } .player-screen { height: 70dvh; } }

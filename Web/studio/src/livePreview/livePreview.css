@@ -58,3 +58,17 @@
 .lp-debug .lp-src { color: var(--axis-y); }
 .lp-lv-warn .lp-text, .lp-lv-warn .lp-name { color: var(--warn); }
 .lp-lv-error .lp-text, .lp-lv-error .lp-name { color: var(--error); }
+
+.lp-pairing { flex: 0 1 auto; max-height: 45%; overflow: auto; padding: 10px 12px; border-bottom: 1px solid var(--line); font-size: 12px; }
+.lp-pairing summary { cursor: pointer; padding: 4px 0; font-weight: 600; }
+.lp-pairing p { line-height: 1.5; color: var(--text-secondary); }
+.lp-pair-links { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap: 12px; }
+.lp-pair-row { min-width: 0; padding: 12px; border: 1px solid var(--line); border-radius: 8px; }
+.lp-pair-heading, .lp-pair-link { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.lp-pair-heading select, .lp-relay-devices select { background: var(--bg-field); color: var(--text); border: 1px solid var(--line-control); border-radius: 4px; padding: 6px; }
+.lp-pair-link > div { flex: 1; min-width: 150px; }
+.lp-pair-link a { color: var(--accent); margin-right: 8px; }
+.lp-pair-link code { display: block; overflow-wrap: anywhere; padding-top: 8px; color: var(--text-secondary); }
+.lp-relay-consent { display: block; padding: 8px 0; }
+.lp-relay-devices { padding-left: 18px; }
+.lp-relay-devices li { margin: 8px 0; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }

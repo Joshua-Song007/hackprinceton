@@ -71,8 +71,11 @@ const path = require('node:path');
       const { LayoutManager } = await import('/src/layout.ts');
       const host = document.createElement('div');
       host.id = 'dock';
-      host.style.cssText = 'position:absolute;inset:0';
-      document.body.append(host);
+      const shell = document.createElement('div');
+      shell.id = 'studio';
+      shell.style.gridTemplateRows = 'minmax(0, 1fr)';
+      shell.append(host);
+      document.body.append(shell);
       const ids = ['livePreview', 'editor', 'explorer', 'peripherals', 'test', 'inspector', 'console', 'viewport'];
       const specs = ids.map(id => ({ id, title: id, create: () => {
         const element = document.createElement('div');
@@ -147,10 +150,6 @@ const path = require('node:path');
         await page.setViewportSize({ width, height });
         await page.evaluate(async scale => {
           document.documentElement.style.setProperty('--ui-scale', scale);
-          const host = document.getElementById('dock');
-          host.style.zoom = scale;
-          host.style.width = `${innerWidth / scale}px`;
-          host.style.height = `${innerHeight / scale}px`;
           await new Promise(requestAnimationFrame);
           window.qaLayout.reset();
           await new Promise(requestAnimationFrame);

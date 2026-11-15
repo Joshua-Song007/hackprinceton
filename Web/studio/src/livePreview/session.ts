@@ -14,6 +14,8 @@ export interface SessionOptions {
   webSocket?: (url: string) => WebSocketLike;
   /** Unique per panel run so each connect is a fresh dev account. */
   run?: string;
+  /** Physical players may choose a game role independently of their screen size. */
+  role?: 'phone' | 'referee';
 }
 
 export type UiState = { kind: 'loading' } | { kind: 'ready'; ui: PearUI; version: number } | { kind: 'none'; reason: string };
@@ -59,8 +61,13 @@ export class DeviceSession {
     this.socket.onStatus = (s) => {
       this.set(s);
       this.log(sysRow(name, `socket ${s}${s === 'open' ? ` (lobby ${lobby})` : ''}`));
-      if (s === 'open') this.send(roleFrame(kind).name, roleFrame(kind).data);
+      if (s === 'open') this.sendRole();
     };
+  }
+
+  private sendRole(): void {
+    const frame = roleFrame(this.opts.kind);
+    this.send(frame.name, { ...frame.data, role: this.opts.role ?? frame.data.role });
   }
 
   private openSocket(url: string): WebSocketLike {
@@ -114,7 +121,10 @@ export class DeviceSession {
     const at = extractLatLng(f.data);
     if (at) this.position = at;
     const reloaded = f.name === '_reload' ? (f.data as { version?: number } | null)?.version : undefined;
-    if (f.name === '_reload' && reloaded !== this.loadedVersion) void this.loadUi();
+    if (f.name === '_reload') {
+      this.sendRole();
+      if (reloaded !== this.loadedVersion) void this.loadUi();
+    }
     this.onChange();
   }
 
@@ -141,6 +151,7 @@ export class DeviceSession {
     this.disposed = true;
     this.socket?.close();
     this.socket = null;
+    this.status = 'idle';
   }
 
   private set(s: DeviceSession['status']): void {
