@@ -77,10 +77,13 @@ server.tool('save_version', 'Save files as a new version (becomes the latest; li
   return { version: v.version, assets: Object.keys(v.assets) };
 }));
 
-server.tool('publish', 'Make an earlier saved version the live one again (re-saves its content as a new latest version).', { id, version: z.number().int().positive() }, tool(async ({ id, version }) => {
+server.tool('publish', 'Publish: list the game (listed:true) so phones see it, re-saving an earlier saved version as the new latest. Optional description, tags, releaseNotes.', {
+  id, version: z.number().int().positive(),
+  description: z.string().optional(), tags: z.array(z.string()).optional(), releaseNotes: z.string().optional(),
+}, tool(async ({ id, version, description, tags, releaseNotes }) => {
   const v = await api('GET', `/api/games/${id}/versions/${version}`);
   const { scene, client_scripts, server_scripts, assets, metadata, run_mode } = v;
-  const n = await api('POST', `/api/games/${id}/versions`, { scene, client_scripts, server_scripts, assets, metadata, run_mode });
+  const n = await api('POST', `/api/games/${id}/versions`, { scene, client_scripts, server_scripts, assets, metadata, run_mode, listed: true, description, tags, release_notes: releaseNotes });
   return { published: version, version: n.version };
 }));
 
