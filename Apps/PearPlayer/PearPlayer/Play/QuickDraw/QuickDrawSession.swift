@@ -12,6 +12,8 @@ final class QuickDrawSession: Identifiable {
     enum Link: Equatable { case connecting, connected, reconnecting }
 
     let title: String
+    /// The big-screen host (iPad): shows and narrates the match, holds no phone slot, never runs motion or readies.
+    let isReferee: Bool
     /// The code the player asked for; nil is the shared OPEN lobby. The server's `_welcome` echoes the effective one.
     private(set) var lobby: String
     private(set) var link: Link = .connecting
@@ -41,19 +43,25 @@ final class QuickDrawSession: Identifiable {
     private var fireAt: UInt64?
     private var stopped = false
 
-    init?(base: URL, gameId: String, token: String, version: Int, lobby: String?, title: String) {
+    init?(base: URL, gameId: String, token: String, version: Int, lobby: String?, title: String, isReferee: Bool = false) {
         guard let url = QDWire.socketURL(base: base, gameId: gameId, token: token, version: version, lobby: lobby) else {
             return nil
         }
         self.url = url
         self.lobby = lobby ?? "OPEN"
         self.title = title
+        self.isReferee = isReferee
         #if DEBUG
         QDRaiseDetector.selfCheck()
         #endif
     }
 
     var me: QDPlayer? { state.players.first { $0.id == myId } }
+    /// The other phone in the match, from a phone's point of view.
+    var opponentId: String? { state.phones.first { $0 != myId } }
+    var refereeConnected: Bool { !state.referees.isEmpty }
+    /// Referee screen: the name for a phone id, with no "You".
+    func playerName(_ id: String) -> String { state.players.first { $0.id == id }?.name ?? "Player" }
     func name(of id: String?) -> String {
         guard let id else { return "" }
         return id == myId ? "You" : state.players.first { $0.id == id }?.name ?? "Opponent"
@@ -67,7 +75,7 @@ final class QuickDrawSession: Identifiable {
         guard runner == nil else { return }
         UIApplication.shared.isIdleTimerDisabled = true
         sounds.prepare()
-        startMotion()
+        if !isReferee { startMotion() }
         runner = Task { [weak self] in await self?.run() }
     }
 
@@ -121,14 +129,17 @@ final class QuickDrawSession: Identifiable {
             myId = id
             if let code, !code.isEmpty { lobby = code }
             link = .connected
-            send(QDWire.role())
+            send(isReferee ? QDWire.refereeRole() : QDWire.role())
         case .reload:
-            send(QDWire.role())
+            send(isReferee ? QDWire.refereeRole() : QDWire.role())
             detector.reset()
             isCalibrated = false
             isRaised = false
         case .state(let s):
             state = s
+            #if targetEnvironment(simulator)
+            if autoGun, ["lobby", "matchOver"].contains(s.phase), canReady { readyTapped() }
+            #endif
             round = s.round
             if phase != s.phase { enter(s.phase) }
             if s.phase != "matchOver" { matchOver = false }
@@ -140,7 +151,7 @@ final class QuickDrawSession: Identifiable {
             round = r
             enter("arming")
             // Already raised when arming starts: the server only sees transitions, so report it as a foul.
-            if detector.raised { send(QDWire.raised(round: round, sinceFireMs: nil)) }
+            if !isReferee, detector.raised { send(QDWire.raised(round: round, sinceFireMs: nil)) }
         case .fire(let r):
             // The reaction clock starts when this phone receives the cue, so the other phone's clock never enters.
             round = r
@@ -155,11 +166,11 @@ final class QuickDrawSession: Identifiable {
             matchOver = true
             resultSound?.cancel()
             phase = "matchOver"
-            if winner == myId {
-                sounds.matchWin()
+            if isReferee {
+                if winner != nil { sounds.matchWin() }
+            } else if winner == myId {
                 notify(.success)
             } else {
-                sounds.roundLose()
                 notify(.error)
             }
         case .unknown:
@@ -173,12 +184,15 @@ final class QuickDrawSession: Identifiable {
         phase = next
         if next != "countdown" { countdownTask?.cancel(); countdownValue = nil }
         if next != "arming" { sounds.stopDrone() }
+        #if targetEnvironment(simulator)
+        if next == "fire" { autoGunRaise() }
+        #endif
         if next != "fire" { fireAt = nil }
         switch next {
-        case "arming": sounds.startDrone()
+        case "arming": if isReferee { sounds.startDrone() }
         case "fire":
             sounds.fire()
-            UIImpactFeedbackGenerator(style: .heavy).impactOccurred()
+            if !isReferee { UIImpactFeedbackGenerator(style: .heavy).impactOccurred() }
         case "countdown":
             lastResult = nil
             matchWinner = nil
@@ -194,8 +208,7 @@ final class QuickDrawSession: Identifiable {
             for n in stride(from: steps, through: 1, by: -1) {
                 guard let self, !Task.isCancelled else { return }
                 self.countdownValue = n
-                self.sounds.tick()
-                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                if self.isReferee { self.sounds.tick() } else { UIImpactFeedbackGenerator(style: .light).impactOccurred() }
                 try? await Task.sleep(for: .seconds(1))
             }
         }
@@ -207,11 +220,11 @@ final class QuickDrawSession: Identifiable {
         resultSound = Task { [weak self] in
             try? await Task.sleep(for: .milliseconds(150))
             guard let self, !Task.isCancelled, result.winnerId != nil else { return }
-            if result.winnerId == self.myId {
+            if self.isReferee {
                 self.sounds.roundWin()
+            } else if result.winnerId == self.myId {
                 self.notify(.success)
             } else {
-                self.sounds.roundLose()
                 self.notify(.error)
             }
         }
@@ -226,20 +239,28 @@ final class QuickDrawSession: Identifiable {
     /// Calibrates the lowered pose after a short hold, then reports ready. Needed for the first round and for a replay.
     func readyTapped() {
         guard canReady else { return }
+        #if targetEnvironment(simulator)
+        simSettleAtRest()
+        #endif
         if detector.raised {
             notice = "Lower your phone, then tap again."
             return
         }
+        #if !targetEnvironment(simulator)
         guard motion.isDeviceMotionAvailable else {
             notice = "This device has no motion sensor."
             return
         }
+        #endif
         calibrating = true
         notice = "Hold still at your side..."
         Task { [weak self] in
             try? await Task.sleep(for: .milliseconds(700)) // lets the low-pass settle on the rest pose
             guard let self else { return }
             self.calibrating = false
+            #if targetEnvironment(simulator)
+            self.simSettleAtRest()
+            #endif
             if self.detector.calibrate() {
                 self.isCalibrated = true
                 self.notice = nil
@@ -274,5 +295,30 @@ final class QuickDrawSession: Identifiable {
             break
         }
     }
+
+    #if targetEnvironment(simulator)
+    // MARK: Simulator motion injector (fenced: compiled only for the simulator, never a device or release build)
+
+    /// `PEAR_DEV_AUTO_GUN=1`: tap Ready in the lobby, raise ~250 ms after `fire`, lower ~800 ms later.
+    private let autoGun = ["1", "true"].contains(ProcessInfo.processInfo.environment["PEAR_DEV_AUTO_GUN"] ?? "")
+
+    /// Feeds the same detector path as CoreMotion: gravity at the lowered pose (0, 0, -1) or turned 90 degrees (0, 1, 0).
+    /// The low-pass needs a run of samples, so each call feeds enough to settle.
+    private func simFeed(_ g: QDVec) { for _ in 0..<40 { feed(g) } }
+    func simRaise() { guard !isReferee else { return }; simFeed(QDVec(x: 0, y: 1, z: 0)) }
+    func simLower() { guard !isReferee else { return }; simFeed(QDVec(x: 0, y: 0, z: -1)) }
+    /// A simulator has no sensor, so calibration needs a rest sample; skipped while the fake phone is raised.
+    private func simSettleAtRest() { if !detector.raised { simFeed(QDVec(x: 0, y: 0, z: -1)) } }
+
+    private func autoGunRaise() {
+        guard autoGun, !isReferee else { return }
+        Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(250))
+            self?.simRaise()
+            try? await Task.sleep(for: .milliseconds(800))
+            self?.simLower()
+        }
+    }
+    #endif
 }
 #endif

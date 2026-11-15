@@ -1,8 +1,22 @@
 #if os(iOS)
 import SwiftUI
 
-/// Full-screen Quick Draw: lobby, countdown, hold still, draw, round result, match over. The session owns all logic.
+/// The iPad is the referee on a big screen; an iPhone is a gun.
 struct QuickDrawView: View {
+    let session: QuickDrawSession
+    let onLeave: () -> Void
+
+    var body: some View {
+        if session.isReferee {
+            QuickDrawRefereeView(session: session, onLeave: onLeave)
+        } else {
+            QuickDrawGunView(session: session, onLeave: onLeave)
+        }
+    }
+}
+
+/// Full-screen Quick Draw: lobby, countdown, hold still, draw, round result, match over. The session owns all logic.
+private struct QuickDrawGunView: View {
     let session: QuickDrawSession
     let onLeave: () -> Void
 
@@ -13,9 +27,15 @@ struct QuickDrawView: View {
             background.ignoresSafeArea()
             VStack(spacing: PearTheme.Space.s4) {
                 topBar
+                versus
                 Spacer(minLength: 0)
                 content
                 Spacer(minLength: 0)
+                Text(instruction).font(PearTheme.sans(20, .semibold)).foregroundStyle(phase == "fire" ? .white : PearTheme.text)
+                    .multilineTextAlignment(.center).accessibilityIdentifier("qd-instruction")
+                #if targetEnvironment(simulator)
+                simControls
+                #endif
                 if let notice = session.notice {
                     Text(notice).font(PearTheme.sans(17, .medium)).foregroundStyle(PearTheme.warn).multilineTextAlignment(.center)
                 }
@@ -44,6 +64,9 @@ struct QuickDrawView: View {
             .buttonStyle(PearSecondaryButtonStyle())
             .accessibilityHint("Leaves this Quick Draw match")
             Spacer()
+            if session.refereeConnected {
+                Label("Referee screen connected", systemImage: "tv").font(PearTheme.small).foregroundStyle(PearTheme.accent)
+            }
             if session.link != .connected {
                 Label(session.link == .connecting ? "Connecting" : "Reconnecting", systemImage: "wifi.exclamationmark")
                     .font(PearTheme.small).foregroundStyle(PearTheme.warn)
@@ -53,6 +76,45 @@ struct QuickDrawView: View {
         }
         .opacity(phase == "arming" ? 0.5 : 1)
     }
+
+    /// Your name against the opponent's, with the score, from the moment two phones hold slots.
+    @ViewBuilder private var versus: some View {
+        if let opp = session.opponentId, session.inQueue == nil, session.me?.role == "phone" {
+            let mine = session.state.scores[session.myId] ?? 0, theirs = session.state.scores[opp] ?? 0
+            Text("\(session.me?.name ?? "You")  \(mine) - \(theirs)  \(session.playerName(opp))")
+                .font(PearTheme.sans(17, .semibold)).foregroundStyle(PearTheme.textSecondary).lineLimit(1).minimumScaleFactor(0.6)
+                .opacity(phase == "arming" || phase == "fire" ? 0.5 : 1)
+                .accessibilityLabel("You, \(session.me?.name ?? ""), \(mine). \(session.playerName(opp)), \(theirs).")
+        }
+    }
+
+    /// One line per phase telling this player what to do.
+    private var instruction: String {
+        if let place = session.inQueue { return "A match is on. You are number \(place) in line." }
+        switch phase {
+        case "countdown": return "Get ready. Phone down at your side."
+        case "arming": return "Hold still..."
+        case "fire": return "DRAW!"
+        case "roundOver":
+            return session.isRaised || session.me?.raised == true ? "Lower your phone for the next round" : "Waiting for the other phone to lower"
+        case "matchOver": return "Tap Play again when you are both ready"
+        default: return session.me?.ready == true ? "Ready. Waiting for the other player" : "Hold your phone down at your side and tap Ready"
+        }
+    }
+
+    #if targetEnvironment(simulator)
+    /// Simulator only: no motion sensor, so these feed the same raise/lower path as CoreMotion.
+    private var simControls: some View {
+        HStack {
+            Text("Sim:").font(PearTheme.small).foregroundStyle(PearTheme.textSecondary)
+            Button("Raise") { session.simRaise() }
+            Button("Lower") { session.simLower() }
+        }
+        .buttonStyle(PearSecondaryButtonStyle())
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Simulator motion: Raise or Lower")
+    }
+    #endif
 
     @ViewBuilder private var content: some View {
         switch phase {
@@ -212,8 +274,6 @@ struct QuickDrawView: View {
                 }
             }
             scoreLine
-            Text("Lower your phone. The next round starts by itself.").font(PearTheme.sans(17)).foregroundStyle(PearTheme.textSecondary)
-                .multilineTextAlignment(.center)
         }
     }
 

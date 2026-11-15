@@ -35,6 +35,17 @@ struct QDState: Equatable {
     var phones: [String] = []
     var players: [QDPlayer] = []
     var needs = ""
+    /// Connections that announced `role referee` (absent on old servers, where a referee shows as role nil).
+    var referees: [String] = []
+
+    /// Spectating connections other than `id`: referees plus anyone with no phone role. Old servers list a referee as role nil.
+    func watching(excluding id: String) -> Int {
+        let ids = Set(referees).union(players.filter { QDState.isWatcher(role: $0.role) }.map(\.id))
+        return ids.subtracting([id]).count
+    }
+
+    /// Role null or "referee": a connection that holds no phone slot and no queue place.
+    static func isWatcher(role: String?) -> Bool { role == nil || role == "referee" }
 }
 
 struct QDRoundResult: Equatable {
@@ -77,6 +88,7 @@ enum QDWire {
             s.queue = d["queue"] as? [String] ?? []
             s.phones = d["phones"] as? [String] ?? []
             s.needs = d["needs"] as? String ?? ""
+            s.referees = d["referees"] as? [String] ?? []
             for case let p as [String: Any] in d["players"] as? [Any] ?? [] {
                 guard let id = p["id"] as? String else { continue }
                 s.players.append(QDPlayer(
@@ -113,6 +125,7 @@ enum QDWire {
     }
 
     static func role() -> String { frame("role", ["role": "phone"]) }
+    static func refereeRole() -> String { frame("role", ["role": "referee"]) }
     static func ready(round: Int) -> String { frame("ready", ["round": round]) }
     static func lowered() -> String { frame("lowered") }
     /// `sinceFireMs` nil is sent as JSON null: the phone raised before `fire` reached it (a foul).
@@ -212,6 +225,12 @@ struct QDRaiseDetector {
         assert(url?.absoluteString == "wss://pear.test/play/g?token=t&version=3&lobby=K7QM2")
         assert(QDWire.raised(round: 4, sinceFireMs: nil) == #"{"data":{"round":4,"sinceFireMs":null},"name":"raised"}"#)
         assert(QDWire.raised(round: 4, sinceFireMs: 212).contains(#""sinceFireMs":212"#))
+        assert(QDWire.refereeRole() == #"{"data":{"role":"referee"},"name":"role"}"#)
+        if case .state(let s)? = QDWire.decode(
+            #"{"name":"state","data":{"referees":["r1","r2"],"players":[{"id":"a","role":"phone"},{"id":"r1","role":"referee"},{"id":"r2"},{"id":"w"}]}}"#) {
+            assert(s.referees == ["r1", "r2"] && s.phones == ["a"] && s.watching(excluding: "r1") == 2)
+        } else { assertionFailure("referee decode") }
+        assert(QDState.isWatcher(role: nil) && QDState.isWatcher(role: "referee") && !QDState.isWatcher(role: "queued"))
         // Tolerant decode: no players, scores or idleKickAt must not crash.
         if case .state(let s)? = QDWire.decode(#"{"name":"state","data":{"phase":"fire","round":7}}"#) {
             assert(s.phase == "fire" && s.round == 7 && s.players.isEmpty)
