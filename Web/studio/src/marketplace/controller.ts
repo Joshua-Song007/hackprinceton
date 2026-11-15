@@ -34,6 +34,11 @@ export function hostedRuntimeUrls(serverUrl: string, token: string, projectId: s
   return { health: `${base}/agent/health`, ws: `${base.replace(/^http/, 'ws')}/agent/ws?${q}`, hosted: true };
 }
 
+/** Saved model keys belong to the hosted agent, not the desktop's local Python process. */
+export function agentRuntimeUrls(manifest: PluginManifest, serverUrl: string, token: string | null, projectId: string): RuntimeUrls {
+  return token && manifest.id === DEEP_AGENTS_ID ? hostedRuntimeUrls(serverUrl, token, projectId) : localRuntimeUrls(manifest);
+}
+
 /** True when version `a` is higher than `b` ("0.10" > "0.9.9"); non-numeric parts count as 0. */
 export function isNewer(a: string, b: string): boolean {
   const pa = a.split('.').map((n) => Number(n) || 0);
@@ -128,11 +133,14 @@ export class MarketplaceController {
   }
 
   /** The hosted runtime reads the account's key when a panel connects, so a key change reopens installed plugins' panels. */
-  private remountPanels(): void {
-    for (const [id, p] of Object.entries(this.read())) {
+  remountPanels(): void {
+    const panels = Object.entries(this.read()).flatMap(([id, p]) => {
       const panel = p.state === 'installed' ? this.deps.panels[id]?.(p.manifest) : undefined;
-      if (!panel) continue;
-      this.deps.host.unregister(panel.id);
+      return panel ? [panel] : [];
+    });
+    // Dispose every old connection before opening any panel with the current account/backend URLs.
+    for (const panel of panels) this.deps.host.unregister(panel.id);
+    for (const panel of panels) {
       this.deps.host.register(panel);
       this.deps.host.openRight(panel.id);
     }
@@ -266,6 +274,14 @@ export class MarketplaceController {
     return this.run(id, () => this.doUninstall(id));
   }
 
+  /** Reopens an installed plugin and retries its runtime without downloading or unpacking again. */
+  open(id: string): Promise<void> {
+    return this.run(id, async () => {
+      const stored = this.read()[id];
+      if (stored?.state === 'installed') await this.launch(id, stored.manifest);
+    });
+  }
+
   /** Reinstall, and also Update: the install fetches the listed (newest approved) version. */
   reinstall(id: string): Promise<void> {
     return this.run(id, async () => {
@@ -321,19 +337,24 @@ export class MarketplaceController {
     const urls = (this.deps.runtimeUrls ?? localRuntimeUrls)(manifest);
     const hint = this.deps.installer.startHint && !urls.hosted ? ` Start it with: ${this.deps.installer.startHint}` : '';
     this.step(id, urls.hosted ? 'Connecting to the hosted runtime.' : `Runtime starting.${hint}`);
-    if (!urls.hosted) await this.deps.installer.start(projectId, manifest);
+    const openPanel = () => {
+      const panel = this.deps.panels[id]?.(manifest);
+      if (panel) {
+        this.deps.host.register(panel);
+        this.deps.host.openRight(panel.id);
+      }
+    };
+    if (urls.hosted) openPanel();
+    else await this.deps.installer.start(projectId, manifest);
     try {
       await waitHealthy(urls.health, { fetchFn: this.deps.fetchFn, sleep: this.deps.sleep, timeoutMs: this.deps.healthTimeoutMs });
     } catch {
+      if (urls.hosted) throw new Error('Cannot reach the hosted Deep Agent runtime. The panel remains available: use Retry now there, or Open here to retry. Check your sign-in, backend connection and saved model API key in Marketplace; if it persists, ask the server admin to check the hosted agent service.');
       // The runtime is left running: a first `uv sync` can outlast the poll, and stopping would kill it.
       throw new Error(`Runtime still starting - press Reinstall or wait.${hint}`);
     }
     this.step(id, 'Healthy');
-    const panel = this.deps.panels[id]?.(manifest);
-    if (panel) {
-      this.deps.host.register(panel);
-      this.deps.host.openRight(panel.id);
-    }
+    if (!urls.hosted) openPanel();
   }
 
   /** Registers the panels of installed plugins. Call before layout.start() so a saved layout that names them is kept. */

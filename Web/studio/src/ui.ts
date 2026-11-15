@@ -71,6 +71,7 @@ export function rovingToolbar(bar: HTMLElement): void {
 export const clock = (ms: number): string => new Date(ms).toLocaleTimeString([], { hour12: false }) + '.' + String(ms % 1000).padStart(3, '0');
 
 let sheetCount = 0;
+let closeActiveMenu: (() => void) | undefined;
 
 /** The UI scale preference (--ui-scale on :root); menus and sheets live outside #studio and apply it themselves. */
 export const uiScale = (): number => Number.parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--ui-scale')) || 1;
@@ -114,17 +115,19 @@ export interface MenuItem {
 
 /** Popup menu under `anchor`; arrow keys move, Enter runs, Escape closes and returns focus to the anchor. */
 export function openMenu(anchor: HTMLElement, items: MenuItem[]): void {
-  document.querySelectorAll('.menu').forEach((m) => m.remove());
+  closeActiveMenu?.();
   const menu = el('div', { class: 'menu', role: 'menu', 'aria-label': anchor.getAttribute('aria-label') || anchor.textContent || 'Menu' });
   anchor.setAttribute('aria-haspopup', 'menu');
   anchor.setAttribute('aria-expanded', 'true');
   const buttons: HTMLButtonElement[] = [];
   const close = (refocus: boolean) => {
     menu.remove();
+    closeActiveMenu = undefined;
     anchor.setAttribute('aria-expanded', 'false');
     document.removeEventListener('pointerdown', outside, true);
     if (refocus) anchor.focus();
   };
+  closeActiveMenu = () => close(false);
   const outside = (e: Event) => {
     if (!menu.contains(e.target as Node)) close(false);
   };
@@ -163,8 +166,10 @@ export function openMenu(anchor: HTMLElement, items: MenuItem[]): void {
   document.body.append(menu);
   const r = anchor.getBoundingClientRect();
   const at = menuPosition(r, uiScale(), window.innerWidth);
-  menu.style.left = `${at.left}px`;
-  menu.style.top = `${at.top}px`;
+  const scale = uiScale();
+  const bounds = menu.getBoundingClientRect();
+  menu.style.left = `${Math.max(0, Math.min(at.left * scale, window.innerWidth - bounds.width)) / scale}px`;
+  menu.style.top = `${Math.max(0, Math.min(at.top * scale, window.innerHeight - bounds.height)) / scale}px`;
   document.addEventListener('pointerdown', outside, true);
   buttons.find((b) => !b.disabled)?.focus();
 }

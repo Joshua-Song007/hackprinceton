@@ -32,7 +32,6 @@ export interface LayoutHooks {
 }
 
 const CURRENT_KEY = 'pear.studio.layout.current';
-const CORE_PANELS = ['explorer', 'inspector'];
 const NAMED_KEY = 'pear.studio.layouts';
 /** Panels added after layouts were first saved: each is offered once as a tab beside `beside`, so an old saved layout does not hide it for good. */
 const ADDED_PANELS: readonly { id: string; beside: string }[] = [{ id: 'peripherals', beside: 'explorer' }];
@@ -90,6 +89,9 @@ export class LayoutManager {
         };
       },
     });
+    this.api.onDidAddGroup((group) => this.constrainGroup(group));
+    this.api.onDidAddPanel((panel) => this.constrainGroup(panel.group));
+    this.api.onDidActivePanelChange((panel) => { if (panel) this.constrainGroup(panel.group); });
     this.api.onDidLayoutChange(() => {
       if (this.restoring) return;
       clearTimeout(this.saveTimer);
@@ -145,22 +147,32 @@ export class LayoutManager {
   }
 
   private tryLoad(json: string): boolean {
+    const previous = this.api.toJSON();
     this.restoring = true;
+    clearTimeout(this.saveTimer);
     try {
       const data = JSON.parse(json) as SerializedDockview;
       const ids = Object.values(data.panels ?? {}).map((p) => (p as { contentComponent?: string }).contentComponent);
       if (ids.some((id) => !id || !this.specs.has(id))) return false;
       // A layout missing a core panel (e.g. only the viewport left open) strands a creator; start from the default instead.
-      if (CORE_PANELS.some((id) => this.specs.has(id) && !ids.includes(id))) return false;
+      if (!ids.length) return false;
       this.api.fromJSON(data);
+      this.collapsed.clear();
       return true;
     } catch {
-      this.api.clear();
+      this.api.fromJSON(previous);
       return false;
     } finally {
       this.restoring = false;
       this.storage.setItem(CURRENT_KEY, JSON.stringify(this.api.toJSON()));
     }
+  }
+
+  private constrainGroup(group: DockviewGroupPanel): void {
+    if (this.collapsed.has(group.id)) return;
+    const ids = group.panels.map((p) => p.id);
+    const primary = ids.some((id) => id === 'editor' || id === 'livePreview' || id === 'viewport');
+    group.api.setConstraints({ minimumWidth: primary ? 280 : 180, minimumHeight: primary ? 220 : ids.includes('inspector') ? 180 : 100 });
   }
 
   private add(id: string, position?: { referencePanel?: string; direction?: 'left' | 'right' | 'above' | 'below' | 'within' }, size: { initialWidth?: number; initialHeight?: number } = {}, inactive = false) {
@@ -170,6 +182,8 @@ export class LayoutManager {
 
   applyPreset(preset: PresetId): void {
     this.restoring = true;
+    clearTimeout(this.saveTimer);
+    this.collapsed.clear();
     this.api.clear();
     this.api.layout(this.host.clientWidth, this.host.clientHeight); // sizes below need a measured dock
     const b = this.add.bind(this);
@@ -182,7 +196,7 @@ export class LayoutManager {
       b('viewport', { referencePanel: 'editor', direction: 'right' });
       b('inspector', { referencePanel: 'viewport', direction: 'below' });
       b('console', { direction: 'below' } as never);
-      sizes = { explorer: { width: 220 }, viewport: { width: 380 }, inspector: { height: 240 }, console: { height: 140 } };
+      sizes = { explorer: { width: 200 }, viewport: { width: 360 }, inspector: { height: 200 }, console: { height: 140 } };
     } else if (preset === 'debug-focus') {
       b('viewport');
       b('editor', { referencePanel: 'viewport', direction: 'within' }, {}, true);
@@ -191,21 +205,23 @@ export class LayoutManager {
       b('test', { referencePanel: 'explorer', direction: 'within' }, {}, true);
       b('inspector', { referencePanel: 'viewport', direction: 'right' });
       b('console', { direction: 'below' } as never);
-      sizes = { explorer: { width: 200 }, inspector: { width: 260 }, console: { height: 420 } };
+      sizes = { explorer: { width: 200 }, inspector: { width: 240 }, console: { height: 360 } };
     } else {
       // Pear is outdoor mixed reality: Live Preview (device frames + GPS map) is the centre, the 3D viewport is opt-in (View menu).
       b('livePreview');
-      b('editor', { referencePanel: 'livePreview', direction: 'left' });
-      b('explorer', { referencePanel: 'editor', direction: 'left' });
+      b('editor', { referencePanel: 'livePreview', direction: 'within' }, {}, true);
+      b('explorer', { referencePanel: 'livePreview', direction: 'left' });
       b('peripherals', { referencePanel: 'explorer', direction: 'within' }, {}, true);
       b('test', { referencePanel: 'explorer', direction: 'within' }, {}, true);
-      b('inspector', { referencePanel: 'livePreview', direction: 'below' });
-      b('console', { direction: 'below' } as never);
-      sizes = { explorer: { width: 220 }, livePreview: { width: 460 }, inspector: { height: 200 }, console: { height: 160 } };
+      const compact = this.host.clientHeight < 700 || this.host.clientWidth < 1100;
+      b('inspector', { referencePanel: compact ? 'explorer' : 'livePreview', direction: compact ? 'within' : 'below' }, {}, compact);
+      b('console', compact ? { referencePanel: 'livePreview', direction: 'within' } : { direction: 'below' }, {}, compact);
+      sizes = { explorer: { width: 220 }, inspector: compact ? {} : { height: 220 }, console: compact ? {} : { height: 140 } };
     }
     // The panel that holds the rest keeps its size; sidebars, inspector and debug area get theirs.
     for (const [id, size] of Object.entries(sizes)) this.api.getPanel(id)?.api.setSize(size);
-    this.api.getPanel('console')?.api.setActive();
+    for (const group of this.api.groups) this.constrainGroup(group);
+    if (this.api.getPanel('console')?.group !== this.api.getPanel('livePreview')?.group) this.api.getPanel('console')?.api.setActive();
     this.api.getPanel(preset === 'default' ? 'livePreview' : 'viewport')?.api.setActive();
     this.restoring = false;
     this.markOffered(ADDED_PANELS.map((a) => a.id)); // the presets already include them
@@ -219,7 +235,8 @@ export class LayoutManager {
   // Named layouts
   private named(): Record<string, SerializedDockview> {
     try {
-      return JSON.parse(this.storage.getItem(NAMED_KEY) ?? '{}') as Record<string, SerializedDockview>;
+      const saved: unknown = JSON.parse(this.storage.getItem(NAMED_KEY) ?? '{}');
+      return saved && typeof saved === 'object' && !Array.isArray(saved) ? saved as Record<string, SerializedDockview> : {};
     } catch {
       return {};
     }

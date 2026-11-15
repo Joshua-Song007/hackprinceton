@@ -10,6 +10,7 @@ import { renderThumbnail, thumbStamp, ThumbnailQueue } from './thumbnail';
 export interface ProjectsHooks {
   account: AccountController;
   open(snapshot: ProjectSnapshot, file?: SavedFile): void;
+  openHostedGame?(gameId: string): Promise<boolean>;
   /** Starts the New game form (the instructions come first), optionally with a template chosen. */
   newGame(template?: TemplateId): void;
   signOut(): void;
@@ -92,7 +93,10 @@ export function renderProjectsScreen(root: HTMLElement, h: ProjectsHooks): void 
       const stamp = thumbStamp(p.stamp);
       const where = p.kind === 'cloud' ? 'Cloud' : p.kind === 'draft' ? 'Draft' : 'This computer';
       const open = p.kind === 'cloud'
-        ? run(async () => { const snapshot = await account.openLatest(p.key); void markOpened('cloud', p.key); h.open(snapshot); })
+        ? run(async () => {
+          if (h.openHostedGame) await h.openHostedGame(p.key);
+          else { const snapshot = await account.openLatest(p.key); void markOpened('cloud', p.key); h.open(snapshot); }
+        })
         : () => { void markOpened(p.kind, p.key); h.open(p.kind === 'draft' ? draft! : p.recent!.snapshot); };
 
       const thumb = el('div', { class: 'scr-thumb' }, [el('span', { class: 'scr-thumb-none' }, ['No preview'])]);
@@ -213,7 +217,7 @@ export function renderProjectsScreen(root: HTMLElement, h: ProjectsHooks): void 
     ]),
   ]);
   const section = (title: string, count: HTMLElement, list: HTMLElement) => el('section', { class: 'scr-section' }, [el('h2', {}, [title, count]), list]);
-  const all = allGamesSection(account, (snapshot) => h.open(snapshot), run);
+  const all = allGamesSection(account, (snapshot) => h.open(snapshot), run, h.openHostedGame);
   root.replaceChildren(el('div', { class: 'scr-card scr-wide' }, [
     el('div', { class: 'scr-bar' }, [
       el('div', { class: 'scr-title' }, [el('h1', {}, ['Projects']), ...(h.back ? [button('Back to editor', h.back)] : [])]),

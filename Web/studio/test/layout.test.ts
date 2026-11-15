@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isLegacyDefault, panelsToOffer, wants3D } from '../src/layout';
+import { LayoutManager, isLegacyDefault, panelsToOffer, wants3D } from '../src/layout';
 
 const added = [{ id: 'peripherals', beside: 'explorer' }];
 
@@ -32,5 +32,44 @@ describe('non-3D default', () => {
     expect(wants3D({ runMode: 'screen', entities: [ent([0, 0, 0])] })).toBe(false);
     expect(wants3D({ runMode: 'screen', entities: [] })).toBe(false);
     expect(wants3D({ runMode: 'device', entities: [ent([1, 1, 1])] })).toBe(false);
+  });
+});
+
+describe('saved workspace recovery', () => {
+  const workspace = () => {
+    const current = { panels: { editor: { contentComponent: 'editor' } } };
+    let state = current;
+    const storage = new Map<string, string>();
+    const manager = Object.assign(Object.create(LayoutManager.prototype), {
+      specs: new Map([['editor', {}], ['explorer', {}], ['inspector', {}]]),
+      collapsed: new Map(),
+      storage: { getItem: (key: string) => storage.get(key) ?? null, setItem: (key: string, value: string) => storage.set(key, value) },
+      api: {
+        toJSON: () => state,
+        fromJSON: (data: typeof current & { broken?: boolean }) => {
+          state = data;
+          if (data.broken) throw new Error('Invalid grid');
+        },
+      },
+    });
+    return { manager: manager as LayoutManager, storage, current, state: () => state };
+  };
+  it('restores an intentionally editor-only layout', () => {
+    const w = workspace();
+    w.storage.set('pear.studio.layouts', JSON.stringify({ Writing: w.current }));
+    expect(w.manager.loadNamed('Writing')).toBe(true);
+  });
+  it('rolls back a malformed named layout without losing the current workspace', () => {
+    const w = workspace();
+    w.storage.set('pear.studio.layouts', JSON.stringify({ Broken: { ...w.current, broken: true } }));
+    expect(w.manager.loadNamed('Broken')).toBe(false);
+    expect(w.state()).toEqual(w.current);
+  });
+  it('treats non-object named-layout storage as empty', () => {
+    const w = workspace();
+    for (const invalid of ['null', '[]', '42']) {
+      w.storage.set('pear.studio.layouts', invalid);
+      expect(w.manager.namedLayouts()).toEqual([]);
+    }
   });
 });

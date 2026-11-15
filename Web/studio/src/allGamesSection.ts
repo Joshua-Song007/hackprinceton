@@ -4,7 +4,7 @@ import type { ProjectSnapshot } from './project';
 import { button, el } from './ui';
 
 /** Null for non-developers. Open selects the game on the account so Publish then targets that same game id. */
-export function allGamesSection(account: AccountController, open: (snapshot: ProjectSnapshot) => void, run: (work: () => Promise<void>) => () => void): HTMLElement | null {
+export function allGamesSection(account: AccountController, open: (snapshot: ProjectSnapshot) => void, run: (work: () => Promise<void>) => () => void, openHostedGame?: (gameId: string) => Promise<boolean>): HTMLElement | null {
   if (!account.isDeveloper) return null;
   const list = el('ul', { class: 'scr-grid', role: 'list', 'aria-label': 'All hosted games' });
   const count = el('span', { class: 'om-secondary' });
@@ -17,7 +17,10 @@ export function allGamesSection(account: AccountController, open: (snapshot: Pro
       const cover = el('div', { class: 'scr-thumb' }, [g.has_cover
         ? el('img', { src: account.client.coverUrl(g.id, g.updated_at), alt: '', 'aria-hidden': 'true' })
         : el('span', { class: 'scr-thumb-none' }, ['No cover'])]);
-      const go = run(async () => { const snapshot = await account.openLatest(g.id); account.select(g.id); open(snapshot); });
+      const go = run(async () => {
+        if (openHostedGame) await openHostedGame(g.id);
+        else { const snapshot = await account.openLatest(g.id); account.select(g.id); open(snapshot); }
+      });
       return el('li', { class: 'scr-tile' }, [cover, el('div', { class: 'scr-info' }, [
         el('span', { class: 'scr-name', title: g.title }, [g.title]),
         el('span', { class: 'scr-meta' }, [`Owner: ${g.owner_name || g.owner_id}`]),

@@ -23,6 +23,8 @@ export interface ChatLink {
   /** Fills the prompt in Instructions mode without sending it. Returns a sentence when there is no panel to fill. */
   send(text: string): string | undefined;
   attach(fill: (text: string) => void): () => void;
+  /** Unsent content survives closing or remounting the panel; sent prompts are never replayed. */
+  draft?: { text: string; mode: Mode };
 }
 
 export function createChatLink(): ChatLink {
@@ -79,26 +81,29 @@ function createView({ url, project, openScript, chat, WebSocketImpl }: DeepAgent
   let todos: TodoItem[] = [];
   const agents = new Map<string, AgentRow>();
   let files: FileLink[] = [];
-  let mode: Mode = 'scripts';
+  let mode: Mode = chat?.draft?.mode ?? 'scripts';
   /** The mode of the prompt in flight: an instructions run applies only instructions.json. */
   let runMode: Mode = 'scripts';
   let pendingFile: FileLink | null = null;
 
   /** Only the host is shown: the address carries the sign-in token and the project in its query string. */
-  const host = (() => {
+  const { host, hosted } = (() => {
     try {
-      return new URL(url).host || 'the configured address';
+      const address = new URL(url);
+      return { host: address.host || 'the configured address', hosted: address.pathname.endsWith('/agent/ws') };
     } catch {
-      return 'the configured address';
+      return { host: 'the configured address', hosted: false };
     }
   })();
   const unreachable = `Cannot reach the Deep Agent runtime at ${host}.`;
   let connected = false;
   let waiting = false;
   const promptId = 'deep-agent-prompt';
-  const input = el('textarea', { id: promptId, rows: 4, placeholder: PLACEHOLDER.scripts });
+  const input = el('textarea', { id: promptId, rows: 4, placeholder: PLACEHOLDER[mode] });
+  input.value = chat?.draft?.text ?? '';
   const modeId = 'deep-agent-mode';
   const modeSelect = el('select', { id: modeId, 'aria-label': 'Mode' }, [el('option', { value: 'scripts' }, ['Scripts']), el('option', { value: 'instructions' }, ['Instructions'])]);
+  modeSelect.value = mode;
   modeSelect.addEventListener('change', () => {
     mode = modeSelect.value === 'instructions' ? 'instructions' : 'scripts';
     input.setAttribute('placeholder', PLACEHOLDER[mode]);
@@ -107,7 +112,9 @@ function createView({ url, project, openScript, chat, WebSocketImpl }: DeepAgent
   send.classList.add('om-btn--default');
   send.setAttribute('aria-keyshortcuts', 'Control+Enter Meta+Enter');
   const status = el('p', { class: 'da-status', role: 'status', 'aria-live': 'polite' });
-  const hint = el('p', { class: 'da-hint' }, ['Start the Deep Agent runtime, then retry.']);
+  const hint = el('p', { class: 'da-hint' }, [hosted
+    ? 'Check your sign-in, backend connection and saved model API key in Marketplace, then Retry now. If it persists, ask the server admin to check the hosted agent service.'
+    : 'Start the Deep Agent runtime, then retry.']);
   const retry = button('Retry now', () => {
     clearTimeout(retryTimer);
     retries = 0;
@@ -174,9 +181,13 @@ function createView({ url, project, openScript, chat, WebSocketImpl }: DeepAgent
     waiting = false;
     connected = false;
     render();
+    const previous = socket;
+    socket = undefined;
+    previous?.close();
     const ws = new Socket(url);
     socket = ws;
     ws.onopen = () => {
+      if (disposed || socket !== ws) return;
       retries = 0;
       connected = true;
       waiting = false;
@@ -184,9 +195,13 @@ function createView({ url, project, openScript, chat, WebSocketImpl }: DeepAgent
       connection = 'Connected';
       render();
     };
-    ws.onmessage = (e) => handle(String(e.data));
+    ws.onmessage = (e) => {
+      if (!disposed && socket === ws) handle(String(e.data));
+    };
     ws.onerror = () => {
+      if (disposed || socket !== ws) return;
       connected = false;
+      waiting = true;
       if (!errors.includes(unreachable)) errors.push(unreachable);
       render();
     };
@@ -318,6 +333,7 @@ function createView({ url, project, openScript, chat, WebSocketImpl }: DeepAgent
     focus: () => input.focus(),
     dispose: () => {
       disposed = true;
+      if (chat) chat.draft = { text: input.value, mode };
       offProject();
       offChat?.();
       clearTimeout(retryTimer);

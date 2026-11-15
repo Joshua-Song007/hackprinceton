@@ -1,10 +1,11 @@
 // Live Preview panel: an iPhone and an iPad frame for the open cloud game (each its own dev device in one lobby), a GPS map of the
 // devices and a terminal of /debug plus per-device frames. Menu: View > Live Preview.
 import type { DebugEvent, ReconnectingSocket } from '@pear/cloud';
-import { mount, validate, type Hooks, type Node, type PearUI } from '@pear/ui';
+import { mount, pickScreen, validate, type Hooks, type Node, type PearUI } from '@pear/ui';
 import type { AccountController } from '../account';
 import type { PanelSpec, PanelView } from '../layout';
 import { button, el } from '../ui';
+import { RelayClient } from '../relay';
 import { debugRow, normalizeLobby, randomLobby, sensorHz, sysRow, type LogRow, type PreviewKind } from './helpers';
 import { DEFAULT_CENTER, PreviewMap, type LatLng } from './map';
 import { DeviceSession } from './session';
@@ -32,7 +33,7 @@ interface Device {
   raf: number;
 }
 
-export const livePreviewPanel = (account: AccountController): PanelSpec => ({ id: 'livePreview', title: 'Live Preview', create: () => createLivePreviewPanel(account) });
+export const livePreviewPanel = (account: AccountController, openHostedGame?: () => void): PanelSpec => ({ id: 'livePreview', title: 'Live Preview', create: () => createLivePreviewPanel(account, openHostedGame) });
 
 /** Lobby hand-off from the Lobbies panel: picks the game, then the panel (open or about to open) connects to this lobby. */
 let pendingLobby: string | null = null;
@@ -51,7 +52,7 @@ export function logToLivePreview(row: Omit<LogRow, 'id'>): void {
   else buffered.push(row);
 }
 
-export function createLivePreviewPanel(account: AccountController): PanelView {
+export function createLivePreviewPanel(account: AccountController, openHostedGame?: () => void): PanelView {
   const root = el('div', { class: 'lp-root' });
   const terminal = new PreviewTerminal();
   terminalSink = (row) => terminal.add(row);
@@ -69,7 +70,7 @@ export function createLivePreviewPanel(account: AccountController): PanelView {
   };
   const lobbyInput = el('input', { type: 'text', class: 'lp-lobby', value: randomLobby(), maxlength: 12, 'aria-label': 'Lobby code', spellcheck: 'false', autocomplete: 'off' }) as HTMLInputElement;
   const statusEl = el('span', { class: 'lp-status', role: 'status' });
-  const connectBtn = button('Connect', () => connect());
+  const connectBtn = button('Reconnect simulators', () => connect());
   const newCode = button('New code', () => {
     lobbyInput.value = randomLobby();
     connect();
@@ -103,7 +104,30 @@ export function createLivePreviewPanel(account: AccountController): PanelView {
   const devicesEl = el('div', { class: 'lp-devices' });
   const side = el('div', { class: 'lp-side' }, [el('div', { class: 'lp-map-wrap' }, [map.element]), terminal.element]);
   const body = el('div', { class: 'lp-body' }, [devicesEl, side]);
-  root.append(toolbar, body);
+  const relay = new RelayClient();
+  const relayStatus = el('p', { role: 'status' }, ['Physical devices: disconnected.']);
+  const relayDevices = el('ul');
+  const relayConnect = button('Connect device relay', () => relay.connect(), { variant: 'small' });
+  const relayDisconnect = button('Disconnect relay', () => { relay.close(); renderRelay(); }, { variant: 'small' });
+  function renderRelay(): void {
+    relayStatus.textContent = relay.status === 'open'
+      ? `Relay connected · ${relay.devices.length} physical device(s). Not the simulated players below.`
+      : relay.status === 'connecting' ? 'Connecting to local device relay…'
+      : relay.status === 'failed' ? 'Device relay unavailable. Start the relay, then retry.' : 'Physical devices: disconnected.';
+    relayConnect.disabled = relay.status === 'open' || relay.status === 'connecting';
+    relayDisconnect.disabled = relay.status === 'idle';
+    relayDevices.replaceChildren(...relay.devices.map((d) => el('li', {}, [`${d.name} (${d.kind}) · connected to relay`])));
+  }
+  relay.onChange = renderRelay;
+  const pairing = el('details', {}, [
+    el('summary', {}, ['Connect real peripherals']),
+    el('p', {}, ['Run npm run relay from Web/studio on this computer. On the same Wi-Fi, open the Pear companion app and connect to “Pear relay” (Bonjour _pear._tcp, TCP port 7777). Allow Local Network access and the required sensor permissions. Watch and AirPods connect through the companion, not browser Bluetooth.']),
+    el('p', {}, ['This connection lists real devices; their sensor packets feed the local Test runner, not these cloud UI simulators. Start a local test to use them. A connected relay with no listed devices means no companion has joined.']),
+    relayConnect, relayDisconnect, relayStatus, relayDevices,
+  ]);
+  relay.onPacket = (id, packet) => terminal.add(sysRow('device relay', `${id}: ${JSON.stringify(packet)}`));
+  renderRelay();
+  root.append(toolbar, pairing, body);
 
   let devices: Device[] = [];
   let localUi: PearUI | null = null;
@@ -130,7 +154,7 @@ export function createLivePreviewPanel(account: AccountController): PanelView {
   function setStatus(): void {
     if (!account.gameId) return void (statusEl.textContent = 'No cloud game open.');
     const open = devices.filter((d) => d.session.status === 'open').length;
-    statusEl.textContent = `${gameTitle()} · ${open}/${devices.length} devices connected`;
+    statusEl.textContent = `${gameTitle()} · ${open}/${devices.length} simulated cloud sessions open · not physical devices`;
   }
 
   function emptyState(text: string, detail?: string): HTMLElement {
@@ -139,11 +163,16 @@ export function createLivePreviewPanel(account: AccountController): PanelView {
 
   function renderDevice(d: Device): void {
     const s = d.session;
-    d.status.textContent = s.status === 'open' ? 'Connected' : s.status === 'failed' ? 'Sign-in failed' : s.status === 'idle' ? 'Idle' : 'Connecting…';
+    d.status.textContent = s.status === 'open' ? 'Simulator online'  : s.status === 'failed' ? 'Sign-in failed' : s.status === 'idle' ? 'Idle' : 'Connecting…';
     d.status.dataset.state = s.status;
     d.slider.disabled = d.motion === 0;
     const ui = s.uiState;
-    if (ui.kind === 'ready') {
+    if (ui.kind === 'ready' && !pickScreen(ui.ui, s.state)) {
+      d.handle?.destroy();
+      d.handle = null;
+      d.uiRef = null;
+      d.screen.replaceChildren(emptyState('Waiting for a game screen', 'The published UI has no matching route for the current game state. Check the frames in the terminal or load a local ui.json.'));
+    } else if (ui.kind === 'ready') {
       if (d.uiRef !== ui.ui) {
         d.handle?.destroy();
         d.screen.replaceChildren();
@@ -228,6 +257,7 @@ export function createLivePreviewPanel(account: AccountController): PanelView {
     const gameId = account.gameId;
     if (!gameId) {
       devicesEl.append(emptyState('Open a cloud game first', 'Pick or create a game in File > Account and publishing, then come back to Live Preview.'));
+      if (openHostedGame) devicesEl.append(button('Open hosted game', openHostedGame));
       return setStatus();
     }
     const lobby = normalizeLobby(lobbyInput.value) || randomLobby();
@@ -288,6 +318,7 @@ export function createLivePreviewPanel(account: AccountController): PanelView {
       handoff = null;
       terminalSink = null;
       unsub();
+      relay.close();
       ro?.disconnect();
       teardown();
       map.dispose();

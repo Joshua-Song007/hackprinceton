@@ -7,7 +7,7 @@ export const RELAY_URL = 'ws://127.0.0.1:8787';
 export interface RelayDevice { id: string; name: string; kind: string }
 
 export class RelayClient {
-  status: 'idle' | 'open' | 'failed' = 'idle';
+  status: 'idle' | 'connecting' | 'open' | 'failed' = 'idle';
   devices: RelayDevice[] = [];
   onChange?: () => void;
   onPacket?: (deviceId: string, packet: UsisPacket) => void;
@@ -18,7 +18,9 @@ export class RelayClient {
     let ws: WebSocket;
     try { ws = new WebSocket(RELAY_URL); } catch { this.status = 'failed'; this.onChange?.(); return; }
     this.ws = ws;
-    ws.onopen = () => { this.status = 'open'; this.onChange?.(); };
+    this.status = 'connecting';
+    this.onChange?.();
+    ws.onopen = () => { if (this.ws !== ws) return; this.status = 'open'; this.onChange?.(); };
     ws.onclose = ws.onerror = () => {
       if (this.ws !== ws) return;
       this.ws = null;
@@ -27,6 +29,7 @@ export class RelayClient {
       this.onChange?.();
     };
     ws.onmessage = (e) => {
+      if (this.ws !== ws) return;
       let m: { type?: string; devices?: RelayDevice[]; deviceId?: string; packet?: unknown };
       try { m = JSON.parse(String(e.data)); } catch { return; }
       if (m.type === 'devices' && Array.isArray(m.devices)) { this.devices = m.devices; this.onChange?.(); }

@@ -101,6 +101,10 @@ export class RegistryClient {
   }
 
   async setModelKey(provider: ModelProvider, key: string): Promise<void> {
+    if (!this.signedIn) throw new Error('Sign in before saving a hosted agent model key.');
+    key = key.trim();
+    if (!key || /\s/.test(key)) throw new Error('Enter a model API key without whitespace.');
+    if (!['anthropic', 'openai', 'google'].includes(provider)) throw new Error('Choose a supported model provider.');
     await this.request('/me/model-key', { method: 'PUT', body: JSON.stringify({ provider, key }) });
   }
 

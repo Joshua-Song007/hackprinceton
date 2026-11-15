@@ -25,6 +25,7 @@ import { isPhoneOnly, phoneLinks, type PhoneLink } from './phonePlay';
 import { ScriptAudio } from './scriptAudio';
 import { RelayClient } from './relay';
 import type { Project } from './project';
+import { tauriFetch } from './tauriFetch';
 import { button, el, icon } from './ui';
 
 /** `onTick` rate: 5 Hz, enough to report a position without flooding the worker. */
@@ -1383,7 +1384,7 @@ export class RunController {
       const { account } = this.deps;
       name = `${account.account?.display_name || account.account?.subject || 'player'}-p${n}`;
       try {
-        client = new CloudClient({ baseUrl: account.serverUrl });
+        client = new CloudClient({ baseUrl: account.serverUrl, fetch: tauriFetch });
         await client.signIn({ provider: 'dev', subject: `sim-${name}`, display_name: name });
       } catch (e) {
         throw new Error(`Could not sign in ${name}: ${describeError(e, account.serverUrl)}`);

@@ -2,13 +2,13 @@
 import { flattenScene, type RigView } from '@pear/runtime';
 import './theme.css';
 import { openAboutPanel } from './aboutPanel';
-import { AccountController, describeError, openAccountSheet } from './account';
+import { AccountController, createHostedGameOpener, describeError, openAccountSheet } from './account';
 import { createInspectorPanel } from './inspector';
 import { DebugStore, createConsolePanel } from './debug-panel';
 import { EditorBus, createEditorPanel, openApiSheet } from './editor';
 import { Selection, createExplorerPanel } from './explorer';
 import { LayoutManager, wants3D, type PanelSpec } from './layout';
-import { MarketplaceController, hostedRuntimeUrls, localRuntimeUrls, openScriptAndReveal } from './marketplace/controller';
+import { MarketplaceController, agentRuntimeUrls, localRuntimeUrls, openScriptAndReveal } from './marketplace/controller';
 import { BrowserInstaller, TauriInstaller } from './marketplace/installer';
 import { MARKETPLACE_PANEL_ID, marketplacePanel } from './marketplace/panel';
 import { RegistryClient } from './marketplace/registry';
@@ -25,6 +25,7 @@ import { openPhoneSheet } from './phonePlay';
 import { openNewGameSheet } from './newGame';
 import { walkEntities, Project, TEMPLATES, attachAutosave, templateSnapshot, type ProjectSnapshot, type TemplateId } from './project';
 import { RunController, ViewportHost, createViewportPanel } from './run';
+import { tauriFetch } from './tauriFetch';
 import { announce, button, el, openMenu, openSheet, promptSheet, rovingToolbar, type MenuItem } from './ui';
 import { installShortcuts, mod, mountMenuBar } from './menubar';
 import { renderLoginScreen } from './loginScreen';
@@ -48,7 +49,7 @@ const project = new Project();
 const selection = new Selection();
 const editor = new EditorBus();
 const debug = new DebugStore();
-const account = new AccountController(prefs, !testPlayer);
+const account = new AccountController(prefs, !testPlayer, undefined, tauriFetch);
 const viewport = new ViewportHost();
 debug.onServerError = (message) => editor.reportServerError(project, message);
 
@@ -74,16 +75,17 @@ const marketplaceProjectId = () => (project.gameId ?? 'local').replace(/[^A-Za-z
 // Desktop runs plugin runtimes on this machine; a signed-in browser uses the backend's hosted runtime.
 const runtimeUrls = (manifest: Parameters<typeof localRuntimeUrls>[0]) => {
   const token = account.account ? account.client.token : null;
-  return !inDesktopApp() && token ? hostedRuntimeUrls(prefs.get().serverUrl, token, marketplaceProjectId()) : localRuntimeUrls(manifest);
+  return agentRuntimeUrls(manifest, prefs.get().serverUrl, token, marketplaceProjectId());
 };
 const marketplace = new MarketplaceController({
-  registry: new RegistryClient(() => prefs.get().serverUrl, undefined, () => (account.account ? account.client.token : null)),
+  registry: new RegistryClient(() => prefs.get().serverUrl, tauriFetch, () => (account.account ? account.client.token : null)),
   installer: inDesktopApp() ? new TauriInstaller() : new BrowserInstaller(),
   runtimeUrls,
   host: { register: (spec) => layout.register(spec), unregister: (id) => layout.unregister(id), openRight: (id) => layout.openRight(id) },
   panels: { 'langchain-deepagents': (manifest) => deepAgentPanel({ url: runtimeUrls(manifest).ws, project, chat, openScript: openScriptAndReveal(editor, (id) => layout.show(id)) }) },
   projectId: marketplaceProjectId,
   storage: localStorage,
+  fetchFn: tauriFetch,
 });
 
 const panels: PanelSpec[] = [
@@ -96,7 +98,7 @@ const panels: PanelSpec[] = [
   { id: 'console', title: 'Console', create: () => createConsolePanel(debug) },
   { id: 'test', title: 'Test', create: () => createTestPanel(project, run, () => layout.show('playtest'), () => startLocal()) },
   { id: 'playtest', title: 'Playtest', create: () => createPlaytestPanel(project, run, sendToChat, (id) => layout.show(id)) },
-  livePreviewPanel(account),
+  livePreviewPanel(account, () => openHostedChooser()),
   lobbiesPanel(account, (id) => layout.show(id)),
   checkPanel(project),
   { id: 'instructions', title: 'Instructions', create: () => createInstructionsPanel(project, run, sendToChat) },
@@ -105,9 +107,16 @@ const panels: PanelSpec[] = [
 layout = new LayoutManager(document.getElementById('dock')!, panels, inDesktopApp() ? {
   popOut: (id) => {
     const panel = layout.api.getPanel(id);
-    if (panel) void layout.api.addPopoutGroup(panel, { popoutUrl: '/popout.html' });
+    if (panel) void layout.api.addPopoutGroup(panel, { popoutUrl: '/popout.html' }).then((opened) => {
+      if (!opened) { layout.show(id); status('Could not open the panel window. Allow pop-ups or reopen the panel from Window.'); }
+    }).catch((error) => {
+      layout.show(id);
+      status(`Could not open the panel window: ${describeError(error, account.serverUrl)}. Reopen it from Window.`);
+    });
   },
 } : {});
+
+editor.onChange(() => { if (editor.active) layout.show('editor'); });
 
 // Viewport follows the scene and the selection; a scene that does not parse leaves the last good drawing.
 let previewView: RigView | null = null;
@@ -182,13 +191,31 @@ const confirmDiscard = (): Promise<boolean> => new Promise((resolve) => {
 /** The file this project was opened from / last saved to; Save overwrites it, Save as picks a new one. */
 let projectFile: SavedFile | null = null;
 const openSnapshot = async (snapshot: ProjectSnapshot): Promise<boolean> => {
+  hostedGames.cancel();
   if (!(await confirmDiscard())) return false;
   run.stop();
   project.load(snapshot);
+  account.select(snapshot.gameId ?? null);
   projectFile = null;
   status(`Opened ${project.name}`);
   return true;
 };
+const hostedGames = createHostedGameOpener(account, {
+  confirm: confirmDiscard,
+  load: (snapshot) => {
+    run.stop();
+    project.load(snapshot);
+    projectFile = null;
+  },
+  opened: () => {
+    hasProject = true;
+    showScreen('editor');
+    layout.show('livePreview');
+    void markOpened('cloud', project.gameId!);
+    status(`Opened ${project.name}`);
+  },
+});
+const openHostedChooser = () => openAccountSheet(account, prefs, { project, openSnapshot, openHostedGame: hostedGames.open });
 
 // A new game starts from its instructions (the New game form), then opens the editor with the Instructions panel showing.
 const startNewGame = (template?: TemplateId) => openNewGameSheet((snapshot) => void openSnapshot(snapshot).then((ok) => {
@@ -200,9 +227,8 @@ const startNewGame = (template?: TemplateId) => openNewGameSheet((snapshot) => v
 
 // The game the prompt agent created: shown in Live Preview (the panel connects when the selected game changes).
 const openPromptedGame = async (gameId: string) => {
-  layout.show('livePreview');
-  await account.refreshGames().catch(() => undefined);
-  account.select(gameId);
+  await account.refreshGames();
+  await hostedGames.open(gameId);
 };
 
 // Screens: login and projects are full-window overlays; the editor stays mounted underneath.
@@ -226,6 +252,7 @@ const showScreen = (s: Screen) => {
         hasProject = true;
         showScreen('editor');
       }),
+      openHostedGame: hostedGames.open,
       signOut: () => void account.signOut().catch(() => showScreen('login')),
       back: hasProject ? () => showScreen('editor') : undefined,
       deleted: (id) => { if (project.gameId === id) project.setCloud(null, null); },
@@ -256,11 +283,13 @@ const save = saveTo(false);
 const saveAs = saveTo(true);
 
 const openFile = guard(async () => {
+  hostedGames.cancel();
   if (!(await confirmDiscard())) return;
   const opened = await openProjectFile();
   if (!opened) return;
   run.stop();
   project.load(opened.snapshot);
+  account.select(opened.snapshot.gameId ?? null);
   projectFile = { name: opened.name, handle: opened.handle };
   void rememberRecent(opened.name, opened.snapshot);
   void markOpened('local', opened.name);
@@ -268,7 +297,7 @@ const openFile = guard(async () => {
 });
 
 const publish = guard(async () => {
-  if (!account.account || !account.gameId) return openAccountSheet(account, prefs, { project, openSnapshot });
+  if (!account.account || !account.gameId) return openHostedChooser();
   const v = await account.publish(project);
   debug.addOutput('log', `Published version ${v.version} of ${account.game?.title ?? 'the game'}.`);
   status(`Published version ${v.version}`);
@@ -288,7 +317,7 @@ const projectButton = button('', () => {
   const items = TEMPLATES.map((t) => ({ label: `New game from template: ${t.label}`, run: () => startNewGame(t.id) }));
   openMenu(projectButton, [
     ...items,
-    { label: 'Open from cloud (latest version)...', run: () => openAccountSheet(account, prefs, { project, openSnapshot }) },
+    { label: 'Open from cloud (latest version)...', run: () => openHostedChooser() },
     { separator: true },
     { label: 'Save', shortcut: mod('Ctrl+S'), run: save },
     { label: 'Save as...', shortcut: mod('Ctrl+Shift+S'), run: saveAs },
@@ -343,6 +372,8 @@ account.onChange(renderChrome);
 // Signing in (or switching accounts) applies that account's plugin installs from other devices.
 // The marketplace boots once the editor has an account (login is required), so the auto-install sees the account's records.
 let marketplaceAccount = account.account?.id ?? null;
+let marketplaceToken = account.client.token;
+let marketplaceServer = account.serverUrl;
 let marketplaceBooted = false;
 const bootMarketplace = () => {
   marketplaceBooted = true;
@@ -350,9 +381,14 @@ const bootMarketplace = () => {
 };
 account.onChange(() => {
   const id = account.account?.id ?? null;
-  if (id === marketplaceAccount) return;
+  const token = account.client.token;
+  const server = account.serverUrl;
+  if (id === marketplaceAccount && token === marketplaceToken && server === marketplaceServer) return;
   marketplaceAccount = id;
+  marketplaceToken = token;
+  marketplaceServer = server;
   if (testPlayer) return;
+  marketplace.remountPanels();
   if (id && !marketplaceBooted) bootMarketplace();
   else void marketplace.refresh().then(() => marketplace.loadModelKey());
 });
@@ -400,14 +436,14 @@ mountMenuBar(document.getElementById('menubar')!, [
       { label: 'New game...', run: () => startNewGame() },
       { label: 'New game from prompt...', run: () => { layout.show('livePreview'); openPromptGameSheet({ url: () => marketplace.runtimeUrlOf('langchain-deepagents')?.ws ?? null, log: logToLivePreview, openGame: openPromptedGame, openModelKey: () => layout.show(MARKETPLACE_PANEL_ID) }); } },
       ...TEMPLATES.map((t) => ({ label: `New game from template: ${t.label}`, run: () => startNewGame(t.id) })),
-      { label: 'Open from cloud...', run: () => openAccountSheet(account, prefs, { project, openSnapshot }) },
+      { label: 'Open from cloud...', run: () => openHostedChooser() },
       { label: 'Open file...', shortcut: mod('Ctrl+O'), run: () => void openFile() },
       { separator: true },
       { label: 'Save', shortcut: mod('Ctrl+S'), run: () => void save() },
       { label: 'Save as...', shortcut: mod('Ctrl+Shift+S'), run: () => void saveAs() },
       { separator: true },
       { label: 'Publish', run: () => void publish() },
-      { label: 'Account and games...', run: () => openAccountSheet(account, prefs, { project, openSnapshot }) },
+      { label: 'Account and games...', run: () => openHostedChooser() },
       { label: 'Game About...', run: () => openAboutPanel(account, project.gameId ?? account.gameId) },
       { label: 'Settings...', run: () => openSettingsSheet(prefs) },
       { label: 'Sign out', run: () => void account.signOut().catch(() => showScreen('login')) },

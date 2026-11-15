@@ -12,7 +12,7 @@ const STATE_LABEL: Record<PluginCard['state'], string> = { available: 'Not insta
 function renderCard(c: PluginCard, controller: MarketplaceController): HTMLElement {
   const update = c.updateAvailable ? [button(`Update to ${c.version}`, () => void controller.reinstall(c.id), { variant: 'default', ariaLabel: `Update ${c.name} from ${c.installedVersion} to ${c.version}` })] : [];
   const actions = c.state === 'installed'
-    ? [...update, button('Uninstall', () => void controller.uninstall(c.id), { variant: 'small', ariaLabel: `Uninstall ${c.name}` }), button('Reinstall', () => void controller.reinstall(c.id), { variant: 'small', ariaLabel: `Reinstall ${c.name}` })]
+    ? [button('Open', () => void controller.open(c.id), { variant: 'default', ariaLabel: `Open ${c.name}` }), ...update, button('Uninstall', () => void controller.uninstall(c.id), { variant: 'small', ariaLabel: `Uninstall ${c.name}` }), button('Reinstall', () => void controller.reinstall(c.id), { variant: 'small', ariaLabel: `Reinstall ${c.name}` })]
     : [button('Install', () => void controller.install(c.id), { variant: 'default', ariaLabel: `Install ${c.name}` })];
   for (const a of actions) a.disabled = c.busy;
   return el('li', { class: 'mk-item', 'aria-busy': String(c.busy) }, [

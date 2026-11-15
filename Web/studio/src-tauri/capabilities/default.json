@@ -3,5 +3,5 @@
   "identifier": "default",
   "description": "Main Studio window: core defaults, updater, window state the pop-out command and marketplace plugin commands.",
   "windows": ["main"],
-  "permissions": ["core:default", "updater:default", "window-state:default", "allow-open-panel-window", "allow-install-plugin", "allow-uninstall-plugin", "allow-start-runtime", "allow-stop-runtime"]
+  "permissions": ["core:default", { "identifier": "http:default", "allow": [{ "url": "https://155-138-208-146.sslip.io/api/*" }, { "url": "https://155-138-208-146.sslip.io/agent/health" }] }, "updater:default", "window-state:default", "allow-open-panel-window", "allow-install-plugin", "allow-uninstall-plugin", "allow-start-runtime", "allow-stop-runtime"]
 }

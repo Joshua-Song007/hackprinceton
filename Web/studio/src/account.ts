@@ -68,8 +68,10 @@ export class AccountController {
   private publishedJson: string | null = null;
   private listeners = new Set<() => void>();
   private url: string;
+  private fetchFn?: typeof fetch;
 
-  constructor(private prefs: PreferenceStore, private persist = true, private storage: Pick<Storage, 'getItem' | 'setItem' | 'removeItem'> | null = typeof localStorage === 'undefined' ? null : localStorage) {
+  constructor(private prefs: PreferenceStore, private persist = true, private storage: Pick<Storage, 'getItem' | 'setItem' | 'removeItem'> | null = typeof localStorage === 'undefined' ? null : localStorage, fetchFn?: typeof fetch) {
+    this.fetchFn = fetchFn;
     let saved: { token?: string; account?: Account } = {};
     try {
       if (persist) saved = JSON.parse(storage?.getItem(SESSION_KEY) ?? '{}');
@@ -79,11 +81,14 @@ export class AccountController {
     this.url = prefs.get().serverUrl;
     this.client = this.makeClient(saved.token);
     this.account = saved.token && saved.account ? saved.account : null;
-    this.gameId = persist ? (storage?.getItem(GAME_KEY) ?? null) : null;
+    this.gameId = persist && this.account ? (storage?.getItem(GAME_KEY) ?? null) : null;
     prefs.onChange((p) => {
       if (this.url !== p.serverUrl) {
         this.url = p.serverUrl;
-        this.client = this.makeClient(this.client.token ?? undefined);
+        // A session belongs to its server; never forward it to a newly configured backend.
+        this.account = null;
+        this.forget();
+        this.client = this.makeClient();
         this.emit();
       }
     });
@@ -93,6 +98,7 @@ export class AccountController {
     return new CloudClient({
       baseUrl: this.url,
       ...(token ? { token } : {}),
+      ...(this.fetchFn ? { fetch: this.fetchFn } : {}),
       onUnauthorized: () => {
         this.account = null;
         this.forget();
@@ -119,7 +125,14 @@ export class AccountController {
   }
 
   private forget(): void {
-    if (this.persist) this.storage?.removeItem(SESSION_KEY);
+    this.games = [];
+    this.gameId = null;
+    this.lastPublished = null;
+    this.publishedJson = null;
+    if (this.persist) {
+      this.storage?.removeItem(SESSION_KEY);
+      this.storage?.removeItem(GAME_KEY);
+    }
   }
 
   async signIn(name: string): Promise<void> {
@@ -127,6 +140,7 @@ export class AccountController {
     const res = await this.client.signIn({ provider: 'dev', subject: name, display_name: name });
     this.account = res.account;
     if (this.persist) this.storage?.setItem(SESSION_KEY, JSON.stringify({ token: res.token, account: res.account }));
+    this.emit();
     await this.refreshGames();
   }
 
@@ -139,6 +153,7 @@ export class AccountController {
     const res = await this.client.signIn({ provider: 'developer', subject: username, password });
     this.account = res.account;
     if (this.persist) this.storage?.setItem(SESSION_KEY, JSON.stringify({ token: res.token, account: res.account }));
+    this.emit();
     await this.refreshGames();
   }
 
@@ -147,6 +162,7 @@ export class AccountController {
     const res = await this.client.signUp({ username, password, display_name: displayName || username });
     this.account = res.account;
     if (this.persist) this.storage?.setItem(SESSION_KEY, JSON.stringify({ token: res.token, account: res.account }));
+    this.emit();
     await this.refreshGames();
   }
 
@@ -270,6 +286,38 @@ export class AccountController {
   }
 }
 
+export function createHostedGameOpener(account: AccountController, hooks: {
+  confirm(): Promise<boolean>;
+  load(snapshot: ProjectSnapshot): void;
+  opened(): void;
+}): { open(gameId: string): Promise<boolean>; cancel(): void } {
+  let request = 0;
+  return {
+    cancel: () => { request++; },
+    async open(gameId) {
+      const ticket = ++request;
+      const client = account.client;
+      const owner = account.account;
+      const token = client.token;
+      const current = () => ticket === request && client === account.client && owner === account.account && token === client.token;
+      if (!(await hooks.confirm()) || !current()) return false;
+      account.select(null);
+      try {
+        const version = await client.fetchVersion(gameId, 'latest');
+        if (!current()) return false;
+        if (version.game_id !== gameId) throw new Error('The server returned a different game. Refresh the game list and try again.');
+        hooks.load(Project.snapshotOfVersion(version));
+        account.select(gameId);
+        hooks.opened();
+        return true;
+      } catch (error) {
+        if (!current()) return false;
+        throw error;
+      }
+    },
+  };
+}
+
 /** Small "Developer" pill for the account UI. */
 export const developerBadge = (): HTMLElement => el('span', { class: 'scr-tag', title: 'Developer account' }, ['Developer']);
 
@@ -277,6 +325,7 @@ export interface AccountSheetHooks {
   project: Project;
   /** Replace the open project; the caller confirms unsaved changes. */
   openSnapshot(snapshot: ProjectSnapshot): void;
+  openHostedGame?(gameId: string): Promise<boolean>;
 }
 
 export function openAccountSheet(account: AccountController, prefs: PreferenceStore, hooks: AccountSheetHooks): void {
@@ -329,7 +378,9 @@ export function openAccountSheet(account: AccountController, prefs: PreferenceSt
             button('Create game', guarded(() => account.createGame(title.value.trim()), 'Game created.')),
             button('Open latest version', guarded(async () => {
               if (!gameId) throw new Error('Choose a game first.');
-              hooks.openSnapshot(await account.openLatest(gameId));
+              if (hooks.openHostedGame) {
+                if (await hooks.openHostedGame(gameId)) close();
+              } else hooks.openSnapshot(await account.openLatest(gameId));
             }, 'Opened the latest version.')),
           ]),
           el('p', { class: 'om-num' }, [hooks.project.version && hooks.project.gameId === gameId ? `This project is at version ${hooks.project.version}.` : 'Not published yet.']),
