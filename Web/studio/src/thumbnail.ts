@@ -1,6 +1,6 @@
 // Project previews for the projects screen: one shared offscreen Viewport renders a scene to a small JPEG.
 // Browsers cap live WebGL contexts, so there is never one per card; renders are queued one at a time.
-import { Viewport, flattenScene, parseScene, readViewportColors } from '@omni/runtime';
+import { Viewport, flattenScene, parseScene, readViewportColors } from '@pear/runtime';
 import type { SceneJson } from './project';
 
 export const THUMB_WIDTH = 480;
