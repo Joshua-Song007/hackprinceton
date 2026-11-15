@@ -25,6 +25,12 @@ export function groupByGame(instances: Instance[]): GameLobbies[] {
 
 export const versionLabel = (version: number | null | undefined): string => (version == null ? 'unversioned' : `v${version}`);
 
+/** Whether a lobby has reached the game's newest published version: '' when either side is unknown. */
+export function reachLabel(lobbyVersion: number | null | undefined, latest: number | undefined): string {
+  if (lobbyVersion == null || latest === undefined) return '';
+  return lobbyVersion >= latest ? 'on latest' : `behind (latest v${latest})`;
+}
+
 export const playersLabel = (n: number): string => `${n} ${n === 1 ? 'player' : 'players'}`;
 
 /** "just now", "5 min ago", "2 h ago", "3 d ago"; '' when the timestamp does not parse. */
@@ -60,6 +66,7 @@ export function createLobbiesPanel(account: AccountController, show: (id: string
   const list = el('div', { class: 'lb-list' });
   root.append(el('div', { class: 'lb-toolbar' }, [refreshBtn, status]), list);
 
+  let latest = new Map<string, number>();
   let disposed = false;
   let loading = false;
   let timer: ReturnType<typeof setInterval> | null = null;
@@ -86,7 +93,7 @@ export function createLobbiesPanel(account: AccountController, show: (id: string
     return el('section', { class: 'lb-lobby' }, [
       el('header', {}, [
         el('strong', { class: 'lb-code' }, [i.lobby]),
-        el('span', { class: 'lb-meta' }, [`${versionLabel(i.version)} · ${playersLabel(i.players.length)} · active ${ageLabel(i.last_activity_at, Date.now())}`]),
+        el('span', { class: 'lb-meta' }, [`${[versionLabel(i.version), reachLabel(i.version, latest.get(i.game_id))].filter(Boolean).join(' ')} · ${playersLabel(i.players.length)} · active ${ageLabel(i.last_activity_at, Date.now())}`]),
         button('Open in Live Preview', () => {
           openInLivePreview(account, i.game_id, i.lobby);
           show('livePreview');
@@ -108,7 +115,11 @@ export function createLobbiesPanel(account: AccountController, show: (id: string
     loading = true;
     try {
       const instances = await account.client.listInstances();
+      const ids = [...new Set(instances.map((i) => i.game_id))];
+      const got = await Promise.allSettled(ids.map((id) => account.client.fetchVersion(id)));
       if (disposed) return;
+      // A game whose latest version cannot be fetched just shows no reach label.
+      latest = new Map(got.flatMap((r, n) => (r.status === 'fulfilled' ? [[ids[n]!, r.value.version] as const] : [])));
       render(instances);
       status.textContent = `${instances.length} live ${instances.length === 1 ? 'lobby' : 'lobbies'} · updated ${new Date().toLocaleTimeString()}`;
     } catch (e) {
