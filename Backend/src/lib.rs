@@ -66,6 +66,9 @@ pub fn app_with_studio(db: Option<Db>, studio_dir: Option<PathBuf>) -> Router {
         .merge(api::agent::routes())
         .merge(api::apple::routes())
         .merge(api::avatars::routes())
+        .merge(api::assets::routes())
+        .merge(api::status::routes())
+        .merge(api::instances::routes())
         .merge(game_server::session::routes())
         .merge(game_server::debug::routes());
     let router = match studio_dir {

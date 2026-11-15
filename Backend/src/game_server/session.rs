@@ -19,6 +19,8 @@
 //   `on_player_join` for everyone already connected (its `ctx.state` starts empty). A player joining
 //   an already-live session joins that session whatever version they asked for.
 //   Every join, leave, inbound and outbound frame is also published to the debug bus (debug.rs).
+// - Ops: `instances` / `close_lobby` / `kick` / `counts` serve api/instances.rs and api/status.rs; `admit`
+//   refuses a /play upgrade over PEAR_MAX_INSTANCES (503) or PEAR_MAX_PLAYERS_PER_INSTANCE (409).
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -145,6 +147,9 @@ struct Timer {
 struct Session {
     game: String,
     lobby: String,
+    version: Option<i32>,
+    started_at: String,
+    last_activity_at: String,
     host: Box<dyn ScriptHost>,
     players: HashMap<String, Player>,
     timers: Vec<Timer>,
@@ -201,6 +206,24 @@ fn encode(name: String, data: Value) -> Option<String> {
     serde_json::to_string(&Frame { name, data }).ok()
 }
 
+/// One live session as the operator API shows it.
+#[derive(Debug, Clone)]
+pub struct InstanceInfo {
+    pub game_id: String,
+    pub lobby: String,
+    pub version: Option<i32>,
+    /// `(id, name)`
+    pub players: Vec<(String, String)>,
+    pub started_at: String,
+    pub last_activity_at: String,
+}
+
+/// Limits from `PEAR_MAX_INSTANCES` (default 200) and `PEAR_MAX_PLAYERS_PER_INSTANCE` (default 16).
+pub fn limits() -> (usize, usize) {
+    let var = |k: &str, d: usize| std::env::var(k).ok().and_then(|v| v.trim().parse().ok()).unwrap_or(d);
+    (var("PEAR_MAX_INSTANCES", 200), var("PEAR_MAX_PLAYERS_PER_INSTANCE", 16))
+}
+
 /// All live sessions, keyed by `session_key(game id, lobby)`.
 pub struct Registry {
     factory: HostFactory,
@@ -242,6 +265,9 @@ impl Registry {
         let session = map.entry(game_id.to_string()).or_insert_with(|| Session {
             game: split_key(game_id).0,
             lobby: split_key(game_id).1,
+            version: release.as_ref().map(|r| r.version),
+            started_at: crate::memstore::now_rfc3339(),
+            last_activity_at: crate::memstore::now_rfc3339(),
             host: (self.factory)(game_id, release.as_ref().map_or(&[][..], |r| r.sources.as_slice())),
             players: HashMap::new(),
             timers: Vec::new(),
@@ -279,6 +305,7 @@ impl Registry {
 
     fn reload_one(map: &mut HashMap<String, Session>, factory: &HostFactory, game_id: &str, release: &Release) {
         let Some(session) = map.get_mut(game_id) else { return };
+        session.version = Some(release.version);
         bus().publish(game_id, "reload", json!({ "version": release.version }));
         session.host = factory(game_id, &release.sources);
         session.timers.clear(); // the old host's timers belong to the old scripts
@@ -300,6 +327,12 @@ impl Registry {
         if session.players.get(player).map(|p| p.conn) != Some(conn) {
             return;
         }
+        Self::remove_player(&mut map, game_id, player);
+    }
+
+    /// The leave path shared by a socket ending and an operator kick.
+    fn remove_player(map: &mut HashMap<String, Session>, game_id: &str, player: &str) {
+        let Some(session) = map.get_mut(game_id) else { return };
         session.players.remove(player);
         bus().publish(game_id, "leave", json!({ "player": player }));
         let out = session.host.on_player_leave(player);
@@ -307,6 +340,69 @@ impl Registry {
         if session.players.is_empty() {
             map.remove(game_id);
             bus().end(game_id);
+        }
+    }
+
+    /// Operator kick: drops one player (their sender drops, which ends their socket) through the normal
+    /// leave path. False when the lobby or the player is not live.
+    pub fn kick(&self, game_id: &str, lobby: &str, player: &str) -> bool {
+        let key = session_key(game_id, lobby);
+        let mut map = self.lock();
+        if !map.get(&key).is_some_and(|s| s.players.contains_key(player)) {
+            return false;
+        }
+        Self::remove_player(&mut map, &key, player);
+        true
+    }
+
+    /// Operator close of one lobby: its players' senders drop, which ends their sockets. False when not live.
+    pub fn close_lobby(&self, game_id: &str, lobby: &str) -> bool {
+        let key = session_key(game_id, lobby);
+        let removed = self.lock().remove(&key).is_some();
+        if removed {
+            bus().end(&key);
+        }
+        removed
+    }
+
+    /// Every live session, sorted by game then lobby.
+    pub fn instances(&self) -> Vec<InstanceInfo> {
+        let mut out: Vec<InstanceInfo> = self
+            .lock()
+            .values()
+            .map(|s| {
+                let mut players: Vec<_> = s.players.iter().map(|(id, p)| (id.clone(), p.name.clone())).collect();
+                players.sort();
+                InstanceInfo {
+                    game_id: s.game.clone(),
+                    lobby: s.lobby.clone(),
+                    version: s.version,
+                    players,
+                    started_at: s.started_at.clone(),
+                    last_activity_at: s.last_activity_at.clone(),
+                }
+            })
+            .collect();
+        out.sort_by(|a, b| (&a.game_id, &a.lobby).cmp(&(&b.game_id, &b.lobby)));
+        out
+    }
+
+    /// (live sessions, connected players).
+    pub fn counts(&self) -> (usize, usize) {
+        let map = self.lock();
+        (map.len(), map.values().map(|s| s.players.len()).sum())
+    }
+
+    /// Whether `player` may join session `key` under the limits: a new session needs room among
+    /// `max_instances` (503), a new player needs room in `max_players` (409). A player already in the
+    /// session (a reconnect) is always let in.
+    // ponytail: checked before the upgrade, not atomically with the join; a burst can overshoot by a few.
+    pub fn admit(&self, key: &str, player: &str, max_instances: usize, max_players: usize) -> Result<(), StatusCode> {
+        let map = self.lock();
+        match map.get(key) {
+            None if map.len() >= max_instances => Err(StatusCode::SERVICE_UNAVAILABLE),
+            Some(s) if !s.players.contains_key(player) && s.players.len() >= max_players => Err(StatusCode::CONFLICT),
+            _ => Ok(()),
         }
     }
 
@@ -345,6 +441,7 @@ impl Registry {
         if session.players.get(player).map(|p| p.conn) != Some(conn) {
             return;
         }
+        session.last_activity_at = crate::memstore::now_rfc3339();
         bus().publish(game_id, "in", json!({ "player": player, "name": frame.name, "data": frame.data }));
         let out = session.host.on_remote(player, &frame.name, &frame.data);
         session.deliver(game_id, out);
@@ -404,6 +501,26 @@ pub fn reload(game_id: &str, version: &GameVersion) {
     registry().reload(game_id, Release::from(version));
 }
 
+/// Every live session (called by instances.rs).
+pub fn instances() -> Vec<InstanceInfo> {
+    registry().instances()
+}
+
+/// (live sessions, connected players) (called by status.rs).
+pub fn counts() -> (usize, usize) {
+    registry().counts()
+}
+
+/// Operator close of one lobby (called by instances.rs).
+pub fn close_lobby(game_id: &str, lobby: &str) -> bool {
+    registry().close_lobby(game_id, lobby)
+}
+
+/// Operator kick of one player (called by instances.rs).
+pub fn kick(game_id: &str, lobby: &str, player: &str) -> bool {
+    registry().kick(game_id, lobby, player)
+}
+
 /// Ends every live lobby of a game that was just deleted (called by games.rs).
 pub fn close(game_id: &str) {
     registry().close(game_id);
@@ -449,10 +566,15 @@ async fn play(
     if version.is_some() && release.is_none() {
         return StatusCode::NOT_FOUND.into_response();
     }
+    let key = session_key(&game_id, &lobby);
+    let (max_instances, max_players) = limits();
+    if let Err(code) = registry().admit(&key, &account.id, max_instances, max_players) {
+        return code.into_response();
+    }
     match ws {
         Ok(ws) => ws
             .max_message_size(MAX_MESSAGE_BYTES)
-            .on_upgrade(move |socket| run_socket(socket, session_key(&game_id, &lobby), account.id, account.display_name, release, HEARTBEAT)),
+            .on_upgrade(move |socket| run_socket(socket, key, account.id, account.display_name, release, HEARTBEAT)),
         Err(rej) => rej.into_response(),
     }
 }
@@ -580,6 +702,43 @@ mod tests {
         drain(&mut other);
         r.close("g");
         r.close("nobody");
+    }
+
+    #[test]
+    fn instances_kick_close_counts_and_limits() {
+        let (r, log) = reg();
+        let (_ca, mut a) = player(&r, "g/ABCD", "a");
+        let (_cb, mut b) = player(&r, "g/ABCD", "b");
+        let (_cc, _c) = player(&r, "g/WXYZ", "c");
+        drain(&mut a);
+        drain(&mut b);
+        assert_eq!(r.counts(), (2, 3));
+        let list = r.instances();
+        assert_eq!(list.len(), 2);
+        assert_eq!((list[0].game_id.as_str(), list[0].lobby.as_str()), ("g", "ABCD"));
+        assert_eq!(list[0].players, [("a".to_string(), String::new()), ("b".to_string(), String::new())]);
+        assert!(list[0].started_at.ends_with('Z') && list[0].version.is_none());
+        let (ca2, _z) = player(&r, "g/ABCD", "z");
+        std::thread::sleep(Duration::from_millis(5));
+        r.remote("g/ABCD", "z", ca2, r#"{"name":"ping"}"#);
+        assert!(r.instances()[0].last_activity_at >= r.instances()[0].started_at);
+        assert_eq!(r.admit("g/ABCD", "new", 10, 3), Err(StatusCode::CONFLICT));
+        assert_eq!(r.admit("g/ABCD", "a", 10, 3), Ok(()), "a reconnect is always admitted");
+        assert_eq!(r.admit("g/NEW1", "new", 2, 3), Err(StatusCode::SERVICE_UNAVAILABLE));
+        assert_eq!(r.admit("g/NEW1", "new", 3, 3), Ok(()));
+        assert!(!r.kick("g", "ABCD", "nobody"));
+        assert!(!r.kick("g", "NOPE", "a"));
+        assert!(r.kick("g", "ABCD", "a"));
+        assert!(log.lock().unwrap().contains(&"leave:a".to_string()));
+        drain(&mut a);
+        assert!(matches!(a.try_recv(), Err(tokio::sync::mpsc::error::TryRecvError::Disconnected)));
+        assert!(r.kick("g", "WXYZ", "c"));
+        assert_eq!(r.counts(), (1, 2), "the emptied session is dropped");
+        assert!(r.close_lobby("g", "ABCD"));
+        assert!(!r.close_lobby("g", "ABCD"));
+        drain(&mut b);
+        assert!(matches!(b.try_recv(), Err(tokio::sync::mpsc::error::TryRecvError::Disconnected)));
+        assert_eq!(r.counts(), (0, 0));
     }
 
     #[test]

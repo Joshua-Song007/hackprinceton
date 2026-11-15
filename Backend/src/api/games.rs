@@ -12,7 +12,7 @@
 //   DELETE /api/games/{id}/cover                               -> 204 (owner or developer)
 //   GET  /api/games/{id}/cover                                 -> 200 image bytes | 404 (public, no auth)
 //   GET  /api/games/{id}/lobbies                               -> 200 [{code, players: [{id, name}]}] live lobbies
-//   POST /api/games/{id}/versions           NewGameVersion     -> 201 GameVersion (owner only)
+//   POST /api/games/{id}/versions           NewGameVersion     -> 201 GameVersion (owner only; 400 when assets[*].sha256 is not stored)
 //   GET  /api/games/{id}/versions/{version} number or "latest" -> 200 GameVersion
 
 use axum::body::Bytes;
@@ -113,7 +113,7 @@ async fn list_games(
 }
 
 /// 404 when the game does not exist, 403 unless the caller owns it or is a developer.
-async fn require_editor(pool: &db::Db, account: &Account, game_id: &str) -> Result<(), StatusCode> {
+pub(crate) async fn require_editor(pool: &db::Db, account: &Account, game_id: &str) -> Result<(), StatusCode> {
     match db::game_owner(pool, game_id).await.map_err(|e| db_err("owner", e))? {
         None => Err(StatusCode::NOT_FOUND),
         Some(owner) if owner != account.id && !account.is_developer() => Err(StatusCode::FORBIDDEN),
@@ -213,6 +213,7 @@ async fn publish_version(
     }
     let pool = state.db.as_ref().ok_or(StatusCode::SERVICE_UNAVAILABLE)?;
     require_editor(pool, &account, &game_id).await?;
+    crate::api::assets::check_refs(&body.assets).await?;
     let v = db::insert_game_version(pool, &game_id, &body)
         .await
         .map_err(|e| db_err("publish", e))?;

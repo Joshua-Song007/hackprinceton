@@ -10,7 +10,7 @@
 # PEAR_APPLE_AUDIENCES (comma-separated app bundle ids for Sign in with Apple; empty = that route answers 503).
 # Marketplace: PEAR_PLUGIN_SIGNING_KEY, PEAR_SECRET_KEY and PEAR_RUNTIME_SECRET are generated once and
 # appended to .env when missing (keep them: changing them breaks bundle signatures / stored model keys).
-# PEAR_S3_* (Vultr Object Storage) are added to .env by hand; with them set, each run ends with the
+# PEAR_S3_* (Vultr Object Storage) are added to .env by hand (or, preferably, with Deploy/configure-storage.sh into /etc/pear/storage.env); with them set, each run ends with the
 # plugin seed job (publishes Plugins/*, a no-op when nothing changed).
 set -euo pipefail
 
@@ -120,6 +120,7 @@ if grep -q '^PEAR_S3_BUCKET=.' .env; then
   docker compose run --rm backend /app/pear-backend seed /app/Plugins
 else
   echo "PEAR_S3_* not in .env: plugin bundles are not seeded (see the marketplace notes at the top)"
+  echo "Object storage keys: run Deploy/configure-storage.sh as root (writes /etc/pear/storage.env)"
 fi
 domain="$(grep '^PEAR_DOMAIN=' .env | cut -d= -f2-)"
 echo "Pear is up: https://$domain  (Studio at /, downloads at /download, health at /health)"

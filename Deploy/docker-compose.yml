@@ -6,13 +6,23 @@
 # Marketplace (Phase 10): PEAR_S3_ENDPOINT, PEAR_S3_BUCKET, PEAR_S3_ACCESS_KEY, PEAR_S3_SECRET_KEY
 # (Vultr Object Storage), PEAR_PLUGIN_SIGNING_KEY, PEAR_SECRET_KEY, PEAR_RUNTIME_SECRET (64 hex each,
 # written by vultr-bootstrap.sh), PEAR_PLUGIN_REVIEWERS (account ids, optional).
+# Object storage keys (PEAR_S3_ENDPOINT, PEAR_S3_REGION, PEAR_S3_ACCESS_KEY, PEAR_S3_SECRET_KEY, PEAR_S3_BUCKET,
+# optional PEAR_S3_PREFIX) live in the root-only file /etc/pear/storage.env (mode 600, written by
+# configure-storage.sh) and reach only the backend container through its env_file below; the file is optional,
+# without it the backend uses its in-memory blob store. PEAR_BUILD (git short sha, set by deploy.sh) is passed
+# as a build arg and shows in GET /api/status. Needs Compose >= 2.24 (env_file `required: false`).
 
 services:
   backend:
     build:
       context: ..
       dockerfile: Deploy/Dockerfile
-    env_file: .env
+      args:
+        PEAR_BUILD: ${PEAR_BUILD:-dev}
+    env_file:
+      - .env
+      - path: /etc/pear/storage.env
+        required: false
     environment:
       PORT: "8080"
       PEAR_STUDIO_DIR: /app/studio

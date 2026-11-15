@@ -1,7 +1,7 @@
 // Profile pictures: one small JPEG or PNG per account, kept in the blob store under avatars/<account id>.
 // The image is public (GET needs no session) because AsyncImage cannot send an Authorization header;
 // ids are random uuids and the response is the image only. Removing a picture stores a 0-byte object
-// (blobs has put and get only), and GET treats an empty object as none.
+// (kept as is; blobs now also has delete), and GET treats an empty object as none.
 //
 // Routes:
 //   PUT    /api/accounts/me/avatar  raw image body, image/jpeg or image/png, <= 512 KB -> 204 | 413 | 415 | 401
