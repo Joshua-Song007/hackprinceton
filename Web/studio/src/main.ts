@@ -52,7 +52,7 @@ const joinVersion = async (version: number | 'latest') => {
   history.replaceState(null, '', `${location.pathname}?${new URLSearchParams({ join: v.game_id, version: String(v.version), as: testPlayer!.name })}`);
   await run.join(v.game_id, v.version);
 };
-const run = new RunController({ project, debug, account, viewport, editor, reveal: (id) => layout.show(id), onReload: testPlayer ? joinVersion : undefined });
+const run = new RunController({ project, debug, account, viewport, editor, reveal: (id) => layout.show(id), onReload: testPlayer ? joinVersion : undefined, agentUrl: () => marketplace.runtimeUrlOf('langchain-deepagents')?.ws ?? null });
 
 const marketplaceProjectId = () => (project.gameId ?? 'local').replace(/[^A-Za-z0-9_-]/g, '_');
 // Desktop runs plugin runtimes on this machine; a signed-in browser uses the backend's hosted runtime.

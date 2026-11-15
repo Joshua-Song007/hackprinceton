@@ -5,3 +5,4 @@ export * from './viewport';
 export * from './orbit';
 export * from './rig';
 export * from './instructions';
+export * from './observation';

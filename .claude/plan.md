@@ -419,15 +419,20 @@ Not in overview.md; added at user request 2026-11-14 (overview.md stays unchange
 
 ### 12.3 Agent players
 
-- [ ] `Web/packages/pear-runtime/src/observation.ts` — pure `buildObservation` from an `AvatarView`-style input plus a cue list: own haptics, audio and speech cues heard, device in hand, phase and clock, other players inside 8 m and in front (distance, bearing, gaze); no scene or server state. `Action` union (walk_to, look_at, gesture, give_device, say, wait) and `parseActions` (valid only, max 5, walk clamped to the arena).
-- [ ] `Web/packages/pear-runtime/src/index.ts` — export observation (second change to this file; do it with the 12.1 item if built together).
-- [ ] `Web/packages/pear-runtime/test/observation.test.ts` — visible vs hidden, behind and out of range, invalid actions, clamps.
-- [ ] `Web/studio/src/pauseClock.ts` — pure pausable clock: `now`, `setTimer`, `clearTimer`, `hold`, `release`; time and timers stand still while held.
-- [ ] `Web/studio/test/pauseClock.test.ts` — now frozen while held, timers fire after release with the remaining time, clear works.
-- [ ] `Web/studio/src/run.ts` — `RunController.hold()` and `release()` (the pause clock goes into LocalRun, SimDevices and `createPlayServer`; wander, walk and bots skip while held); per-player control `human | agent | idle`; per-player cue log (speak, beep, haptic); `observationFor(id)`. Local Play only. (`timeScale` alone cannot pause: it only scales `dt` in `LocalRun.step` and `walk`.)
-- [ ] `Web/studio/src/agentPlayers.ts` — a driver per agent player: decide every 1.5 s of game time; apply actions through the run (stepToward, SimDevices gesture and heart rate, holdDevice, say to Output); `hold()` while any request is in flight; 20 s timeout to wait; call cap per player (default 60); calls and cost counter; transport injected.
-- [ ] `Web/studio/src/testPanel.ts` — per-player Agent toggle, persona select, Thinking indicator, calls counter; the role select keeps `player | ref` and follows the instructions role kind; `structureKey` includes control and persona.
-- [ ] `Web/studio/test/agentPlayers.test.ts` — fake transport: run held while thinking and released after, timeout, call cap, actions applied, observation holds no hidden state.
+- [x] `Web/packages/pear-runtime/src/observation.ts` — pure `buildObservation` from an `AvatarView` plus a cue list: own haptics, audio and speech cues heard, notes on actions that failed, devices in hand, game time, other players inside 8 m and in front (distance, bearing, gaze); no scene or server state, no phase (nothing in a run knows it). `Action` union (walk_to, look_at, gesture, give_device, say, wait) and `parseActions` (valid only, max 5, coordinates clamped to the arena, wait 0.5 to 10 s).
+- [x] `Web/packages/pear-runtime/src/index.ts` — export observation (second change to this file).
+- [x] `Web/packages/pear-runtime/test/observation.test.ts` — visible vs hidden, behind and out of range, bearing sign, invalid actions, clamps, and agreement with `players.py` (action names, gestures, limits).
+- [x] `Web/studio/src/pauseClock.ts` — pure pausable clock: `now`, `epoch`, `setTimer`, `clearTimer`, `hold`, `release`, `reset`; time and timers stand still while held, holds nest.
+- [x] `Web/studio/test/pauseClock.test.ts` — now frozen while held, timers fire after release with the remaining time, clear works, reset.
+- [x] `Web/studio/src/run.ts` — `RunController.hold()`, `release()` and `held` (the pause clock goes into LocalRun, SimDevices and `createPlayServer`; wander and walk skip while held); per-player `agent` driver (instead of a `control` field: idle already means standing still); per-player cue log (speak, audio, haptic, notes); `observationFor(id)`; `setAgent` with error sentences; the agent's actions applied through the run. Local Play only. (`timeScale` alone cannot pause: it only scales `dt` in `LocalRun.step` and `walk`; agent pacing is on the unscaled pause clock.)
+- [x] `Web/studio/src/agentTransport.ts` — socket to the Deep Agent runtime for `decide` and `report` (lazy, matched by id, timeouts, no auto-reconnect, URL read at each open).
+- [x] `Web/studio/src/agentPlayers.ts` — a driver per agent player: decide every 1.5 s of game time; one action per tick (walk waits for arrival, wait counts clock seconds); `hold()` while a request is in flight; 20 s transport timeout and a 10 s backoff after an error; call cap per player (default 60); calls counter (no tokens are reported) and `unsure` notes kept for 12.4. The `report` call at the end of a run belongs to 12.4.
+- [x] `Web/studio/src/marketplace/controller.ts` — `runtimeUrlOf(id)`: the runtime URLs of an installed plugin.
+- [x] `Web/studio/src/main.ts` — `agentUrl` for the run controller.
+- [x] `Web/studio/src/testPanel.ts` — per-player Agent toggle, persona select, instructions role select, status and calls line (Thinking, Acting, Waiting); hidden for the driven player and outside local Play; `structureKey` includes the seat.
+- [x] `Web/studio/test/agentPlayers.test.ts` — fake transport and clock: held while thinking and released after (also on error), two agents, plan order, walk wait, backoff, cap, dispose mid-flight, invalid actions; pause in `LocalRun` and the in-page server.
+- [x] `Web/studio/test/agentTransport.test.ts` — id matching, errors, close, timeout, reopen, URL per open.
+- [x] `Web/studio/test/agentRun.test.ts` — `RunController` with stub deps: observation holds no hidden state, actions, `setAgent` sentences, hold and release.
 
 ### 12.4 Playtest report
 

@@ -227,3 +227,13 @@ Stale comments flagged, not edited: `Web/packages/pear-runtime/src/viewport.ts` 
 Paths: `Web/packages/pear-runtime/src/viewport.ts`, `Web/packages/pear-runtime/src/scene.ts`, `Web/studio/src/project.ts`, `Web/studio/src/run.ts`
 
 Comment text only, at the user's instruction; closes the "Stale comments flagged, not edited" list of the simulator entry above. `viewport.ts` line 1 now covers trigger volumes and the players and devices drawn from a `RigView`. `scene.ts` line 2 lists `ownership` and `raise` among the web-only fields. `project.ts` line 1 and the `setSceneSetting` and `applyPeripheralChange` docs name instructions and `ownership`. The `run.ts` `bindCamera` and `setRunning` docs now separate Player view (mouse-look, head-follow) from Overview (editor camera, click a player or device, drag to place). Checked and left alone: the `run.ts` `rig` docs and the `viewport.ts` `setHeadPose` doc.
+
+### 2026-11-14 — Agent players in the run (Phase 12.3)
+Paths: `Web/studio/src/run.ts`, `Web/studio/src/testPanel.ts`, `Web/studio/src/main.ts`, `Web/studio/src/marketplace/controller.ts`, `Web/studio/src/pauseClock.ts`, `Web/studio/src/agentPlayers.ts`, `Web/studio/src/agentTransport.ts`
+
+Local Play can seat a Deep Agent in a player (Test panel: Agent, persona, instructions role). The run's clock is a pause clock injected into `LocalRun`, the room `SimDevices` and the in-page server, so time stands still while any agent thinks; walking, wandering and bots skip while held. Each player keeps a cue log and an observation of what a person would perceive. Not paused: the creator's own keyboard walk, which fires no events because `dt` is 0. `timeScale` does not scale agent pacing. Plan in `plan.md` Phase 12.3.
+- [x] `Web/studio/src/run.ts` — `hold`, `release`, `held`, `gameTime`, `observationFor`, `setAgent`, agent actions, cues.
+- [x] `Web/studio/src/testPanel.ts` — Agent toggle, persona and role selects, status line.
+- [x] `Web/studio/src/main.ts` — `agentUrl`.
+- [x] `Web/studio/src/marketplace/controller.ts` — `runtimeUrlOf`.
+- [x] `Web/studio/test/agentRun.test.ts`, `Web/studio/test/agentPlayers.test.ts`

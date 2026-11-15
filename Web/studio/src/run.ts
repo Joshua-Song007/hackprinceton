@@ -4,18 +4,21 @@
 import { CloudClient, type DebugEvent, type PlayFrame, type ReconnectingSocket } from '@pear/cloud';
 import { quat, type UsisPacket } from '@pear/core';
 import {
-  InputBus, SceneEvents, Viewport, ownershipOf, readViewportColors, scriptName,
-  type Ownership, type OwnershipMode, type PeripheralKind, type RigDevice, type RigHit, type RigView, type SceneDescription, type WorldEntity,
+  InputBus, OBSERVATION_RANGE, SceneEvents, Viewport, buildObservation, ownershipOf, readViewportColors, scriptName,
+  type Action, type Cue, type Observation, type Ownership, type OwnershipMode, type PeripheralKind, type RigDevice, type RigHit, type RigView, type SceneDescription, type WorldEntity,
 } from '@pear/runtime';
 import { LocalServer, ScriptSandbox, type ScriptOutput } from '@pear/script';
 import prelude from '../../../Packages/PearScript/Sources/PearScript/Resources/prelude.js?raw';
 import { SIM_DEVICE_KINDS, SimDevices, UsisPlayer, attachGestureKeys, attachMouseLook, type SimDeviceKind, type SimDevicesOptions } from '@pear/sim';
+import { AgentDriver, type AgentSeat } from './agentPlayers';
+import { socketTransport, type AgentTransport, type DecideRequest } from './agentTransport';
 import type { AccountController } from './account';
 import { describeError } from './account';
 import type { DebugStore } from './debug-panel';
 import type { EditorBus } from './editor';
 import type { PanelView } from './layout';
 import { rigFor } from './needs';
+import { createPauseClock } from './pauseClock';
 import { ScriptAudio } from './scriptAudio';
 import { RelayClient } from './relay';
 import type { Project } from './project';
@@ -638,11 +641,16 @@ export interface TestPlayer {
   /** Where a double click in the viewport sent this player walking (x, z); null when not walking. */
   goal: [number, number] | null;
   socket?: ReconnectingSocket<PlayFrame>;
+  /** What this player heard and felt since its last observation; an agent player reads and clears it. */
+  cues: Cue[];
+  /** The driver that plays this player (local Play only); null for a person-driven, wandering or idle player. */
+  agent: AgentDriver | null;
 }
 
 export const SIM_DEVICE_NAMES: Record<SimDeviceKind, string> = { airpods: 'AirPods', phone: 'phone', watch: 'watch' };
 
-const playerDefaults = () => ({ goal: null as [number, number] | null, source: 'manual' as PlayerSource, botMode: 'chase' as BotMode, botEvery: 2, botLeft: 2, liveDevices: new Set<string>() });
+const MAX_CUES = 50;
+const playerDefaults = () => ({ cues: [] as Cue[], agent: null as AgentDriver | null, goal: null as [number, number] | null, source: 'manual' as PlayerSource, botMode: 'chase' as BotMode, botEvery: 2, botLeft: 2, liveDevices: new Set<string>() });
 
 const IDLE: RunStatus ={ kind: null, text: 'Stopped', rateHz: 0, latencyMs: null, serverLatencyMs: null, players: 0 };
 
@@ -656,6 +664,8 @@ export interface RunDeps {
   onReload?(version: number): Promise<void> | void;
   /** Called with the panel to show when a run starts (the viewport). */
   reveal?(panelId: string): void;
+  /** The Deep Agent runtime's WebSocket URL for agent players, or null when the plugin is not installed. */
+  agentUrl?(): string | null;
 }
 
 const RIG_KEY = 'pear.studio.rig';
@@ -722,6 +732,13 @@ export class RunController {
   private wanderTimer: ReturnType<typeof setInterval> | null = null;
   private walkTimer: ReturnType<typeof setInterval> | null = null;
   private session: { scene: SceneDescription; gameId?: string; version?: number } | null = null;
+  /** Local Play: time stands still while an agent player thinks (see `hold`); the devices, scripts and server run on this clock. */
+  readonly clock = createPauseClock();
+  private runId = '';
+  private gameStart = 0;
+  private agentSeq = 0;
+  private agentTransport: AgentTransport | null = null;
+  private agentTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor(private deps: RunDeps) {
     this.relay.onChange = () => { for (const l of this.listeners) l(); };
@@ -743,6 +760,7 @@ export class RunController {
   drive(id: string): void {
     const p = this.players.find((x) => x.id === id);
     if (!p) return;
+    this.dropAgent(p); // a person takes over
     this.driven = id;
     this.deps.viewport.setRunning(p.run.devices);
     for (const l of this.listeners) l();
@@ -780,6 +798,7 @@ export class RunController {
   }
 
   private walk(): void {
+    if (this.clock.held) return;
     const scale = this.server ? this.timeScale : 1;
     for (const p of this.players) {
       if (!p.goal) continue;
@@ -787,6 +806,113 @@ export class RunController {
       const next = stepToward([d.position[0], d.position[2]], p.goal, 1.5 * scale, 0.05);
       d.setPosition(next.pos[0], d.position[1], next.pos[1]);
       if (next.done) p.goal = null;
+    }
+  }
+
+  /** Freezes the run's clock (devices, scripts, the in-page server's timers, wander, walking) until each `hold` has a `release`. */
+  hold(): void {
+    this.clock.hold();
+    for (const l of this.listeners) l();
+  }
+
+  release(): void {
+    this.clock.release();
+    for (const l of this.listeners) l();
+  }
+
+  get held(): boolean {
+    return this.clock.held > 0;
+  }
+
+  /** Seconds since this run started, on the pause clock (0 while stopped). */
+  gameTime(): number {
+    return this.local ? (this.clock.now() - this.gameStart) / 1000 : 0;
+  }
+
+  private cue(p: TestPlayer, kind: Cue['kind'], text: string, from?: string): void {
+    p.cues.push({ t: Math.round(this.gameTime() * 10) / 10, kind, text, ...(from ? { from } : {}) });
+    if (p.cues.length > MAX_CUES) p.cues.splice(0, p.cues.length - MAX_CUES);
+  }
+
+  /** What this player perceives now: others in front and in range, and the cues since the last call (which clears them). Null for an unknown player. */
+  observationFor(id: string): Observation | null {
+    const p = this.players.find((x) => x.id === id);
+    const avatars = this.rigView()?.avatars;
+    const me = avatars?.find((a) => a.id === id);
+    return p && avatars && me ? buildObservation(me, avatars, p.cues.splice(0), this.gameTime()) : null;
+  }
+
+  private dropAgent(p: TestPlayer): void {
+    p.agent?.dispose();
+    p.agent = null;
+  }
+
+  /** Makes a player an agent (a Deep Agent plays it from the instructions) or, with null, a plain player again. Returns an error sentence, or undefined. */
+  setAgent(id: string, seat: AgentSeat | null): string | undefined {
+    const p = this.players.find((x) => x.id === id);
+    if (!p) return undefined;
+    if (!seat) {
+      this.dropAgent(p);
+      for (const l of this.listeners) l();
+      return undefined;
+    }
+    const instructions = this.deps.project.instructions;
+    if (!this.server) return 'Agent players run in local Play only.';
+    if (id === this.driven) return 'Drive another player: an agent cannot be the player you drive.';
+    if (p.source === 'replay' || p.source === 'live') return 'Set the input source to Manual first.';
+    if (!instructions) return "Write the game's instructions first (Deep Agent, Instructions mode).";
+    if (!this.deps.agentUrl?.()) return 'Install the Deep Agent plugin first.';
+    this.dropAgent(p);
+    const role = instructions.roles.find((r) => r.id === seat.role);
+    if (role) p.run.role = role.kind;
+    p.wander = false;
+    if (p.source === 'bot') p.source = 'manual';
+    this.agentTransport ??= socketTransport(() => this.deps.agentUrl?.() ?? null);
+    p.agent = new AgentDriver({
+      id, seat, run: `${this.runId}-${++this.agentSeq}`, transport: this.agentTransport,
+      clock: { now: this.clock.now, hold: () => this.hold(), release: () => this.release() },
+      host: {
+        observation: () => this.observationFor(id)!,
+        apply: (a) => this.applyAgent(p, a),
+        walking: () => p.goal !== null,
+        intro: () => this.introFor(p, seat),
+      },
+    });
+    for (const l of this.listeners) l();
+    return undefined;
+  }
+
+  private introFor(p: TestPlayer, seat: AgentSeat): { role: DecideRequest['role']; instructions: unknown } {
+    const instructions = this.deps.project.instructions;
+    const r = instructions?.roles.find((x) => x.id === seat.role);
+    return { role: r ? { id: r.id, name: r.name, brief: r.brief, kind: r.kind } : { id: 'player', name: 'Player', brief: '', kind: p.run.role }, instructions };
+  }
+
+  /** The only way an agent acts: the same moves a person has (walk, turn the head, gesture, hand over a device, speak). What cannot be done comes back as a note cue. */
+  private applyAgent(p: TestPlayer, a: Action): void {
+    const d = p.run.devices;
+    const lookToward = (x: number, z: number) => d.setHeadLook(Math.atan2(-(x - d.position[0]), -(z - d.position[2])), 0);
+    if (a.type === 'walk_to') this.walkTo(p.id, a.x, a.z);
+    else if (a.type === 'look_at') {
+      if ('player' in a) {
+        const at = this.players.find((q) => q.id === a.player)?.run.devices.position;
+        if (at) lookToward(at[0], at[2]);
+        else this.cue(p, 'note', `There is no player ${a.player} to look at.`);
+      } else lookToward(a.x, a.z);
+    } else if (a.type === 'gesture') {
+      const room = this.rooms.has('phone') && (ownershipOf(this.ownership, 'phone').mode === 'free' || this.holders.get('phone') === p.id);
+      if (d.has('phone') || room) d.gesture(a.gesture, a.gesture === 'flick' ? [1, 0, 0] : undefined);
+      else this.cue(p, 'note', `You have no phone to do a ${a.gesture} with.`);
+    } else if (a.type === 'give_device') {
+      if (this.holders.get(a.device) !== p.id) this.cue(p, 'note', `You do not hold the ${a.device}.`);
+      else if (a.to === p.id || !this.players.some((q) => q.id === a.to)) this.cue(p, 'note', `There is no player ${a.to} to give it to.`);
+      else this.holdDevice(a.device, a.to);
+    } else if (a.type === 'say') {
+      this.out('log', `[${p.id}] says: ${a.text}`);
+      for (const q of this.players) {
+        const [qx, , qz] = q.run.devices.position;
+        if (q !== p && Math.hypot(qx - d.position[0], qz - d.position[2]) <= OBSERVATION_RANGE) this.cue(q, 'speech', a.text, p.id);
+      }
     }
   }
 
@@ -813,7 +939,7 @@ export class RunController {
   /** A wandering player random-walks and gestures on its own while the creator drives someone else. */
   setWander(id: string, on: boolean): void {
     const p = this.players.find((x) => x.id === id);
-    if (p) p.wander = on;
+    if (p) (p.wander = on, on && this.dropAgent(p));
     for (const l of this.listeners) l();
   }
 
@@ -828,6 +954,7 @@ export class RunController {
     const p = this.players.find((x) => x.id === id);
     if (!p) return undefined;
     if (source === 'replay' && !p.run.clip) return 'Record a clip or load a .usis.jsonl file first.';
+    if (source !== 'manual') this.dropAgent(p);
     p.run.replay(source === 'replay');
     p.run.live = source === 'live';
     if (source === 'live') this.relay.connect();
@@ -877,6 +1004,7 @@ export class RunController {
     p!.run.stop();
     for (const [kind, holder] of this.holders) if (holder === id) this.holders.set(kind, this.players[0]!.id);
     if (this.clients.delete(id)) (this.server?.leave(id), this.deps.debug.handleDebugEvent({ kind: 'leave', t: Date.now(), player: id }));
+    p!.agent?.dispose();
     if (this.driven === id) this.drive(this.players[0]!.id);
     this.out('log', `Removed ${id}.`);
     this.refresh();
@@ -966,8 +1094,10 @@ export class RunController {
         if (entry.level === 'error' && entry.script) editor.reportError({ kind: 'client', name: entry.script }, entry.text);
       },
     });
+    this.gameStart = this.clock.now();
+    this.runId = `run-${Date.now().toString(36)}`;
     const run = new LocalRun({
-      scene, sandbox, clientScripts: project.clientScripts,
+      scene, sandbox, clientScripts: project.clientScripts, now: this.clock.now,
       onPacket: (p) => debug.addPacket(p),
       onLoadError: (script, message) => {
         this.out('error', `${script}: ${message}`);
@@ -991,6 +1121,7 @@ export class RunController {
     run.start();
     this.wanderTimer = setInterval(() => this.wander(), 200);
     this.walkTimer = setInterval(() => this.walk(), 50);
+    if (kind === 'local') this.agentTimer = setInterval(() => { for (const p of this.players) p.agent?.tick(); }, 100);
     this.session = { scene, ...(gameId ? { gameId } : {}), ...(version !== undefined ? { version } : {}) };
     if (kind === 'local') this.startPlayServer(run);
     const rig = this.rig.length ? this.rig.map((k) => SIM_DEVICE_NAMES[k]).join(', ') : 'no devices';
@@ -1025,6 +1156,7 @@ export class RunController {
     const { project, debug, editor } = this.deps;
     const ev = (e: { kind: string; [k: string]: unknown }) => debug.handleDebugEvent({ t: Date.now(), ...e });
     const server = createPlayServer(this.clients, {
+      now: this.clock.epoch, setTimer: this.clock.setTimer, clearTimer: this.clock.clearTimer,
       onLog: (level, msg) => ev({ kind: 'log', level, msg }),
       onError: (msg) => ev({ kind: 'error', msg }),
       onState: (json) => ev({ kind: 'state', state: JSON.parse(json) }),
@@ -1079,11 +1211,12 @@ export class RunController {
     const sandbox = new ScriptSandbox({ onLog: (e) => this.out(e.level, `[${id}] ${e.text}`) });
     const p: TestPlayer = { id, name, run: undefined as unknown as LocalRun, wander: false, ...playerDefaults(), lastEvent: null, hapticAt: 0 };
     p.run = new LocalRun({
-      scene: sess.scene, sandbox, clientScripts: project.clientScripts,
+      scene: sess.scene, sandbox, clientScripts: project.clientScripts, now: this.clock.now,
       devices: { kinds: this.rig.filter((k) => !this.rooms.has(k)) },
       onLoadError: (script, message) => this.out('error', `[${id}] ${script}: ${message}`),
       onOutput: (o) => {
-        if (o.kind === 'haptic') (p.hapticAt = Date.now(), this.out('log', `[${id}] haptic ${o.pattern} ${o.intensity}`), this.sendHaptic(p, o.pattern, o.intensity));
+        if (o.kind === 'haptic') (p.hapticAt = Date.now(), this.cue(p, 'haptic', `${o.pattern} ${o.intensity}`), this.out('log', `[${id}] haptic ${o.pattern} ${o.intensity}`), this.sendHaptic(p, o.pattern, o.intensity));
+        if (o.kind === 'audio') this.cue(p, 'audio', `${o.action} ${o.sound ?? o.text ?? ''}`.trim());
         if (o.kind !== 'remote') return;
         if (this.server) this.server.remote(id, o.name, o.data);
         else p.socket?.send({ name: o.name, data: o.data });
@@ -1114,7 +1247,7 @@ export class RunController {
   private buildRooms(kinds: readonly SimDeviceKind[], ownership: Partial<Record<PeripheralKind, Ownership>>): void {
     this.ownership = ownership;
     for (const kind of kinds) {
-      const room = new SimDevices((packet) => this.route(packet), { kinds: [kind], idPrefix: 'room' });
+      const room = new SimDevices((packet) => this.route(packet), { kinds: [kind], idPrefix: 'room', now: this.clock.now });
       const own = ownershipOf(ownership, kind);
       if (own.mode === 'free' && own.at) room.setPosition(...own.at);
       if (own.mode === 'passed') this.holders.set(kind, this.players[0]!.id);
@@ -1169,6 +1302,7 @@ export class RunController {
 
   /** One wander or bot step for every wandering or bot player the creator is not driving. */
   private wander(): void {
+    if (this.clock.held) return;
     const scale = this.server ? this.timeScale : 1;
     for (const p of this.players) {
       if (p.id === this.driven || p.goal) continue;
@@ -1231,8 +1365,11 @@ export class RunController {
   private handleOutput(o: EffectOutput, script: string): void {
     if (o.kind === 'haptic') {
       this.out('log', `haptic ${o.pattern} ${o.intensity}`);
-      if (this.players[0]) (this.players[0].hapticAt = Date.now(), this.sendHaptic(this.players[0], o.pattern, o.intensity));
-    } else if (o.kind === 'audio') this.out('log', `audio ${o.action} ${o.sound ?? o.text ?? ''} on ${o.entity}`.trim());
+      if (this.players[0]) (this.players[0].hapticAt = Date.now(), this.cue(this.players[0], 'haptic', `${o.pattern} ${o.intensity}`), this.sendHaptic(this.players[0], o.pattern, o.intensity));
+    } else if (o.kind === 'audio') {
+      this.out('log', `audio ${o.action} ${o.sound ?? o.text ?? ''} on ${o.entity}`.trim());
+      if (this.players[0]) this.cue(this.players[0], 'audio', `${o.action} ${o.sound ?? o.text ?? ''}`.trim());
+    }
     else if (o.kind === 'spawn') this.out('log', `spawn ${o.name} (not simulated locally)`);
     else if (this.server && this.local?.playerId) this.server.remote(this.local.playerId, o.name, o.data);
     else if (this.play) {
@@ -1275,6 +1412,12 @@ export class RunController {
     this.wanderTimer = null;
     if (this.walkTimer) clearInterval(this.walkTimer);
     this.walkTimer = null;
+    if (this.agentTimer) clearInterval(this.agentTimer);
+    this.agentTimer = null;
+    for (const p of this.players) p.agent?.dispose();
+    this.agentTransport?.close();
+    this.agentTransport = null;
+    this.clock.reset();
     if (this.roomTimer) clearInterval(this.roomTimer);
     this.roomTimer = null;
     for (const room of this.rooms.values()) room.stop();

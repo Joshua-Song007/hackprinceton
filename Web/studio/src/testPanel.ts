@@ -1,6 +1,7 @@
 // Test panel: every player in a running multiplayer test, a top-down map, and controls for the driven player.
 import { ownershipOf, parseGestures, type OwnershipMode } from '@pear/runtime';
 import { SIM_DEVICE_KINDS, accelPulse, parseUsisJsonl, type SimDeviceKind } from '@pear/sim';
+import { PERSONAS, type AgentStatus, type Persona } from './agentPlayers';
 import { slotDevice } from './needs';
 import { button, el, icon, openMenu } from './ui';
 import type { PanelView } from './layout';
@@ -50,7 +51,7 @@ export function createTestPanel(project: Project, run: RunController): PanelView
 
   let key = '';
   let canvas: HTMLCanvasElement | null = null;
-  let rows = new Map<string, { sub: HTMLElement; dot: HTMLElement }>();
+  let rows = new Map<string, { sub: HTMLElement; dot: HTMLElement; agent: HTMLElement | null }>();
   let yaw: HTMLInputElement | null = null;
   let pitch: HTMLInputElement | null = null;
   let yawOut: HTMLElement | null = null;
@@ -60,7 +61,7 @@ export function createTestPanel(project: Project, run: RunController): PanelView
   let moved = 0;
   let start: [number, number] = [0, 0];
   const msg = el('p', { class: 'pn-empty', role: 'status' });
-  const structureKey = () => [run.running, run.driven, run.players.map((p) => `${p.id}:${p.wander}:${p.run.recording}:${p.run.replaying}:${p.run.clip?.length ?? 0}:${p.source}:${p.botMode}:${p.run.role}:${p.run.phoneUp}:${[...p.liveDevices]}`).join(), run.rig.join(), [...run.rooms.keys()].map((k) => `${k}=${run.holderOf(k)}`).join(), run.relay.status, run.relay.devices.map((d) => d.id).join(), run.timeScale, run.status.kind].join('|');
+  const structureKey = () => [run.running, run.driven, run.players.map((p) => `${p.id}:${p.wander}:${p.run.recording}:${p.run.replaying}:${p.run.clip?.length ?? 0}:${p.source}:${p.botMode}:${p.run.role}:${p.run.phoneUp}:${[...p.liveDevices]}:${p.agent ? `${p.agent.seat.persona}/${p.agent.seat.role}` : ''}`).join(), project.instructions?.roles.map((r) => r.id).join() ?? '', run.rig.join(), [...run.rooms.keys()].map((k) => `${k}=${run.holderOf(k)}`).join(), run.relay.status, run.relay.devices.map((d) => d.id).join(), run.timeScale, run.status.kind].join('|');
 
   const slider = (label: string, input: HTMLElement, out: HTMLElement) =>
     el('div', { style: 'display:grid;grid-template-columns:72px minmax(0,1fr) 52px;align-items:center;gap:8px;font-size:11px;color:var(--text-secondary);min-height:var(--row-height)' }, [label, input, out]);
@@ -156,14 +157,33 @@ export function createTestPanel(project: Project, run: RunController): PanelView
     return el('span', { style: 'grid-column:1/-1;display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px' }, items);
   };
 
+  const AGENT_TEXT: Record<AgentStatus, string> = { idle: 'Waiting', thinking: 'Thinking', acting: 'Acting', limit: 'Call limit reached', stopped: 'Stopped' };
+  const agentText = (p: TestPlayer): string => (p.agent ? `Agent: ${AGENT_TEXT[p.agent.status]}, ${p.agent.calls} calls${p.agent.notes.length ? `, ${p.agent.notes.length} notes` : ''}` : '');
+
+  /** An agent player is played by a Deep Agent from the game's instructions: on or off, its persona and its instructions role. */
+  const agentControls = (p: TestPlayer): Node[] => {
+    const roles = project.instructions?.roles ?? [];
+    const persona = el('select', { 'aria-label': `Persona of ${p.name}` }, PERSONAS.map((x) => el('option', { value: x }, [x])));
+    persona.value = p.agent?.seat.persona ?? 'follows';
+    const role = el('select', { 'aria-label': `Instructions role of ${p.name}` }, [el('option', { value: '' }, ['No role']), ...roles.map((r) => el('option', { value: r.id }, [r.name || r.id]))]);
+    role.value = p.agent?.seat.role ?? '';
+    const seat = () => ({ persona: persona.value as Persona, role: role.value });
+    const apply = (on: boolean) => { msg.textContent = run.setAgent(p.id, on ? seat() : null) ?? ''; };
+    const toggle = button('Agent', () => apply(!p.agent), { variant: 'small', ariaLabel: `Agent ${p.name}` });
+    toggle.setAttribute('aria-pressed', String(!!p.agent));
+    for (const s of [persona, role]) s.addEventListener('change', () => p.agent && apply(true)); // a new seat is a new agent, so the persona takes effect
+    return [toggle, persona, ...(roles.length ? [role] : [])];
+  };
+
   const playersSection = (): Node[] => {
     rows = new Map();
     if (!run.running) return [el('p', { class: 'pn-empty' }, ['Press Play (F5). Your player and any you add appear here.'])];
     const list = el('ul', { class: 'om-list', 'aria-label': 'Players' }, run.players.map((p, i) => {
       const sub = el('span', { class: 'om-sub' });
       const dot = el('span', { class: 'om-haptic', role: 'img', 'aria-label': 'Haptic output' }, [icon('phone')]);
-      rows.set(p.id, { sub, dot });
       const driven = run.driven === p.id;
+      const agent = i > 0 && run.status.kind === 'local' && !driven ? el('span', { class: 'om-sub', role: 'status', 'aria-label': `Agent status of ${p.name}`, style: 'grid-column:1/-1' }) : null;
+      rows.set(p.id, { sub, dot, agent });
       const drive = button(driven ? 'Driving' : 'Drive', () => run.drive(p.id), { variant: 'small', ariaLabel: `Drive ${p.name}` });
       drive.disabled = driven;
       drive.setAttribute('aria-pressed', String(driven));
@@ -171,6 +191,7 @@ export function createTestPanel(project: Project, run: RunController): PanelView
       if (i > 0) {
         const w = button('Wander', () => run.setWander(p.id, !p.wander), { variant: 'small', ariaLabel: `Wander ${p.name}` });
         w.setAttribute('aria-pressed', String(p.wander));
+        if (run.status.kind === 'local' && !driven) btns.push(...agentControls(p));
         btns.push(w, button('Remove', () => run.removePlayer(p.id), { variant: 'small', ariaLabel: `Remove ${p.name}` }));
       }
       const role = el('select', { 'aria-label': `Role of ${p.name}` }, [el('option', { value: 'player' }, ['Player']), el('option', { value: 'ref' }, ['Referee'])]);
@@ -180,6 +201,7 @@ export function createTestPanel(project: Project, run: RunController): PanelView
         el('span', { class: 'om-name' }, [i === 0 ? `${p.name} (you)` : p.name, sub]), dot,
         el('span', { style: 'display:flex;gap:4px' }, [role, ...btns]),
         clipRow(p),
+        ...(agent ? [agent] : []),
       ]);
     }));
     const addRole = el('select', { 'aria-label': 'Role of the new player' }, [el('option', { value: 'player' }, ['Player']), el('option', { value: 'ref' }, ['Referee'])]);
@@ -385,6 +407,7 @@ export function createTestPanel(project: Project, run: RunController): PanelView
       if (!r) continue;
       r.sub.textContent = fmt(p.run.devices.position) + (p.lastEvent ? `  last: ${p.lastEvent}` : '');
       r.dot.classList.toggle('is-firing', hapticRecent(p.hapticAt, now));
+      if (r.agent) r.agent.textContent = agentText(p);
     }
     const h = run.drivenPlayer?.run.devices;
     if (h && yaw && pitch && document.activeElement !== yaw && document.activeElement !== pitch) {

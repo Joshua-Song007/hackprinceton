@@ -88,6 +88,12 @@ export class MarketplaceController {
 
   constructor(private deps: MarketplaceDeps) {}
 
+  /** The runtime URLs of an installed plugin (the same a panel connects to), null when it is not installed. */
+  runtimeUrlOf(id: string): RuntimeUrls | null {
+    const stored = this.read()[id];
+    return stored?.state === 'installed' ? (this.deps.runtimeUrls ?? localRuntimeUrls)(stored.manifest) : null;
+  }
+
   get signedIn(): boolean {
     return this.deps.registry.signedIn;
   }
