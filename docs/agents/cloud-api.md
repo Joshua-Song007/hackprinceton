@@ -13,6 +13,9 @@ Routes
 - `POST /v1/games/{gameId}/versions` (auth). Request: a game bundle. Owner only (403 otherwise). Response `{"gameId": "...", "version": N}`.
 - `GET /v1/games` (auth). Response `{"games": [{"id": "...", "title": "...", "latestVersion": N}]}` for the signed-in account.
 - `GET /v1/games/{gameId}/versions/{N|latest}` (auth). Response `{"gameId": "...", "version": N, "bundle": <bundle>}`. 404 if absent.
+- Live play (Backend `game_server/session.rs`): `GET /play/{gameId}?token=..&version=n&lobby=CODE` (WebSocket). `lobby` is optional, 4-8 chars `[A-Z0-9]`, case-insensitive (uppercased); invalid is 400; missing joins the shared lobby `OPEN`. A session is one `(gameId, lobby)`; joining an unused code creates it. The `_welcome` frame data is `{"id", "name", "lobby"}`. The server pings every 10 s and drops a socket silent for 30 s (`onPlayerLeave` fires). `/debug/{gameId}` takes an optional `?lobby=` (default `OPEN`).
+- `GET /api/games/{gameId}/lobbies` (auth). Response `[{"code": "AB12C", "players": [{"id": "...", "name": "..."}]}]`, live lobbies only (in-memory, nothing stored; `OPEN` included when live).
+- `GET /api/friends` entries: `playing` is `{"gameId", "title", "lobby"}` or null.
 
 Game bundle
 

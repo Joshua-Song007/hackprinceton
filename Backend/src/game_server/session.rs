@@ -1,6 +1,6 @@
-// One WebSocket session per live game: players join and leave, remote events go into the script
+// One WebSocket session per live (game, lobby): players join and leave, remote events go into the script
 // host, and the host's `fire` / `fireAll` come back out. Lobbies and matchmaking are game code.
-// Route: GET /play/{game_id} (WebSocket). Text frames are JSON `{"name": "...", "data": ...}` both ways.
+// Route: GET /play/{game_id}?lobby=CODE (WebSocket); `lobby` is 4-8 chars [A-Z0-9], case-insensitive, default "OPEN". Text frames are JSON `{"name": "...", "data": ...}` both ways.
 // Auth: `accounts::authenticate` runs before the upgrade; no valid bearer token = 401.
 //
 // [provisional: needs-tien-review] design choices:
@@ -44,6 +44,15 @@ use crate::AppState;
 
 const MAX_MESSAGE_BYTES: usize = 64 * 1024;
 const MAX_GAME_ID_LEN: usize = 128;
+/// The shared lobby a /play link without `?lobby=` lands in (keeps older phone links working).
+pub const OPEN_LOBBY: &str = "OPEN";
+/// A socket is pinged every `ping`; if no frame at all arrives for `idle` it is dropped, which runs `leave`.
+#[derive(Clone, Copy)]
+struct Heartbeat {
+    ping: Duration,
+    idle: Duration,
+}
+const HEARTBEAT: Heartbeat = Heartbeat { ping: Duration::from_secs(10), idle: Duration::from_secs(30) };
 /// `ctx.after` limits: delay clamped to this range, at most this many pending timers per session.
 const MIN_TIMER_MS: u64 = 50;
 const MAX_TIMER_MS: u64 = 3_600_000;
@@ -122,6 +131,7 @@ impl From<&GameVersion> for Release {
 
 struct Player {
     conn: u64,
+    name: String,
     tx: UnboundedSender<String>,
 }
 
@@ -133,6 +143,8 @@ struct Timer {
 }
 
 struct Session {
+    game: String,
+    lobby: String,
     host: Box<dyn ScriptHost>,
     players: HashMap<String, Player>,
     timers: Vec<Timer>,
@@ -168,11 +180,28 @@ impl Session {
     }
 }
 
+/// Registry / debug-bus key of one lobby of a game; the host factory and the debug bus see this string.
+pub fn session_key(game_id: &str, lobby: &str) -> String {
+    format!("{game_id}/{lobby}")
+}
+
+fn split_key(key: &str) -> (String, String) {
+    match key.rsplit_once('/') {
+        Some((g, l)) => (g.to_string(), l.to_string()),
+        None => (key.to_string(), OPEN_LOBBY.to_string()),
+    }
+}
+
+/// 4-8 chars of [A-Za-z0-9], uppercased; None if invalid.
+pub fn normalize_lobby(s: &str) -> Option<String> {
+    ((4..=8).contains(&s.len()) && s.bytes().all(|b| b.is_ascii_alphanumeric())).then(|| s.to_ascii_uppercase())
+}
+
 fn encode(name: String, data: Value) -> Option<String> {
     serde_json::to_string(&Frame { name, data }).ok()
 }
 
-/// All live sessions, keyed by game id.
+/// All live sessions, keyed by `session_key(game id, lobby)`.
 pub struct Registry {
     factory: HostFactory,
     sessions: Mutex<HashMap<String, Session>>,
@@ -192,7 +221,7 @@ impl Registry {
         self.sessions.lock().unwrap_or_else(|p| p.into_inner())
     }
 
-    /// Adds a player; frames for them arrive on `tx`. Returns the connection id to pass to
+    /// Adds a player to the session `key`; frames for them arrive on `tx`. Returns the connection id to pass to
     /// `remote` / `leave`. A repeat join by the same player replaces the old connection (its
     /// sender is dropped, which ends that socket). `release` builds the host when this join starts
     /// the session; None (no published version) means no server scripts.
@@ -201,7 +230,7 @@ impl Registry {
     }
 
     /// Like `join`, for a real connection: records the display name for scripts and sends the joiner a
-    /// `_welcome` frame `{"id", "name"}` (also on a reconnect) so a client script knows its own player id.
+    /// `_welcome` frame `{"id", "name", "lobby"}` (also on a reconnect) so a client script knows its own player id.
     pub fn join_named(&self, game_id: &str, player: &str, name: &str, tx: UnboundedSender<String>, release: Option<Release>) -> u64 {
         self.join_inner(game_id, player, Some(name), tx, release)
     }
@@ -211,19 +240,21 @@ impl Registry {
         let mut map = self.lock();
         let created = !map.contains_key(game_id);
         let session = map.entry(game_id.to_string()).or_insert_with(|| Session {
+            game: split_key(game_id).0,
+            lobby: split_key(game_id).1,
             host: (self.factory)(game_id, release.as_ref().map_or(&[][..], |r| r.sources.as_slice())),
             players: HashMap::new(),
             timers: Vec::new(),
         });
         if let Some(name) = name {
             session.host.set_player_name(player, name);
-            if let Some(text) = encode("_welcome".into(), json!({ "id": player, "name": name })) {
+            if let Some(text) = encode("_welcome".into(), json!({ "id": player, "name": name, "lobby": session.lobby })) {
                 let _ = tx.send(text);
             }
         }
         let replaced = session
             .players
-            .insert(player.to_string(), Player { conn, tx })
+            .insert(player.to_string(), Player { conn, name: name.unwrap_or_default().to_string(), tx })
             .is_some();
         if !replaced {
             bus().publish(game_id, "join", json!({ "player": player }));
@@ -236,13 +267,20 @@ impl Registry {
         conn
     }
 
-    /// Restarts a live session's host from a newly published version. Players get a `_reload` frame,
+    /// Restarts every live lobby of a game onto a newly published version. Players get a `_reload` frame,
     /// then the new host sees every connected player join. No live session: nothing to do.
     pub fn reload(&self, game_id: &str, release: Release) {
         let mut map = self.lock();
+        let keys: Vec<String> = map.iter().filter(|(_, s)| s.game == game_id).map(|(k, _)| k.clone()).collect();
+        for key in keys {
+            Self::reload_one(&mut map, &self.factory, &key, &release);
+        }
+    }
+
+    fn reload_one(map: &mut HashMap<String, Session>, factory: &HostFactory, game_id: &str, release: &Release) {
         let Some(session) = map.get_mut(game_id) else { return };
         bus().publish(game_id, "reload", json!({ "version": release.version }));
-        session.host = (self.factory)(game_id, &release.sources);
+        session.host = factory(game_id, &release.sources);
         session.timers.clear(); // the old host's timers belong to the old scripts
         session.deliver(
             game_id,
@@ -272,13 +310,31 @@ impl Registry {
         }
     }
 
-    /// Ends a game's live session (its game was deleted): the players' senders drop, which ends their sockets.
-    /// No live session: nothing to do.
+    /// Ends every live lobby of a game (its game was deleted): the players' senders drop, which ends their
+    /// sockets. No live session: nothing to do.
     pub fn close(&self, game_id: &str) {
         let mut map = self.lock();
-        if map.remove(game_id).is_some() {
-            bus().end(game_id);
+        let keys: Vec<String> = map.iter().filter(|(_, s)| s.game == game_id).map(|(k, _)| k.clone()).collect();
+        for key in keys {
+            map.remove(&key);
+            bus().end(&key);
         }
+    }
+
+    /// Live lobbies of a game with their players `(id, name)`, sorted by code. Nothing is stored.
+    pub fn lobbies(&self, game_id: &str) -> Vec<(String, Vec<(String, String)>)> {
+        let map = self.lock();
+        let mut out: Vec<_> = map
+            .values()
+            .filter(|s| s.game == game_id)
+            .map(|s| {
+                let mut ps: Vec<_> = s.players.iter().map(|(id, p)| (id.clone(), p.name.clone())).collect();
+                ps.sort();
+                (s.lobby.clone(), ps)
+            })
+            .collect();
+        out.sort();
+        out
     }
 
     /// Handles one inbound text frame from a player. Malformed frames and stale connections are ignored.
@@ -317,9 +373,9 @@ impl Registry {
         session.deliver(game_id, out);
     }
 
-    /// The game this player is connected to right now, if any (live sockets only; nothing is stored).
-    pub fn game_of(&self, player: &str) -> Option<String> {
-        self.lock().iter().find(|(_, s)| s.players.contains_key(player)).map(|(id, _)| id.clone())
+    /// The `(game id, lobby)` this player is connected to right now, if any (live sockets only; nothing is stored).
+    pub fn game_of(&self, player: &str) -> Option<(String, String)> {
+        self.lock().values().find(|s| s.players.contains_key(player)).map(|s| (s.game.clone(), s.lobby.clone()))
     }
 
     #[cfg(test)]
@@ -333,17 +389,22 @@ fn registry() -> &'static Registry {
     R.get_or_init(|| Registry::new(super::script_host::factory()))
 }
 
-/// The game this player is connected to right now, if any.
-pub fn game_of(player: &str) -> Option<String> {
+/// The `(game id, lobby)` this player is connected to right now, if any.
+pub fn game_of(player: &str) -> Option<(String, String)> {
     registry().game_of(player)
 }
 
-/// Reloads a live session of the game onto a freshly published version (called by games.rs).
+/// Live lobbies of a game with their players (called by games.rs).
+pub fn lobbies(game_id: &str) -> Vec<(String, Vec<(String, String)>)> {
+    registry().lobbies(game_id)
+}
+
+/// Reloads every live lobby of the game onto a freshly published version (called by games.rs).
 pub fn reload(game_id: &str, version: &GameVersion) {
     registry().reload(game_id, Release::from(version));
 }
 
-/// Ends a live session of a game that was just deleted (called by games.rs).
+/// Ends every live lobby of a game that was just deleted (called by games.rs).
 pub fn close(game_id: &str) {
     registry().close(game_id);
 }
@@ -361,6 +422,13 @@ async fn play(
     if game_id.is_empty() || game_id.len() > MAX_GAME_ID_LEN {
         return StatusCode::BAD_REQUEST.into_response();
     }
+    let lobby = match accounts::query_param(uri.query(), "lobby") {
+        None => OPEN_LOBBY.to_string(),
+        Some(l) => match normalize_lobby(l) {
+            Some(l) => l,
+            None => return StatusCode::BAD_REQUEST.into_response(),
+        },
+    };
     let version = match accounts::query_param(uri.query(), "version") {
         None => None,
         Some(v) => match v.parse::<i32>() {
@@ -384,19 +452,26 @@ async fn play(
     match ws {
         Ok(ws) => ws
             .max_message_size(MAX_MESSAGE_BYTES)
-            .on_upgrade(move |socket| run_socket(socket, game_id, account.id, account.display_name, release)),
+            .on_upgrade(move |socket| run_socket(socket, session_key(&game_id, &lobby), account.id, account.display_name, release, HEARTBEAT)),
         Err(rej) => rej.into_response(),
     }
 }
 
-async fn run_socket(mut socket: WebSocket, game_id: String, player: String, name: String, release: Option<Release>) {
+async fn run_socket(mut socket: WebSocket, game_id: String, player: String, name: String, release: Option<Release>, hb: Heartbeat) {
     let reg = registry();
     let (tx, mut rx) = unbounded_channel::<String>();
     let conn = reg.join_named(&game_id, &player, &name, tx, release);
     let mut ticker = tokio::time::interval(TICK);
+    let mut pinger = tokio::time::interval(hb.ping);
+    let mut last_seen = Instant::now();
     loop {
         tokio::select! {
             _ = ticker.tick() => reg.tick(&game_id, Instant::now()),
+            _ = pinger.tick() => {
+                if last_seen.elapsed() >= hb.idle || socket.send(Message::Ping(Vec::new().into())).await.is_err() {
+                    break; // silent socket (locked / backgrounded phone): free the slot
+                }
+            }
             out = rx.recv() => match out {
                 Some(text) => {
                     if socket.send(Message::Text(text.into())).await.is_err() {
@@ -405,10 +480,13 @@ async fn run_socket(mut socket: WebSocket, game_id: String, player: String, name
                 }
                 None => break, // replaced by a newer connection
             },
-            inc = socket.recv() => match inc {
-                Some(Ok(Message::Text(t))) => reg.remote(&game_id, &player, conn, t.as_str()),
-                Some(Ok(Message::Close(_))) | Some(Err(_)) | None => break,
-                Some(Ok(_)) => {} // binary / ping / pong ignored
+            inc = socket.recv() => {
+                last_seen = Instant::now();
+                match inc {
+                    Some(Ok(Message::Text(t))) => reg.remote(&game_id, &player, conn, t.as_str()),
+                    Some(Ok(Message::Close(_))) | Some(Err(_)) | None => break,
+                    Some(Ok(_)) => {} // binary / ping / pong only refresh last_seen
+                }
             },
         }
     }
@@ -611,7 +689,7 @@ mod tests {
         let (tx, mut rx) = unbounded_channel();
         r.join_named("g", "a", "Ada", tx, None);
         let got = drain(&mut rx);
-        assert_eq!(got[0], json!({"name":"_welcome","data":{"id":"a","name":"Ada"}}));
+        assert_eq!(got[0], json!({"name":"_welcome","data":{"id":"a","name":"Ada","lobby":"OPEN"}}));
         let (tx2, mut rx2) = unbounded_channel();
         r.join_named("g", "a", "Ada", tx2, None);
         assert_eq!(drain(&mut rx2)[0]["name"], "_welcome");
@@ -628,6 +706,105 @@ mod tests {
         drain(&mut a);
         r.tick("g", Instant::now() + Duration::from_secs(5));
         assert!(drain(&mut a).is_empty());
+    }
+
+    #[test]
+    fn lobbies_of_one_game_are_isolated_and_listed() {
+        let (r, _) = reg();
+        let (ca, mut a) = player(&r, &session_key("g", "AB12"), "a");
+        let (_cb, mut b) = player(&r, &session_key("g", "ZZ99"), "b");
+        let (_cc, _c) = player(&r, &session_key("h", "AB12"), "c");
+        drain(&mut a);
+        drain(&mut b);
+        r.remote(&session_key("g", "AB12"), "a", ca, r#"{"name":"all","data":1}"#);
+        assert_eq!(drain(&mut a).len(), 1);
+        assert!(drain(&mut b).is_empty());
+        assert_eq!(
+            r.lobbies("g"),
+            vec![
+                ("AB12".to_string(), vec![("a".to_string(), String::new())]),
+                ("ZZ99".to_string(), vec![("b".to_string(), String::new())]),
+            ]
+        );
+        assert_eq!(r.game_of("b"), Some(("g".to_string(), "ZZ99".to_string())));
+        assert!(r.lobbies("nope").is_empty());
+    }
+
+    #[test]
+    fn reload_and_close_hit_every_lobby_of_the_game() {
+        let (r, _) = reg();
+        let (_ca, mut a) = player(&r, &session_key("g", "AB12"), "a");
+        let (_cb, mut b) = player(&r, &session_key("g", "OPEN"), "b");
+        let (_cc, mut c) = player(&r, &session_key("h", "OPEN"), "c");
+        drain(&mut a);
+        drain(&mut b);
+        drain(&mut c);
+        r.reload("g", Release { version: 2, sources: vec![] });
+        let reloaded = |v: Vec<Value>| v.iter().any(|f| f["name"] == "_reload");
+        assert!(reloaded(drain(&mut a)));
+        assert!(reloaded(drain(&mut b)));
+        assert!(!reloaded(drain(&mut c)));
+        r.close("g");
+        assert!(r.lobbies("g").is_empty());
+        assert!(matches!(a.try_recv(), Err(tokio::sync::mpsc::error::TryRecvError::Disconnected)));
+        assert!(matches!(b.try_recv(), Err(tokio::sync::mpsc::error::TryRecvError::Disconnected)));
+        assert_eq!(r.lobbies("h").len(), 1);
+    }
+
+    #[test]
+    fn lobby_codes_normalize_and_validate() {
+        assert_eq!(normalize_lobby("ab12c").as_deref(), Some("AB12C"));
+        assert_eq!(normalize_lobby("abc"), None);
+        assert_eq!(normalize_lobby("abcdefghi"), None);
+        assert_eq!(normalize_lobby("ab-12"), None);
+    }
+
+    /// A client that connects and then never reads (so never answers pings) is dropped and its player
+    /// leaves; a client that keeps writing stays.
+    #[tokio::test]
+    async fn heartbeat_drops_a_silent_socket() {
+        use futures_util::{SinkExt, StreamExt};
+        let hb = Heartbeat { ping: Duration::from_millis(50), idle: Duration::from_millis(300) };
+        async fn upgrade(ws: WebSocketUpgrade, Path(id): Path<String>, State(hb): State<Heartbeat>) -> Response {
+            ws.on_upgrade(move |s| run_socket(s, session_key("hbgame", "BEAT"), id, "n".into(), None, hb))
+        }
+        let app = Router::new().route("/t/{id}", get(upgrade)).with_state(hb);
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            let _ = axum::serve(listener, app).await;
+        });
+        let (silent, _) = tokio_tungstenite::connect_async(format!("ws://{addr}/t/silent")).await.unwrap();
+        let (mut live, _) = tokio_tungstenite::connect_async(format!("ws://{addr}/t/live")).await.unwrap();
+        let reg = registry();
+        for _ in 0..40 {
+            if reg.lobbies("hbgame").first().is_some_and(|l| l.1.len() == 2) {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(25)).await;
+        }
+        assert_eq!(reg.lobbies("hbgame")[0].1.len(), 2);
+        let keepalive = tokio::spawn(async move {
+            loop {
+                let _ = live.send(tokio_tungstenite::tungstenite::Message::Ping(Vec::new().into())).await;
+                tokio::select! {
+                    _ = live.next() => {}
+                    _ = tokio::time::sleep(Duration::from_millis(50)) => {}
+                }
+            }
+        });
+        let mut left = false;
+        for _ in 0..60 {
+            if reg.lobbies("hbgame")[0].1.len() == 1 {
+                left = true;
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+        keepalive.abort();
+        drop(silent); // held open until here: never polled, so it never answered a ping
+        assert!(left, "silent socket should have been dropped");
+        assert_eq!(reg.lobbies("hbgame")[0].1, vec![("live".to_string(), "n".to_string())]);
     }
 
     #[tokio::test]
