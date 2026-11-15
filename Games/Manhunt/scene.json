@@ -1,0 +1,11 @@
+{
+  "name": "Manhunt",
+  "requiredTier": 1,
+  "playerOrigin": [0, 1.6, 0],
+  "runMode": "device",
+  "permissions": { "location": true },
+  "inputs": { "position": true, "gestures": ["tap"], "players": [2, 16] },
+  "clientScripts": [],
+  "serverScripts": ["game"],
+  "entities": []
+}

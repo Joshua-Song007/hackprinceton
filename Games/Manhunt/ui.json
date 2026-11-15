@@ -1,0 +1,21 @@
+{
+  "pearui": 1,
+  "route": [{ "screen": "main" }],
+  "screens": {
+    "main": {
+      "type": "column",
+      "children": [
+        { "type": "sensor", "id": "gps", "kind": "location", "event": "location", "hz": 1 },
+        { "type": "effect", "id": "caught-haptic", "on": "ev.view.caughtAt", "haptic": "fail" },
+        { "type": "effect", "id": "near-haptic", "on": "ev.view.hotN", "haptic": "heavy" },
+        { "type": "text", "value": "{{ev.view.role}}", "style": { "caps": true, "size": "s" } },
+        { "type": "text", "value": "{{ev.view.status}}", "style": { "size": "xl" } },
+        { "type": "timer", "until": "ev.view.endsAt", "if": "ev.view.phase == 'running'", "style": { "size": "l", "mono": true } },
+        { "type": "text", "value": "{{ev.view.hint}}", "style": { "size": "m", "card": true } },
+        { "type": "map", "markers": "ev.view.markers", "follow": "me", "style": { "grow": true } },
+        { "type": "text", "value": "{{ev.view.tagMsg}}", "style": { "size": "s" }, "if": "ev.view.role == 'hunter'" },
+        { "type": "button", "label": "Tag", "action": { "send": "tag", "data": {} }, "if": "ev.view.role == 'hunter' && ev.view.phase == 'running'", "style": { "tone": "accent" } }
+      ]
+    }
+  }
+}
