@@ -397,7 +397,8 @@ Not planned: multiple developer roles or audit log (one developer role for the h
 - [x] `Tools/pear-mcp/src/kit.js` — location-game example (PR #198, Jacob)
 
 ### 14.8 Later (not scheduled tonight)
-- [ ] thumbnails + gameplay image carousel; developer web About edit; marketplace map plugin with iOS look; iOS Simulator stream check
+- [ ] Game media (thumbnail + image carousel), developer-uploaded (user 2026-11-15): NOT in-game screenshots. Images are IRL photos of people playing, concept art, and rules/how-it-works explainers (Pear games are outdoor, so the "gameplay" is the real world). Flow: when a developer uploads/publishes a game, Studio detects missing or new media and prompts for it; developer uploads their own thumbnail + carousel images (+ optional captions, e.g. a ruleset card). Guidelines shown at upload (aspect ratios, min resolution, safe area, file size, no text near edges). Automatic cropping states: each image gets per-surface crops (home card thumbnail, hero/Editor's pick banner, detail carousel, web page) with a preview of each, auto-centered crop + manual adjust, so it conforms to the home page and web page. Storage: content-addressed assets (`PUT /api/games/{id}/assets/{name}` + `GET /api/assets/{sha256}`) referenced from listing fields (13.9), cover endpoints already exist (`games.cover`). Surfaces: PearPlayer library card/hero + GameDetailView carousel, web listing page, Studio About panel (`Web/studio/src/aboutPanel.ts`).
+- [ ] developer web About edit; marketplace map plugin with iOS look; iOS Simulator stream check
 
 ## Cross-Cutting: Hardware verification (compressed)
 
