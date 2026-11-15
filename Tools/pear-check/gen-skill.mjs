@@ -145,7 +145,7 @@ ${kit}
 
 ${scaffoldLines.join('\n')}
 
-Start from the nearest one: Manhunt for GPS games, Hot Potato for passing/tag, Quick Draw for motion reflex duels.
+Start from the nearest one: Manhunt for GPS and tag games, Quick Draw for motion reflex duels.
 
 ## Workflow
 

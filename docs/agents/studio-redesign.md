@@ -63,7 +63,7 @@ Result: I could not deliberately play one round of the game the template is buil
 ### Input fidelity
 
 - Position is carried by the AirPods head packet (`Web/packages/pear-sim/src/devices.ts:107-110`). Remove AirPods and `ctx.position` freezes at `playerOrigin` while you keep walking.
-- No GPS: no lat/lon, no accuracy, no update-rate or noise model. Scripts hard-code `acc: 2` (`Games/HotPotato/scripts/player.js`).
+- No GPS: no lat/lon, no accuracy, no update-rate or noise model. Scripts hard-code `acc: 2`.
 - No accel: the sim never emits it and scripts cannot read it (`devices.ts:107-110`, ctx shape in `pear-script/src/evaluate.ts:94`). USIS defines `accel` and the real iPhone companion already streams it at 100 Hz (`Apps/PearCompanion/iOS/MotionStreamer.swift:40-49`).
 - Gestures are a fixed list (tap, doubleTap, flick, squeeze, pinch). On real hardware only the Watch turns IMU into a gesture (flick at > 2 g, `watchOS/WristGestureDetector.swift:17-50`); the runtime only passes gestures through (`Packages/PearRuntime/.../GestureEventMapper.swift`). A creator cannot define "tag swing" or "punch".
 - Flick direction is always `[1,0,0]` in the sim.

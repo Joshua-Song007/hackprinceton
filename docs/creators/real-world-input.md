@@ -22,7 +22,7 @@ The server never receives raw sensor data, only what scripts send as remote even
 
 ## Tag with phones and AirPods
 
-Real-world tag needs a phone's GPS for position and AirPods or a phone's motion for the "tag hand" gesture. GPS is accurate to 3 to 10 m, so tagging should combine reported accuracy with range (the Hot potato server does: range plus both players' `acc`). The native work (a location source on the companion, Nearby Interaction for touch range) is specified in `docs/agents/gps-proximity-spec.md` and is not built yet.
+Real-world tag needs a phone's GPS for position and AirPods or a phone's motion for the "tag hand" gesture. GPS is accurate to 3 to 10 m, so tagging should combine reported accuracy with range (a tag game's server can: range plus both players' `acc`). The native work (a location source on the companion, Nearby Interaction for touch range) is specified in `docs/agents/gps-proximity-spec.md` and is not built yet.
 
 ## Custom motion gestures
 

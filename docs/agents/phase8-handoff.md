@@ -29,11 +29,11 @@ Needs cargo (`~/.cargo/bin` on PATH) and Node 22+. Docker and Postgres are not n
 ```bash
 cd Web && npm install && cd ..
 bash Deploy/dev.sh                     # backend :8080 (in-memory store, PEAR_DEV_SIGNIN=1) + Studio :5173
-bash Deploy/demo.sh                    # in a second shell: scripted 2-player Flagship round, prints debug log + ctx.state
+bash Deploy/demo.sh                    # in a second shell: scripted 2-player Quick Draw round, prints debug log + ctx.state
 PEAR_E2E_URL=http://localhost:8080 npm --prefix Web test   # includes the server e2e
 ```
 
-- Studio: http://localhost:5173. Sign in with any name (dev sign-in), open the Flagship or Blank template, then try Run local, Run on server, and the Debug tabs (Output, Server, State, Packets).
+- Studio: http://localhost:5173. Sign in with any name (dev sign-in), open the Blank or Tap counter template, then try Run local, Run on server, and the Debug tabs (Output, Server, State, Packets).
 - Desktop installer (Windows): `cd Web/studio && npx tauri build` writes `src-tauri/target/release/bundle/nsis/Pear Studio_0.1.0_x64-setup.exe`. The macOS dmg must be built on a Mac or by the release workflow (tag `studio-v*`).
 - Hosted (Vultr): `Deploy/vultr-bootstrap.sh` (see its header). Same env names as local: `DATABASE_URL`, `PEAR_DOMAIN`, `PEAR_DEV_SIGNIN`, `PEAR_STUDIO_DIR`, `PEAR_CORS_ORIGINS`, `PORT`.
 

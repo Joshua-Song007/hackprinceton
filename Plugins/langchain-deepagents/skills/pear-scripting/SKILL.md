@@ -176,7 +176,7 @@ SCENARIO (run_scenario: headless, real sockets against the hosted server)
 - `scaffolds/QuickDraw/`: check.json, pear-game.json, scenario.json, scene.json, scripts/game.js, scripts/player.js, ui.json
 - `scaffolds/Manhunt/`: check.json, pear-game.json, scenario.json, scene.json, scripts/game.js, scripts/player.js, ui.json
 
-Start from the nearest one: Manhunt for GPS games, Hot Potato for passing/tag, Quick Draw for motion reflex duels.
+Start from the nearest one: Manhunt for GPS and tag games, Quick Draw for motion reflex duels.
 
 ## Workflow
 
