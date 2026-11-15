@@ -142,6 +142,14 @@ export class AccountController {
     await this.refreshGames();
   }
 
+  /** Creates a password account (POST /api/accounts/signup) and signs in with it. */
+  async signUp(username: string, displayName: string, password: string): Promise<void> {
+    const res = await this.client.signUp({ username, password, display_name: displayName || username });
+    this.account = res.account;
+    if (this.persist) this.storage?.setItem(SESSION_KEY, JSON.stringify({ token: res.token, account: res.account }));
+    await this.refreshGames();
+  }
+
   async signOut(): Promise<void> {
     try {
       await this.client.signOut();

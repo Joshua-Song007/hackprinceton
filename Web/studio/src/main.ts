@@ -7,7 +7,7 @@ import { createInspectorPanel } from './inspector';
 import { DebugStore, createConsolePanel } from './debug-panel';
 import { EditorBus, createEditorPanel, openApiSheet } from './editor';
 import { Selection, createExplorerPanel } from './explorer';
-import { LayoutManager, type PanelSpec } from './layout';
+import { LayoutManager, wants3D, type PanelSpec } from './layout';
 import { MarketplaceController, hostedRuntimeUrls, localRuntimeUrls, openScriptAndReveal } from './marketplace/controller';
 import { BrowserInstaller, TauriInstaller } from './marketplace/installer';
 import { MARKETPLACE_PANEL_ID, marketplacePanel } from './marketplace/panel';
@@ -124,6 +124,7 @@ project.onChange((c) => {
   if (c === 'proposal' && project.proposal) announce('Instructions proposal ready: open Game instructions');
   if (c === 'open') selection.set(null);
   if (c === 'open' || c === 'scene') refreshScene();
+  try { if (c === 'open' && wants3D(project.description()) && layout.api.panels.length) layout.show('viewport'); } catch { /* invalid scene: leave the layout */ }
 });
 selection.onChange((id) => viewport.select(id));
 viewport.onPick = (id) => selection.set(id);
@@ -420,6 +421,7 @@ mountMenuBar(document.getElementById('menubar')!, [
       { label: 'Game instructions', run: () => layout.show('instructions') },
       { label: 'Playtest', run: () => layout.show('playtest') },
       { label: 'Live Preview', run: () => layout.show('livePreview') },
+      { label: 'Viewport (3D)', run: () => layout.show('viewport') },
       { label: 'Lobbies', run: () => layout.show('lobbies') },
       { label: 'Check', run: () => layout.show('check') },
       { separator: true },

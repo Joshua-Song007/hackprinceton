@@ -32,7 +32,7 @@ export interface LayoutHooks {
 }
 
 const CURRENT_KEY = 'pear.studio.layout.current';
-const CORE_PANELS = ['viewport', 'explorer', 'inspector'];
+const CORE_PANELS = ['explorer', 'inspector'];
 const NAMED_KEY = 'pear.studio.layouts';
 /** Panels added after layouts were first saved: each is offered once as a tab beside `beside`, so an old saved layout does not hide it for good. */
 const ADDED_PANELS: readonly { id: string; beside: string }[] = [{ id: 'peripherals', beside: 'explorer' }];
@@ -47,6 +47,16 @@ export function panelsToOffer(
   openIds: readonly string[], offered: readonly string[], specIds: readonly string[], added: readonly { id: string; beside: string }[] = ADDED_PANELS,
 ): { id: string; beside: string }[] {
   return added.filter((a) => !offered.includes(a.id) && !openIds.includes(a.id) && specIds.includes(a.id) && openIds.includes(a.beside));
+}
+
+/** The panel set of the old default layout (3D viewport centre). A saved layout with exactly these is migrated to the new default. */
+const LEGACY_DEFAULT = ['console', 'editor', 'explorer', 'inspector', 'peripherals', 'test', 'viewport'];
+export const isLegacyDefault = (ids: readonly string[]): boolean => [...ids].sort().join() === LEGACY_DEFAULT.join();
+
+/** True when a screen-mode scene has a visible entity, so the 3D viewport is worth opening by itself. */
+export function wants3D(scene: { runMode?: string; entities: { scale: readonly number[]; children: readonly unknown[] }[] }): boolean {
+  const hidden = (e: { scale: readonly number[]; children: readonly unknown[] }): boolean => e.scale.every((s) => s === 0) && (e.children as typeof scene.entities).every(hidden);
+  return scene.runMode === 'screen' && scene.entities.some((e) => !hidden(e));
 }
 
 export class LayoutManager {
@@ -92,8 +102,18 @@ export class LayoutManager {
   /** Restores the last layout, or builds the default one. A saved layout naming an unknown panel is discarded. */
   start(): void {
     const saved = this.storage.getItem(CURRENT_KEY);
-    if (saved && this.tryLoad(saved)) return void this.offerAddedPanels();
+    if (saved && !this.isLegacySaved(saved) && this.tryLoad(saved)) return void this.offerAddedPanels();
     this.applyPreset('default');
+  }
+
+  /** The saved current layout is the untouched old default: drop it so the non-3D default applies (named layouts are never migrated). */
+  private isLegacySaved(json: string): boolean {
+    try {
+      const ids = Object.values((JSON.parse(json) as SerializedDockview).panels ?? {}).map((p) => (p as { contentComponent?: string }).contentComponent ?? '');
+      return this.specs.has('livePreview') && isLegacyDefault(ids);
+    } catch {
+      return false;
+    }
   }
 
   private offered(): string[] {
@@ -173,20 +193,20 @@ export class LayoutManager {
       b('console', { direction: 'below' } as never);
       sizes = { explorer: { width: 200 }, inspector: { width: 260 }, console: { height: 420 } };
     } else {
-      // StudioWindow: sidebar 240, inspector 280, debug area 200, viewport takes the rest.
-      b('viewport');
-      b('editor', { referencePanel: 'viewport', direction: 'within' }, {}, true);
-      b('explorer', { referencePanel: 'viewport', direction: 'left' });
+      // Pear is outdoor mixed reality: Live Preview (device frames + GPS map) is the centre, the 3D viewport is opt-in (View menu).
+      b('livePreview');
+      b('editor', { referencePanel: 'livePreview', direction: 'left' });
+      b('explorer', { referencePanel: 'editor', direction: 'left' });
       b('peripherals', { referencePanel: 'explorer', direction: 'within' }, {}, true);
       b('test', { referencePanel: 'explorer', direction: 'within' }, {}, true);
-      b('inspector', { referencePanel: 'viewport', direction: 'right' });
+      b('inspector', { referencePanel: 'livePreview', direction: 'below' });
       b('console', { direction: 'below' } as never);
-      sizes = { explorer: { width: 240 }, inspector: { width: 280 }, console: { height: 160 } };
+      sizes = { explorer: { width: 220 }, livePreview: { width: 460 }, inspector: { height: 200 }, console: { height: 160 } };
     }
     // The panel that holds the rest keeps its size; sidebars, inspector and debug area get theirs.
     for (const [id, size] of Object.entries(sizes)) this.api.getPanel(id)?.api.setSize(size);
     this.api.getPanel('console')?.api.setActive();
-    this.api.getPanel('viewport')?.api.setActive();
+    this.api.getPanel(preset === 'default' ? 'livePreview' : 'viewport')?.api.setActive();
     this.restoring = false;
     this.markOffered(ADDED_PANELS.map((a) => a.id)); // the presets already include them
     this.storage.setItem(CURRENT_KEY, JSON.stringify(this.api.toJSON()));
