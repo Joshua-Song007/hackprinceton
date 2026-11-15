@@ -308,6 +308,12 @@ Not planned: multiple developer roles or audit log (one developer role for the h
 
 ## Phase 14: Agent-built games: PearUI, headless sim, Pear MCP (MAJOR SYSTEMATIC UPDATE, agreed 2026-11-15)
 
+### Status: PAUSED (2026-11-15 03:30, by user). Do not resume without the user saying so.
+- Built on main: 14.1 (`07b267f`), 14.3 (`f62b61f`), 14.5 (`a434312`). Built on a pushed branch, not merged: 14.2 `feat/pearui-swift` (`72cf8d2`, iOS Simulator build passes, not run on a device).
+- Not built: 14.4, 14.6, 14.7, plus `Schema/pearui.schema.json`. Partial, uncommitted work from stopped workers: `.claude/worktrees/agent-afb58de7c51f3c48b` (14.4), `agent-a0ae30f8a66da0dad` (14.6), `agent-a075703c3defe4511` (14.7, game.js edit started). Local only; inspect before reuse, else restart from the briefs below.
+- Resume order: merge `feat/pearui-swift` → 14.4 (unblocks 14.5 end to end) → 14.7 (needs the `aim` server path) → 14.6 → schema file.
+- Workers for resume: run on the 2 remote laptops (V2 autonomy, `.claude/instructions.md` Speed Rules). This laptop orchestrates only.
+
 ### Agreements (Socratic session, binding)
 - A1 Users: 4-person team, demo speed. No public sign-up, quotas, review.
 - A2 Agent writes the full game (scripts, scene, instructions, ui) in a self-iterating loop: write → headless sim → read report → fix; human verifies in Studio Live Preview, then publishes.
@@ -327,25 +333,35 @@ Not planned: multiple developer roles or audit log (one developer role for the h
 - Action: `{"send":"<event>","data":{…bindings}}` → client sends `{name,data}`; or `{"set":"<local key>","value":…}`.
 - Unknown `type` renders nothing (forward compatible). Schema file: `Schema/pearui.schema.json`.
 
+### C1 amendments (as built, binding)
+- Storage: a version has no extra-file slot. `ui.json` (and any non-script file, e.g. `scenario.json`) is a version ASSET: upload `PUT /api/games/{id}/assets/ui.json`, list it in the version's `assets` map under `"ui.json"`; clients read it via `GET /api/assets/{sha256}`. PearPlayer looks for an asset named `ui.json` or ending in `/ui.json`.
+- Join hello: a PearUI client sends `{"name":"role","data":{"role":"referee"|"phone","kind":"ipad"|"phone"}}` on socket open/reload (same as native Quick Draw). Scripts that ignore `role` are unaffected.
+- Expr: Swift also supports `.length` on arrays/strings; web `@pear/ui` does not yet (add to `Web/packages/pear-ui/src/expr.ts` on resume). Equality is loose on number vs string (`2 == '2'`).
+- Raise detection: PearUI has no client logic, so Quick Draw's 60/45 pitch hysteresis must move server side: client streams `aim {pitch,roll,yaw}` from a `sensor` node; game.js gets an additive `aim` handler feeding the existing raised/lowered path (14.7).
+- Swift renderer limits: effect `sound` ignored (haptics only); one motion and one location stream per screen; map marker colors good=green, bad=red, else orange; macOS falls back to existing paths.
+
 ### Contract C2: headless sim `runScenario(scenario, opts) → report`
 - Scenario JSON: `{"game":"<id>","version"?:n,"lobby"?:"CODE","durationMs":n,"devices":[{"name","kind":"phone"|"ipad"|"watch","role"?,"script":[{"at":ms,"send":{name,data}}|{"at":ms,"motion":{pitch,roll,yaw}}|{"at":ms,"gps":{lat,lng}}|{"at":ms,"tap":true}]}],"expect":[{"by":ms,"expr":"<C1 expr on a device's view state>","device":"<name>"}]}`.
 - Report JSON: `{"ok":bool,"expect":[{…,"pass":bool,"actual"}],"frames":[{"t","device","dir":"in"|"out","name","data"}],"logs":[…from /debug],"final":{"<device>":viewState}}`.
+- Reactive rules (C2 extension, as built): device `rules: [{on:"<event>", when?:"<expr on {data, ...viewState}>", after?:ms, send:{name,data}, once?:bool}]`; `{{expr}}` in `send.data` resolves against the same scope. Needed because cues arrive at random times (Quick Draw `fire`). Device `role` sends `role {role}` after `_welcome`. Timed `motion`/`gps` steps send `aim`/`location` (override with scenario `motionEvent`/`gpsEvent`).
+- Runner: from `Web/`: `npx vite-node packages/pear-sim/bin/pear-sim-run.ts <scenario.json> [--cloud URL] [--token T] [--full]` (no tsx installed). Prints report JSON (frames trimmed to last 200 unless --full); exit 0 ok, 1 expectations failed, 2 usage. Debug logs only with `--token` of an owner/developer.
 - Auth: dev sign-in per device name (hosted `PEAR_DEV_SIGNIN=1`); server URL from `PEAR_CLOUD_URL` (default hosted).
 
 ### Contract C3: Pear MCP tools (stdio; env `PEAR_CLOUD_URL`, `PEAR_TOKEN` developer token)
+- `run_scenario` spawns the runner above (cwd `Web/`); `save_version` uploads non-script files as assets (C1 amendments); `get_game` returns them by fetching each asset.
 - `kit_reference` (C1 + script API + scenario format), `list_games`, `get_game {id}` → files, `create_game {title}`, `save_version {id, files}` → version n, `run_scenario {scenario}` → C2 report, `read_logs {id, lobby?}`, `publish {id, version}`. No source-code or shell tools.
 
 ### 14.1 PearUI web renderer + schema
-- [ ] `Web/packages/pear-ui/` — types, expr eval, validate, DOM renderer (`mount(el, ui, viewState, onAction)`); vitest
+- [x] `Web/packages/pear-ui/` — types, expr eval, validate, DOM renderer (`mount(el, ui, viewState, onAction)`); vitest (Built 2026-11-15 `07b267f`: `mount(el, ui, state, onAction, hooks?, assetUrl?)`, `reduceFrame`, `emptyState`, `pickScreen`, `validate`; map node is a text placeholder, Studio supplies MapLibre; 4 tests in `Web/packages/pear-ui/test/pearui.test.ts`)
 - [ ] `Schema/pearui.schema.json`
 ### 14.2 PearUI Swift renderer in PearPlayer
-- [ ] `Apps/PearPlayer/PearPlayer/Play/PearUI/` — Codable model, expr eval, SwiftUI renderer, CoreMotion/CoreLocation sensor nodes, haptics; used by play screen when version has `ui.json`
+- [ ] `Apps/PearPlayer/PearPlayer/Play/PearUI/` — (Built on branch `feat/pearui-swift` `72cf8d2`, NOT merged; hooks in `Apps/PearPlayer/PearPlayer/PlayerModel.swift` (`pearUI` session, ui.json checked before Quick Draw), `Apps/PearPlayer/PearPlayer/Library/LibraryView.swift` (full-screen cover), `Apps/PearPlayer/Info.plist` (location text); nodes kept as raw `JSONValue`, no typed enum) Codable model, expr eval, SwiftUI renderer, CoreMotion/CoreLocation sensor nodes, haptics; used by play screen when version has `ui.json`
 ### 14.3 Headless sim
-- [ ] `Web/packages/pear-sim/src/headless.ts` + `bin/pear-sim-run` — C2 over real `/play` sockets; Quick Draw scenario passes
+- [x] `Web/packages/pear-sim/src/headless.ts` + `bin/pear-sim-run` — C2 over real `/play` sockets; Quick Draw scenario passes (Built 2026-11-15 `f62b61f`: `Web/packages/pear-sim/bin/pear-sim-run.ts`, `Games/QuickDraw/scenario.json` (2 phones + iPad referee, reactive rules) passed on hosted in 19 s; pear-sim depends on `@pear/ui` for expr, recorded in architecture.md)
 ### 14.4 Pear MCP server
 - [ ] `Tools/pear-mcp/` — C3 over `@modelcontextprotocol/sdk` stdio
 ### 14.5 Deep Agents uses Pear MCP + loop
-- [ ] `Plugins/langchain-deepagents/runtime/` — MCP client (langchain-mcp-adapters), loop prompt: write → run_scenario → fix until expect passes; external MCP servers from config
+- [x] `Plugins/langchain-deepagents/runtime/` — MCP client (langchain-mcp-adapters), loop prompt: write → run_scenario → fix until expect passes; external MCP servers from config (Built 2026-11-15 `a434312`: `runtime/pear_tools.py` (env `PEAR_MCP_COMMAND`, `PEAR_MCP_ARGS`, `PEAR_EXTRA_MCP`), mode `game` in `runtime/server.py`, CLI `runtime/game_cli.py` (`uv run python runtime/game_cli.py "<prompt>"`), `tests/test_game_mode.py`; 70 pytest pass; never run against a real MCP server since 14.4 is not built)
 ### 14.6 Studio Live Preview tab
 - [ ] `Web/studio/src/livePreview/` — device frames rendering PearUI from live session, MapLibre GPS map of devices, terminal of /debug frames + tool calls
 ### 14.7 Quick Draw in PearUI (validation)
