@@ -104,9 +104,15 @@ describe('Quick Draw in the Studio local server', () => {
     const tap = async (run: LocalRun) => { run.devices.gesture('tap'); await advance(20); };
     const lowerBoth = async () => { p1.raisePhone(false); p2.raisePhone(false); await advance(20); };
     // Both phones tap Ready, the countdown runs by itself, then the arming delay (at most 6 s) ends in the cue.
+    // After a round that did not end the match nobody taps: once both are lowered and 2.5 s passed, the next countdown starts.
     const readyToFire = async () => {
-      await tap(p1);
-      await tap(p2);
+      if (state().phase === 'roundOver') {
+        await lowerBoth();
+        await advance(2501);
+      } else {
+        await tap(p1);
+        await tap(p2);
+      }
       expect(state().phase).toBe('countdown');
       await advance(3001);
       expect(state().phase).toBe('arming');

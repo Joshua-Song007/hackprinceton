@@ -10,7 +10,11 @@
   body.fire { background: #d00; }
   #conn { font-size: 14px; color: #f66; } #conn.ok { color: #6c6; }
   #phase { font-size: 40px; font-weight: 700; text-transform: uppercase; }
-  #pitch { font-size: 96px; font-weight: 800; font-variant-numeric: tabular-nums; }
+  #pitch { position: fixed; right: 8px; bottom: 4px; font-size: 11px; color: #555; font-variant-numeric: tabular-nums; }
+  #lobby { font-size: 14px; color: #aaa; letter-spacing: .1em; }
+  #list { list-style: none; margin: 0; padding: 0; font-size: 20px; }
+  #list li { padding: 2px 0; } #list .you { font-weight: 700; } #list .wait { color: #888; }
+  #idle { font-size: 18px; color: #fb4; min-height: 1.2em; }
   #count { font-size: 96px; font-weight: 800; min-height: 1em; }
   #needs, #slot, #scores, #result { font-size: 24px; }
   #go { flex: 1; min-height: 140px; font-size: 44px; font-weight: 800; border: 0; border-radius: 24px; background: #2a7; color: #fff; }
@@ -18,14 +22,17 @@
 </head>
 <body>
 <div id="conn">starting…</div>
+<div id="lobby"></div>
 <div id="phase">lobby</div>
+<ul id="list"></ul>
 <div id="count"></div>
-<div id="pitch">--°</div>
 <div id="slot"></div>
+<div id="idle"></div>
 <div id="needs"></div>
 <div id="scores"></div>
 <div id="result"></div>
 <button id="go">Calibrate / Ready</button>
+<div id="pitch"></div>
 <script src="qd-client.js"></script>
 <script>
 const RAISE_DEG = 80; // degrees of rise from the calibrated rest pose that count as "raised"; tune on the day
@@ -34,7 +41,8 @@ const LOWER_DEG = RAISE_DEG - 10; // hysteresis
 const $ = (id) => document.getElementById(id);
 // round is the server's stale-input token: ready and raised carry the round last seen, anything older is dropped.
 let myId = null, players = [], queue = [], phase = "lobby", round = 0, fireAt = null, raised = false;
-let gravity = null, rest = null, usingMotion = false, audio = null, countdownTimer = null;
+let gravity = null, rest = null, usingMotion = false, audio = null, countdownTimer = null, idleAt = null, droneStop = null, motionAsked = null;
+$("lobby").textContent = "LOBBY " + QD.lobby;
 
 // Pitch = angle between the current and the rest gravity vector. A vector angle has no
 // gimbal-lock singularity near 90 degrees, unlike beta/gamma Euler angles.
@@ -61,7 +69,7 @@ function onPitch() {
   if (!rest) return;
   const dot = Math.max(-1, Math.min(1, rest[0] * gravity[0] + rest[1] * gravity[1] + rest[2] * gravity[2]));
   const deg = Math.acos(dot) * 180 / Math.PI;
-  $("pitch").textContent = Math.round(deg) + "°";
+  $("pitch").textContent = Math.round(deg) + "°"; // debug only, tucked in the corner
   if (!raised && deg >= RAISE_DEG) {
     raised = true;
     qd.send("raised", { round, sinceFireMs: fireAt === null ? null : Math.round(performance.now() - fireAt) });
@@ -72,24 +80,57 @@ function onPitch() {
 }
 
 const nameOf = (id) => (players.find((p) => p.id === id) || {}).name || "?";
-const canReady = () => ["lobby", "roundOver", "matchOver"].includes(phase) && (players.find((p) => p.id === myId) || {}).role === "phone";
+const canReady = () => ["lobby", "matchOver"].includes(phase) && (players.find((p) => p.id === myId) || {}).role === "phone";
 
-// Both phones play their own cue: a tone (Web Audio, unlocked by the Ready tap) and a vibration.
+// Synthesized cues (Web Audio, unlocked by the Ready tap), matching the native app. Phones also vibrate on the cue.
 function unlockAudio() {
   const Ctx = window.AudioContext || window.webkitAudioContext;
   if (Ctx) { audio = audio || new Ctx(); audio.resume(); }
 }
-function beep() {
+function tone(freq, start, dur, type = "sine", vol = 0.4) {
   if (!audio) return;
-  const t0 = audio.currentTime, osc = audio.createOscillator(), gain = audio.createGain();
-  osc.type = "square";
-  osc.frequency.setValueAtTime(1000, t0);
-  gain.gain.setValueAtTime(1, t0);
-  gain.gain.linearRampToValueAtTime(0, t0 + 0.8);
+  const t0 = audio.currentTime + start, osc = audio.createOscillator(), gain = audio.createGain();
+  osc.type = type;
+  osc.frequency.setValueAtTime(freq, t0);
+  gain.gain.setValueAtTime(vol, t0);
+  gain.gain.linearRampToValueAtTime(0, t0 + dur);
   osc.connect(gain).connect(audio.destination);
   osc.start(t0);
-  osc.stop(t0 + 0.8);
+  osc.stop(t0 + dur);
 }
+const tick = () => tone(880, 0, 0.08);
+const arpeggio = (notes, step, type) => notes.forEach((f, i) => tone(f, i * step, 0.3, type));
+const winCue = () => arpeggio([523, 659, 784], 0.12, "triangle");
+const loseCue = () => arpeggio([392, 262], 0.18, "triangle");
+const matchWinCue = () => arpeggio([523, 659, 784, 1047, 784, 1047], 0.13, "square");
+function crack() {
+  if (!audio) return;
+  const t0 = audio.currentTime, len = Math.floor(audio.sampleRate * 0.15);
+  const buf = audio.createBuffer(1, len, audio.sampleRate), d = buf.getChannelData(0);
+  for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / len);
+  const src = audio.createBufferSource(), gain = audio.createGain();
+  src.buffer = buf;
+  gain.gain.setValueAtTime(0.8, t0);
+  src.connect(gain).connect(audio.destination);
+  src.start(t0);
+  tone(1000, 0, 0.25, "square", 0.5);
+}
+// Arming tension: low drone with tremolo until the cue (or the round ending).
+function startDrone() {
+  stopDrone();
+  if (!audio) return;
+  const osc = audio.createOscillator(), lfo = audio.createOscillator(), depth = audio.createGain(), gain = audio.createGain();
+  osc.frequency.value = 110;
+  lfo.frequency.value = 7;
+  depth.gain.value = 0.15;
+  gain.gain.value = 0.25;
+  lfo.connect(depth).connect(gain.gain);
+  osc.connect(gain).connect(audio.destination);
+  osc.start();
+  lfo.start();
+  droneStop = () => { osc.stop(); lfo.stop(); };
+}
+function stopDrone() { if (droneStop) droneStop(); droneStop = null; }
 
 function stopCountdown() {
   clearInterval(countdownTimer);
@@ -99,9 +140,14 @@ function stopCountdown() {
 function startCountdown(ms) {
   stopCountdown();
   const end = performance.now() + ms;
-  const tick = () => { $("count").textContent = Math.max(1, Math.ceil((end - performance.now()) / 1000)); };
-  tick();
-  countdownTimer = setInterval(tick, 100);
+  let shown = 0;
+  const show = () => {
+    const n = Math.max(1, Math.ceil((end - performance.now()) / 1000));
+    if (n !== shown) { shown = n; tick(); }
+    $("count").textContent = n;
+  };
+  show();
+  countdownTimer = setInterval(show, 100);
 }
 
 function render(s) {
@@ -115,8 +161,19 @@ function render(s) {
   $("needs").textContent = s.needs || "";
   $("scores").textContent = players.filter((p) => p.role === "phone").map((p) => `${p.id === myId ? "YOU" : p.name} ${s.scores && s.scores[p.id] || 0}`).join("  -  ");
   $("slot").textContent = !me ? "" : me.role === "phone" ? (me.ready ? "You are ready" : "") : me.role === "queued" ? `Two players are in a match: you are number ${queue.indexOf(myId) + 1} in line` : "No slot";
-  $("go").disabled = !canReady() || !!me.ready;
+  $("list").innerHTML = "";
+  for (const p of players.filter((x) => x.role === "phone" || x.role === "queued")) {
+    const li = document.createElement("li");
+    li.className = (p.id === myId ? "you " : "") + (p.role === "queued" ? "wait" : "");
+    li.textContent = `${p.name}${p.id === myId ? " (you)" : ""}${p.role === "queued" ? ` - in line #${queue.indexOf(p.id) + 1}` : p.ready ? " ✓" : ""}`;
+    $("list").appendChild(li);
+  }
+  idleAt = me && me.idleKickAt ? me.idleKickAt : null; // server epoch ms; shown as a countdown, skew of a second or two is fine
+  updateIdle();
+  $("go").disabled = !canReady() || !me || !!me.ready;
   $("go").textContent = phase === "matchOver" ? "Play again: Ready" : me && me.ready ? "Waiting for the other phone" : rest ? "Recalibrate / Ready" : "Calibrate / Ready";
+  if (phase === "arming" && prev !== "arming") startDrone();
+  if (phase !== "arming") stopDrone();
   if (phase !== "fire") document.body.classList.remove("fire");
   if (phase !== "countdown") stopCountdown();
   if (phase !== "fire") fireAt = null;
@@ -125,11 +182,17 @@ function render(s) {
   if (phase === "arming" && raised) qd.send("raised", { round, sinceFireMs: null });
 }
 
+function updateIdle() {
+  const left = idleAt === null ? 0 : Math.ceil((idleAt - Date.now()) / 1000);
+  $("idle").textContent = left > 0 ? `Ready up within ${left}s or you lose your spot to the next in line` : "";
+}
+setInterval(updateIdle, 1000);
+
 const qd = QD.connect({
   role: "phone",
   onStatus: (t, ok) => { $("conn").textContent = t; $("conn").className = ok ? "ok" : ""; },
   onEvent(name, data) {
-    if (name === "_welcome") myId = data.id;
+    if (name === "_welcome") { myId = data.id; if (data.lobby) $("lobby").textContent = "LOBBY " + data.lobby; }
     else if (name === "_reload") { qd.send("role", { role: "phone" }); raised = false; } // the republished host replays joins without a role
     else if (name === "state") render(data);
     else if (name === "countdown") startCountdown(data.ms);
@@ -138,13 +201,16 @@ const qd = QD.connect({
       round = data.round;
       fireAt = performance.now();
       document.body.classList.add("fire");
-      beep();
+      stopDrone();
+      crack();
       if (navigator.vibrate) navigator.vibrate(200);
     } else if (name === "roundResult") {
       const times = Object.entries(data.reactionMs || {}).map(([id, ms]) => `${id === myId ? "you" : nameOf(id)} ${ms === null ? "-" : ms + "ms"}`).join(", ");
       const outcome = data.winnerId === null ? "Tie, nobody scores" : data.winnerId === myId ? "YOU WIN" : nameOf(data.winnerId) + " wins";
+      if (data.winnerId === myId) winCue(); else if (data.winnerId !== null) loseCue();
       $("result").textContent = `Round ${data.matchRound}: ${outcome}${data.reason === "foul" ? (data.winnerId === myId ? " (the other phone fouled)" : " (you fouled)") : ""}. ${times}`;
     } else if (name === "matchOver") {
+      if (data.winnerId === myId) matchWinCue();
       $("result").textContent = data.winnerId === myId ? "MATCH WON!" : nameOf(data.winnerId) + " won the match";
     }
   },
@@ -159,16 +225,17 @@ document.addEventListener("visibilitychange", () => { if (document.visibilitySta
 $("go").addEventListener("click", async () => {
   if (!canReady()) return;
   if (raised) { $("needs").textContent = "lower your phone, then tap again"; return; } // the rest pose must be the lowered one
-  // Both permission prompts are started synchronously inside the tap (iOS requires the gesture).
+  // One permission prompt, started synchronously inside the tap (iOS requires the gesture) and asked only once:
+  // DeviceMotionEvent's, or DeviceOrientationEvent's only where the first API has no requestPermission.
   unlockAudio();
-  const asks = [DeviceOrientationEvent, DeviceMotionEvent]
-    .filter((E) => typeof E.requestPermission === "function")
-    .map((E) => E.requestPermission());
+  const E = typeof DeviceMotionEvent !== "undefined" && typeof DeviceMotionEvent.requestPermission === "function" ? DeviceMotionEvent
+    : typeof DeviceOrientationEvent !== "undefined" && typeof DeviceOrientationEvent.requestPermission === "function" ? DeviceOrientationEvent : null;
+  if (E && motionAsked !== "granted") motionAsked = E.requestPermission();
   keepAwake();
   try {
-    const answers = await Promise.all(asks);
-    if (answers.includes("denied")) { $("needs").textContent = "motion permission denied: allow it in Safari settings"; return; }
-  } catch (e) { $("needs").textContent = "motion permission error: " + e.message; return; }
+    if (motionAsked && (await motionAsked) !== "granted") { $("needs").textContent = "motion permission denied: allow it in Safari settings"; motionAsked = null; return; }
+    if (motionAsked) motionAsked = "granted";
+  } catch (e) { motionAsked = null; $("needs").textContent = "motion permission error: " + e.message; return; }
   $("needs").textContent = "hold still at your side...";
   await new Promise((r) => setTimeout(r, 700)); // let the low-pass settle on the rest pose
   if (!gravity) { $("needs").textContent = "no motion data from this device"; return; }
