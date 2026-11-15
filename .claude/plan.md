@@ -340,11 +340,13 @@ Not planned: multiple developer roles or audit log (one developer role for the h
 
 ## Phase 14: Agent-built games: PearUI, headless sim, Pear MCP (MAJOR SYSTEMATIC UPDATE, agreed 2026-11-15)
 
-### Status: RESUMED 2026-11-15 03:40 (user): remote Windows workers (Jacob, Tien) implement every non-Swift item fully polished, tested, judge-ready; this Mac laptop merges Swift, reviews, runs and gives feedback. (Paused 03:30–03:40.)
-- Built on main: 14.1 (`07b267f`), 14.3 (`f62b61f`), 14.5 (`a434312`). Built on a pushed branch, not merged: 14.2 `feat/pearui-swift` (`72cf8d2`, iOS Simulator build passes, not run on a device).
-- 14.4, 14.6, 14.7 merged. Open: Manhunt acceptance (#187, Jacob), Quick Draw PearUI native parity (local Mac subagent, branch `feat/qd-pearui-parity`). Partial, uncommitted work from stopped workers: `.claude/worktrees/agent-afb58de7c51f3c48b` (14.4), `agent-a0ae30f8a66da0dad` (14.6), `agent-a075703c3defe4511` (14.7, game.js edit started). Local only; inspect before reuse, else restart from the briefs below.
-- Resume order: merge `feat/pearui-swift` → 14.4 (unblocks 14.5 end to end) → 14.7 (needs the `aim` server path) → 14.6 → schema file.
-- Workers for resume: run on the 2 remote laptops (V2 autonomy, `.claude/instructions.md` Speed Rules). This laptop orchestrates only.
+### Status: WRAP-UP 2026-11-15 05:30 (user: polish for testing the Studio development cycle)
+- Built and merged: 14.1-14.7, 14.9 (game-building MCP tools), 14.10 (Manhunt), Quick Draw PearUI parity, Studio Live Preview/Lobbies/check panel/publish gate UI, accounts (signup, Studio + PearPlayer username/password sign-in), Deep Agents game mode + in-process tools + write safety + generated skill/evals.
+- Verified on hosted: MCP e2e (`Tools/pear-mcp/e2e-manhunt.mjs`) builds Manhunt through the tools and passes its GPS scenario; Quick Draw + Manhunt scenarios pass; signup/sign-in; iPhone Simulator: PearUI Quick Draw (iPad parity), Manhunt lobby with GPS fix, password sign-in.
+- NOT yet done: a real-model Deep Agents run (no API key on the orchestrator laptop; `~/.pear-agent-key` or Tien #190); Studio "New game from prompt" (#231, Tien); hosted runtime game mode (#232, Jacob); publish gate merge (PR #223 needs fixes, Jacob); repo removal of Flagship/HotPotato (#230, Jacob); backend conformance (#215).
+- Wrap-up polish in flight: #233 (Tien, Studio dev cycle end to end), #234 (Jacob, backend/tooling + #230 + #223).
+- Hosted library: Quick Draw (native, live), Quick Draw (PearUI test), Manhunt (v3, private per-player `you` events). Live Quick Draw stays native until the iPhone in-game PearUI screens are verified on devices.
+- Mac-only (orchestrator laptop, not dispatched): Phase 13 Swift items (RaiseDetector, Controller, Cues.swift, ServerScriptEngine members, Swift conformance, MotionReplay, app test target, DeviceProfile, Playability, GameDetailView).
 
 ### Agreements (Socratic session, binding)
 - A0 (user, 2026-11-15 04:03, PARAMOUNT): Pear is NOT a screen game. It is a mixed-reality, outdoor, social experience: iOS hardware (phone GPS/motion/haptics, AirPods, Watch) replicates outdoor games (Manhunt, capture the flag, tag, hide and seek) that get people outside and together. Studio simulation only simulates human interaction (positions, movement, motion, taps); no 3D rendering unless a game specifically needs it. Phase 14 succeeds when a location game like Manhunt can be vibe-coded through the LangChain plugin, live-previewed (GPS map, simulated players), set up and shipped, at mass scale (many mini/outdoor games).
