@@ -1,6 +1,6 @@
 import type { Instance } from '@pear/cloud';
 import { describe, expect, it } from 'vitest';
-import { ageLabel, groupByGame, listError, playersLabel, versionLabel } from '../src/lobbiesPanel';
+import { ageLabel, groupByGame, listError, playersLabel, reachLabel, versionLabel } from '../src/lobbiesPanel';
 import { ApiError } from '@pear/cloud';
 
 const inst = (game_id: string, lobby: string, title?: string): Instance =>
@@ -21,6 +21,12 @@ describe('labels', () => {
     expect(versionLabel(null)).toBe('unversioned');
     expect(playersLabel(1)).toBe('1 player');
     expect(playersLabel(0)).toBe('0 players');
+  });
+  it('reach', () => {
+    expect(reachLabel(3, 3)).toBe('on latest');
+    expect(reachLabel(2, 3)).toBe('behind (latest v3)');
+    expect(reachLabel(null, 3)).toBe('');
+    expect(reachLabel(2, undefined)).toBe('');
   });
   it('age', () => {
     const now = Date.parse('2026-01-01T12:00:00Z');

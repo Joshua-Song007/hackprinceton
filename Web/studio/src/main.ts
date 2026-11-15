@@ -30,6 +30,7 @@ import { installShortcuts, mod, mountMenuBar } from './menubar';
 import { renderLoginScreen } from './loginScreen';
 import { livePreviewPanel } from './livePreview/panel';
 import { lobbiesPanel } from './lobbiesPanel';
+import { checkPanel } from './checkPanel';
 import { renderProjectsScreen } from './projectsScreen';
 import { nextScreen, type Screen } from './screens';
 import { markOpened, rememberRecent } from './recent';
@@ -96,6 +97,7 @@ const panels: PanelSpec[] = [
   { id: 'playtest', title: 'Playtest', create: () => createPlaytestPanel(project, run, sendToChat, (id) => layout.show(id)) },
   livePreviewPanel(account),
   lobbiesPanel(account, (id) => layout.show(id)),
+  checkPanel(project),
   { id: 'instructions', title: 'Instructions', create: () => createInstructionsPanel(project, run, sendToChat) },
 ];
 // Desktop: a dockview popout window (window.open, same JS context) keeps the panel live with the main window's state.
@@ -419,6 +421,7 @@ mountMenuBar(document.getElementById('menubar')!, [
       { label: 'Playtest', run: () => layout.show('playtest') },
       { label: 'Live Preview', run: () => layout.show('livePreview') },
       { label: 'Lobbies', run: () => layout.show('lobbies') },
+      { label: 'Check', run: () => layout.show('check') },
       { separator: true },
       layoutLabel('default', 'Layout: default'),
       layoutLabel('script-focus', 'Layout: script focus'),

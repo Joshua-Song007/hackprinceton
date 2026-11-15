@@ -1,5 +1,6 @@
 // Plays what client scripts ask for with `self.audio` (Web Audio for built-in sounds, speechSynthesis for speak).
 // Only the creator's own player gets one; server scripts have no `self`, so they cannot reach it.
+import { CUE_NAMES, cueNotes, type CueNote } from '@pear/runtime';
 import type { ScriptOutput } from '@pear/script';
 
 /** Built-in sounds by name: oscillator frequency in Hz and length in ms. Add a row for a new one. */
@@ -38,22 +39,27 @@ export class ScriptAudio {
   }
 
   private play(name: string): void {
-    const sound = Object.hasOwn(SOUNDS, name) ? SOUNDS[name] : undefined;
-    if (!sound) return this.env.warn?.(`audio: unknown sound '${name}' (built-in: ${Object.keys(SOUNDS).join(', ')})`);
+    const builtin = Object.hasOwn(SOUNDS, name) ? SOUNDS[name] : undefined;
+    const notes: readonly CueNote[] | undefined = cueNotes(name) ?? (builtin && [builtin]);
+    if (!notes) return this.env.warn?.(`audio: unknown sound '${name}' (built-in: ${[...Object.keys(SOUNDS), ...CUE_NAMES].join(', ')})`);
     if (!this.env.createContext) return this.env.warn?.('audio: Web Audio is not available here');
     this.ctx ??= this.env.createContext();
     const ctx = this.ctx;
     void ctx.resume?.();
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.frequency.value = sound.hz;
-    gain.gain.value = 0.2;
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-    osc.onended = () => this.playing.delete(osc);
-    this.playing.add(osc);
-    osc.start();
-    osc.stop(ctx.currentTime + sound.ms / 1000);
+    for (const n of notes) {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.frequency.value = n.hz;
+      if (n.wave) osc.type = n.wave;
+      gain.gain.value = n.gain ?? 0.2;
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.onended = () => this.playing.delete(osc);
+      this.playing.add(osc);
+      const start = ctx.currentTime + (n.at ?? 0) / 1000;
+      osc.start(start);
+      osc.stop(start + n.ms / 1000);
+    }
   }
 
   private speak(text: string): void {
