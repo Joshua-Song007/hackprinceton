@@ -27,7 +27,7 @@ function runScenario(scenario, token) {
   const file = join(dir, 'scenario.json');
   writeFileSync(file, JSON.stringify(scenario));
   return new Promise((resolve, reject) => {
-    const p = spawn('npx', ['vite-node', 'packages/pear-sim/bin/pear-sim-run.ts', file, '--cloud', cloudUrl(), '--token', token], { cwd: WEB_DIR, shell: process.platform === 'win32', env: process.env });
+    const p = spawn('npx', ['vite-node', 'packages/pear-sim/bin/pear-sim-run.ts', file, '--cloud', cloudUrl()], { cwd: WEB_DIR, shell: process.platform === 'win32', env: { ...process.env, PEAR_TOKEN: token } });
     let out = '', err = '';
     p.stdout.on('data', (d) => (out += d));
     p.stderr.on('data', (d) => (err += d));
