@@ -208,9 +208,9 @@ Goal: updating a game from Studio never needs a Vultr refresh; one Publish uploa
 Not planned: a general UI description language beyond the Quick Draw and Hot Potato widget set; Studio-hosted agent runners in a live lobby; recorded audio pipeline (cues stay synthesized); collaborative editing (Phase 6).
 
 ### Accounts and Studio default (user 2026-11-15 05:00, top priority)
-- [ ] `Backend/src/api/accounts.rs` — username + password signup (`POST /api/accounts/signup`, argon2id, role player, 409 on taken, password ≥ 10); passwordless `dev` sign-in restricted to sims (`PEAR_DEV_SIGNIN=1` + subject prefix `sim-`). (#226, Jacob)
-- [ ] `Web/studio/src/loginScreen.ts`, `Web/studio/src/signupScreen.ts` — Sign in + Create account (username/password); name-only dev sign-in removed from the UI. (#227, Tien)
-- [ ] `Web/studio/src/layout.ts` — default layout = Live Preview + editor + terminal + explorer; 3D `viewport` closed by default, opened only for 3D screen games (A0). (#227, Tien)
+- [x] `Backend/src/api/accounts.rs` — username + password signup (`POST /api/accounts/signup`, argon2id, role player, 409 on taken, password ≥ 10); passwordless `dev` sign-in restricted to sims (`PEAR_DEV_SIGNIN=1` + subject prefix `sim-`). (#226, Jacob; PR #229 merged, verified on hosted 2026-11-15: signup 200, duplicate 409, weak 400, bare dev name 403, `sim-` 200; sign-in for signup accounts uses `provider: "password"`. iPhone app: `Packages/PearCloud/Sources/PearCloud/CloudClient.swift` `signInDev` sends `sim-<name>` (`bd5170f`). Open: PearPlayer has no username/password sign-in yet (Apple + Dev only); accounts made earlier through bare-name dev sign-in are no longer reachable)
+- [x] `Web/studio/src/loginScreen.ts`, `Web/studio/src/signupScreen.ts` — Sign in + Create account (username/password); name-only dev sign-in removed from the UI. (#227, Tien)
+- [x] `Web/studio/src/layout.ts` — default layout = Live Preview + editor + terminal + explorer; 3D `viewport` closed by default, opened only for 3D screen games (A0). (#227, Tien)
 - Note: `Apps/PearStudio` (Swift, RealityKit) is the legacy Phase 2 app and is not the developer environment; the developer environment is the web Studio (`Web/studio`, hosted at the server root, or `npm run tauri dev` for the desktop shell).
 
 ### Phase 13 dispatch (2026-11-15 04:45, remote Windows workers via assigned `ready` issues)
