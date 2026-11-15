@@ -59,7 +59,7 @@ OMNI_E2E_URL=http://localhost:8080 npm --prefix Web test   # includes the server
    - Every `[provisional: needs-tien-review]` note in Phase 8 lines.
 5. Human-only:
    - Create the Vultr instance and DNS record.
-   - Paste `DATABASE_URL` (TigerData).
+   - Paste `DATABASE_URL` (Vultr Postgres).
    - Code-signing certificates (installers are unsigned until secrets exist).
    - Store `~/.tauri/omni-studio.key` (on the tienvu-lol laptop) as the GitHub secret `TAURI_SIGNING_PRIVATE_KEY`. Never commit it.
    - `vultr-bootstrap.sh` fetches from `main`, so it works only after this branch is merged (and the repo is reachable from the box).

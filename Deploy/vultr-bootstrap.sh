@@ -66,7 +66,7 @@ if [ -f .env ]; then
   fi
 else
   ask OMNI_DOMAIN "Domain pointing at this server (empty = use this server's IP, self-signed certificate)"
-  ask DATABASE_URL "Postgres URL, e.g. TigerData (empty = Postgres in Docker)" secret
+  ask DATABASE_URL "Postgres URL (empty = Postgres in Docker)" secret
   ask OMNI_DEV_SIGNIN "Enable dev sign-in, 1 or 0 (1 lets anyone create an account) [0]"
   OMNI_DEV_SIGNIN="${OMNI_DEV_SIGNIN:-0}"
   ask OMNI_APPLE_AUDIENCES "Sign in with Apple bundle ids, comma-separated (empty = Apple sign-in off)"

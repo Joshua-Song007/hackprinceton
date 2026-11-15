@@ -50,7 +50,7 @@ This builds and starts the backend on `http://localhost:8080` (in-memory store, 
 |---|---|---|
 | `PORT` | `8080` | Backend port |
 | `OMNI_DEV_SIGNIN` | `1` | Sign in with any name (no real accounts) |
-| `DATABASE_URL` | unset | Set it to use Postgres / TigerData instead of memory |
+| `DATABASE_URL` | unset | Set it to use Postgres instead of memory |
 
 ## 3. Try it
 

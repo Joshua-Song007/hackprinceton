@@ -1,7 +1,7 @@
 # Run from Deploy/: docker compose up -d --build   (vultr-bootstrap.sh does this and writes .env)
 # .env keys: OMNI_DOMAIN, OMNI_DEV_SIGNIN, DATABASE_URL, OMNI_CORS_ORIGINS (optional),
 # OMNI_CADDY_GLOBAL (local_certs when OMNI_DOMAIN is an IP), POSTGRES_PASSWORD and
-# COMPOSE_PROFILES=localdb (only when no external DATABASE_URL, e.g. TigerData).
+# COMPOSE_PROFILES=localdb (only when no external DATABASE_URL).
 # DATABASE_URL unset = the backend's in-memory store (data lost on restart).
 # Marketplace (Phase 10): OMNI_S3_ENDPOINT, OMNI_S3_BUCKET, OMNI_S3_ACCESS_KEY, OMNI_S3_SECRET_KEY
 # (Vultr Object Storage), OMNI_PLUGIN_SIGNING_KEY, OMNI_SECRET_KEY, OMNI_RUNTIME_SECRET (64 hex each,

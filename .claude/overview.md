@@ -75,7 +75,7 @@ Collaboration (stretch)
 CRDT project document (e.g. Automerge for Swift) synced between Bonjour peers; relay server later
 Conflict-free shared editing of scenes and scripts.
 Game Hosting & Accounts
-Rust backend on Vultr: axum (HTTP API + WebSockets), sqlx, TigerData (managed PostgreSQL), and an embedded JS engine (deno_core or rquickjs) for server scripts
+Rust backend on Vultr: axum (HTTP API + WebSockets), sqlx, PostgreSQL on Vultr, and an embedded JS engine (deno_core or rquickjs) for server scripts
 Accounts own games, like Roblox. Published games (scene, scripts, assets, metadata) are stored in and served from the cloud, and a game with server scripts gets a multiplayer game server. Only game content goes to the cloud; sensor data never does.
 Repo
 Xcode workspace + local Swift packages; the backend is a separate Rust (Cargo) project
@@ -298,7 +298,7 @@ Module 10: Peripheral Adapters (stretch)
 • Contract: func parse(_ bytes: Data) -> USISChannels plus a device descriptor (kind, slot, sample rate), over CoreBluetooth. An adapter's only job is to emit standard USIS JSON, so nothing downstream changes when a device is added.
 • Not this weekend: shipping any third-party adapter. The protocol is documented so Joy-Cons, haptic gloves or ESP32 motion bands can be added later.
 Module 11: Cloud Game Hosting
-• Package: OmniCloud on the Mac (used only by OmniStudio). The backend is a separate Rust project, not a Swift package: an axum HTTP API and WebSocket game server on Vultr, with sqlx over TigerData.
+• Package: OmniCloud on the Mac (used only by OmniStudio). The backend is a separate Rust project, not a Swift package: an axum HTTP API and WebSocket game server on Vultr, with sqlx over Postgres on Vultr.
 • What the backend stores: accounts, games (each owned by an account), and each game's published versions (scene, scripts, assets, metadata).
 • Game server: each live session of a published game with server scripts runs them in an embedded JS engine with the same serverScript API as Studio's local test server, and relays remote events between players. Lobbies and matchmaking are game code, not platform features.
 • Core Responsibility: Stores and serves the games creators build, like Roblox. Publishing from Studio saves a game version to a cloud database; a game is loaded from there, not from the creator's machine.
@@ -306,7 +306,7 @@ Module 11: Cloud Game Hosting
 • What is not hosted: live sensor data (USIS packets) and output commands. They stay on the local network, so the Network Rule in Module 5 is unchanged.
 • Flow: Studio publishes a game version to the cloud database. To play or edit, Studio fetches that version and hands the scene and script sources to OmniRuntime and OmniScript. From there the runtime reads input only through the InputBus, as usual.
 • Boundary: hosting carries game content only and never touches input, so the hardware-blind property holds and a hosted game runs the same on simulated or live input. OmniRuntime, OmniScript and games do not depend on the cloud client; Studio, the composition root, does the fetching.
-• Not decided yet: sign-in method, where game files are stored (in TigerData or object storage), JS engine (deno_core vs rquickjs), permissions, version history, and moderation.
+• Not decided yet: sign-in method, where game files are stored (in Postgres or object storage), JS engine (deno_core vs rquickjs), permissions, version history, and moderation.
 Frame Loop & Event Processing
 Asynchronous ingest (as packets arrive):
 1.  A source (live bridge or simulator) emits a UsisPacket onto the InputBus.
@@ -336,7 +336,7 @@ Roadmap & Operational Phases
 4.  Phase 4: Flagship Game
     ◦ Build the game only through the public script API.
     ◦ Spend real effort on sound, visuals and feedback: no gray boxes.
-    ◦ Sign in and publish the game from Studio to the Omni backend (Rust on Vultr, TigerData), which hosts a game server for games with server scripts.
+    ◦ Sign in and publish the game from Studio to the Omni backend (Rust on Vultr), which hosts a game server for games with server scripts.
 5.  Phase 5: Demo Hardening
     ◦ Local hotspot, pre-paired devices, recorded fallback video.
     ◦ Five clean demo runs in a row.

@@ -1,6 +1,6 @@
 // Integration tests for live hosting: a published server script runs behind /play (token in the query),
 // /debug (owner only) streams what happens, and publishing a newer version reloads the live session.
-// Tests that need TigerData read DATABASE_URL and return early when it is unset, like tests/api.rs.
+// Tests that need the database read DATABASE_URL and return early when it is unset, like tests/api.rs.
 use std::time::Duration;
 
 use omni_backend::{app, db};

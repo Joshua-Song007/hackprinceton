@@ -1,4 +1,4 @@
-// TigerData (Postgres) pool and queries for accounts, games and game versions.
+// Postgres (Vultr) pool and queries for accounts, games and game versions.
 // Runtime sqlx queries only (no query! macros). The sqlx features in Cargo.toml have no uuid, chrono
 // or json support, so ids and timestamps cross the boundary as text (cast in SQL) and JSON columns
 // are read as text and parsed with serde_json.
@@ -13,7 +13,7 @@ use crate::memstore::MemStore;
 
 pub type DbResult<T> = Result<T, sqlx::Error>;
 
-/// Where data lives: TigerData (Postgres) when DATABASE_URL is set, else the in-memory store.
+/// Where data lives: Postgres (Vultr) when DATABASE_URL is set, else the in-memory store.
 #[derive(Clone)]
 pub enum Db {
     Pg(PgPool),
