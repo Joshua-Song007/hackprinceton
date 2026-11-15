@@ -15,22 +15,21 @@ from scripted_model import LOG, ScriptedModel, call, say
 ROOT = Path(__file__).resolve().parent.parent
 
 
-def test_write_outside_scripts_is_denied(tmp_path):
+def test_agent_can_write_anywhere_in_project_but_not_outside_it(tmp_path):
+    project = tmp_path / "project"
+    project.mkdir()
     model = ScriptedModel(replies=[
-        call("write_file", "w1", file_path="/escape.js", content="x"),
+        call("write_file", "w1", file_path="/tools/hub.js", content="x"),
         call("write_file", "w2", file_path="/scripts/ok.js", content="y"),
-        call("write_file", "w3", file_path="/scene.json", content="{}"),
-        call("write_file", "w4", file_path="/AGENTS.md", content="x"),
+        call("write_file", "w3", file_path="/../escape.js", content="z"),
         say("end"),
     ])
-    agent = create_deep_agent(model=model, backend=FilesystemBackend(root_dir=tmp_path, virtual_mode=True),
+    agent = create_deep_agent(model=model, backend=FilesystemBackend(root_dir=project, virtual_mode=True),
                               permissions=server.PERMISSIONS)
-    result = asyncio.run(agent.ainvoke({"messages": [{"role": "user", "content": "go"}]}))
+    asyncio.run(agent.ainvoke({"messages": [{"role": "user", "content": "go"}]}))
+    assert (project / "tools" / "hub.js").read_text() == "x"
+    assert (project / "scripts" / "ok.js").read_text() == "y"
     assert not (tmp_path / "escape.js").exists()
-    assert (tmp_path / "scripts" / "ok.js").read_text() == "y"
-    assert (tmp_path / "scene.json").read_text() == "{}"
-    assert not (tmp_path / "AGENTS.md").exists()
-    assert "permission denied" in result["messages"][2].content
 
 
 CLIENT_JS = "export default script({});\n"

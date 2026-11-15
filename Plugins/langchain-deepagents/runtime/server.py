@@ -70,11 +70,10 @@ def sanitize(message: str, secrets=()) -> str:
 def env_secrets(env) -> list[str]:
     return [env[k] for k in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GOOGLE_API_KEY", "GEMINI_API_KEY") if env.get(k)]
 
+# Full vibecoding access: the agent reads and writes anything in the project dir. The project dir is the
+# FilesystemBackend root (virtual_mode), so paths cannot escape it.
 PERMISSIONS = [
-    FilesystemPermission(operations=["write"], paths=["/scripts/**"]),
-    # The scene: written from the panel's snapshot before each prompt; the panel validates edits before applying them.
-    FilesystemPermission(operations=["write"], paths=["/scene.json"]),
-    FilesystemPermission(operations=["write"], paths=["/**"], mode="deny"),
+    FilesystemPermission(operations=["read", "write"], paths=["/**"]),
 ]
 
 SUBAGENTS = [

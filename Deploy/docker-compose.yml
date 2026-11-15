@@ -17,6 +17,8 @@ services:
       PORT: "8080"
       PEAR_STUDIO_DIR: /app/studio
       PEAR_AGENT_RUNTIME_URL: ws://runtime:9410/ws
+      # Seeds the marketplace at startup so a fresh cloud box lists plugins (the seed job skips unchanged ones).
+      PEAR_PLUGIN_SEED_DIR: /app/Plugins
     depends_on:
       postgres:
         condition: service_healthy

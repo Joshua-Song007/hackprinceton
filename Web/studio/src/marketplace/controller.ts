@@ -176,9 +176,11 @@ export class MarketplaceController {
 
   /** Reloads the list, then applies this account's installs and uninstalls from other devices. */
   async refresh(): Promise<void> {
+    this.errors.delete('');
     try {
       this.plugins = await this.deps.registry.list();
-      this.errors.delete('');
+      // An empty list is the unseeded server: the install of the default plugin would 404 on it.
+      if (!this.plugins.length) this.errors.set('', 'The registry has no plugins yet: this server has not published any (its seed job has not run). Ask the server admin to run it, then Retry.');
     } catch (e) {
       this.fail('', e);
     }
@@ -223,7 +225,9 @@ export class MarketplaceController {
 
   private fail(id: string, e: unknown): void {
     const message = e instanceof Error ? e.message : String(e);
-    this.errors.set(id, message);
+    // A plugin with no card (not in the registry list) would hide its error: show it as the list error, unless one is already shown.
+    const owner = this.plugins.some((p) => p.id === id) ? id : '';
+    if (owner || !this.errors.has('')) this.errors.set(owner, message);
     this.progress.delete(id);
     this.say(`${(this.plugins.find((p) => p.id === id)?.name ?? id) || 'Marketplace'}: ${message}`);
   }

@@ -5,7 +5,7 @@ description: Write Pear Client and Server JavaScript scripts (script / serverScr
 
 # Pear scripting
 
-Scripts are plain JavaScript in `/scripts/`. Only `/scripts/` is writable.
+Scripts are plain JavaScript in `/scripts/`. You may also read and write any other file in the project.
 
 - `scripts/<name>.client.js` is a **client script** (runs per player, attached to an entity).
 - `scripts/<name>.server.js` is a **server script** (runs once per room, never sees input).

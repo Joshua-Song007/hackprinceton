@@ -44,9 +44,17 @@ export class RegistryClient {
   private async request(path: string, init: RequestInit = {}): Promise<Response> {
     const t = this.token();
     const headers = { ...(init.body ? { 'Content-Type': 'application/json' } : {}), ...(t ? { Authorization: `Bearer ${t}` } : {}) };
-    const res = await this.fetchFn(`${this.baseUrl()}/api${path}`, { ...init, headers });
+    const base = this.baseUrl();
+    let res: Response;
+    try {
+      res = await this.fetchFn(`${base}/api${path}`, { ...init, headers });
+    } catch (e) {
+      throw new Error(`Cannot reach the registry at ${base || 'this page'}: ${e instanceof Error ? e.message : String(e)}`);
+    }
     if (!res.ok) {
-      const detail = await res.json().then((b: { error?: string }) => b.error, () => undefined);
+      // A proxy's own 502-504 has no JSON body: say that the server answered but its backend did not.
+      const gateway = res.status >= 502 && res.status <= 504 ? 'the server answered but its backend is not responding' : undefined;
+      const detail = await res.json().then((b: { error?: string }) => b.error ?? gateway, () => gateway);
       throw new Error(`Registry request failed (${res.status})${detail ? `: ${detail}` : ''}`);
     }
     return res;

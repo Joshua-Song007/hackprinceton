@@ -56,7 +56,7 @@ export function createMarketplacePanel(controller: MarketplaceController): Panel
     root.replaceChildren(
       el('div', { class: 'pn-bar' }, [button('Refresh', () => void controller.refresh(), { variant: 'small', ariaLabel: 'Refresh plugin list' })]),
       renderModelKey(controller),
-      ...(controller.listError ? [el('p', { class: 'pn-empty', role: 'alert' }, [controller.listError])] : []),
+      ...(controller.listError ? [el('div', { class: 'pn-empty', role: 'alert' }, [el('p', {}, [controller.listError]), button('Retry', () => void controller.refresh(), { variant: 'small', ariaLabel: 'Retry loading the plugin list' })])] : []),
       ...(cards.length || controller.listError ? [] : [el('p', { class: 'pn-empty' }, ['No plugins loaded yet. Press Refresh to load the registry.'])]),
       el('ul', { class: 'mk-list', 'aria-label': 'Plugins' }, cards.map((c) => renderCard(c, controller))),
     );

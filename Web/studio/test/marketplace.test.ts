@@ -91,6 +91,47 @@ describe('marketplace registry list', () => {
     await controller.refresh();
     expect(controller.listError).toMatch(/500/);
   });
+
+  it('an unseeded server (empty list, 404 on the default plugin) shows one readable reason, and a retry clears it once seeded', async () => {
+    const { controller, deps } = setup({ token: null });
+    let seeded = false;
+    const list = deps.registry.list.bind(deps.registry);
+    deps.registry.list = async () => (seeded ? list() : []);
+    deps.registry.bundle = async () => {
+      throw new Error('Registry request failed (404): unknown plugin: langchain-deepagents');
+    };
+    await controller.boot();
+    await controller.refresh();
+    expect(controller.listError).toMatch(/seed job/);
+    seeded = true;
+    await controller.refresh();
+    expect(controller.listError).toBe('');
+  });
+
+  it('an install error of a plugin with no card is shown as the list error', async () => {
+    const { controller, deps } = setup({ token: null });
+    deps.registry.bundle = async () => {
+      throw new Error('Registry request failed (404): unknown plugin: langchain-deepagents');
+    };
+    await controller.install(DEEP_AGENTS_ID);
+    expect(controller.listError).toMatch(/404.*unknown plugin/);
+  });
+});
+
+describe('RegistryClient errors', () => {
+  const client = (fetchFn: typeof fetch) => new RegistryClient(() => 'http://backend', fetchFn);
+
+  it('names the server when it cannot be reached', async () => {
+    await expect(client((async () => { throw new TypeError('Failed to fetch'); }) as unknown as typeof fetch).list()).rejects.toThrow(/Cannot reach the registry at http:\/\/backend: Failed to fetch/);
+  });
+
+  it('a gateway error without a JSON body says the backend is not responding, with the status', async () => {
+    await expect(client((async () => new Response('', { status: 502 })) as unknown as typeof fetch).list()).rejects.toThrow(/\(502\): the server answered but its backend is not responding/);
+  });
+
+  it('keeps the server\'s own error text', async () => {
+    await expect(client((async () => Response.json({ error: 'database unavailable' }, { status: 503 })) as unknown as typeof fetch).list()).rejects.toThrow(/\(503\): database unavailable/);
+  });
 });
 
 describe('marketplace install flow', () => {
