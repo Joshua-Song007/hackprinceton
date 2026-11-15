@@ -402,7 +402,7 @@ export class ViewportHost {
   /**
    * Editor camera: right drag rotates (Alt: only around the vertical axis), middle drag pans (Shift+left drag too, for
    * trackpads), wheel zooms, a left click that barely moved picks.
-   * While running, a click is mouse-look and the camera follows the head, so all of it is off.
+   * While running in Player view, a click is mouse-look and the camera follows the head, so all of it is off. In Overview the camera works as above, a click on a player drives them or on a device opens its menu, and a drag places the driven player or a free device.
    */
   private bindCamera(canvas: HTMLCanvasElement): void {
     let drag: { mode: 'pan' | 'rotate' | 'none'; moved: number; button: number; move?: { id: string; y: number }; place?: true; device?: { kind: RigDevice; y: number } } | null = null;
@@ -549,7 +549,7 @@ export class ViewportHost {
     this.viewport?.setColors(readViewportColors());
   }
 
-  /** While running, the camera follows the driven player's virtual AirPods and the canvas takes mouse-look and key input. `origin` places that player; omitted, it stays where it is (switching drivers). */
+  /** While running, the canvas takes key input; in Player view the camera follows the driven player's virtual AirPods and the canvas takes mouse-look, in Overview it frames the room. `origin` places that player and starts in Overview; omitted, it stays where it is (switching drivers). */
   setRunning(devices: SimDevices | null, origin?: readonly [number, number, number]): void {
     this.running = devices ? { devices } : null;
     if (devices && origin) {

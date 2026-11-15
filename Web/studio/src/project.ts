@@ -1,4 +1,4 @@
-// Project model: scene JSON + client/server script sources + cloud link, dirty tracking and IndexedDB autosave.
+// Project model: scene JSON + client/server script sources + instructions + cloud link, dirty tracking and IndexedDB autosave.
 // The Flagship template is imported from Games/Flagship through Vite (never copied into the Studio).
 import type { GameVersion, NewGameVersion } from '@pear/cloud';
 import { parseGestures, parseInputs, parseInstructions, parseOwnership, parsePeripherals, parseRaise, parseScene, type CustomGesture, type Instructions, type Ownership, type PeripheralKind, type SceneDescription, type SceneInputs } from '@pear/runtime';
@@ -415,7 +415,7 @@ export class Project {
     return this.updateEntity(id, (x) => void x.components!.splice(index, 1));
   }
 
-  /** Keys: name, requiredTier, runMode, permissions.location, playerOrigin, inputs, peripherals, gestures. Returns an error sentence, or undefined on success. */
+  /** Keys: name, requiredTier, runMode, permissions.location, playerOrigin, inputs, peripherals, ownership, gestures. Returns an error sentence, or undefined on success. */
   setSceneSetting(key: string, value: unknown): string | undefined {
     switch (key) {
       case 'name':
@@ -485,7 +485,7 @@ export class Project {
   }
 
   /**
-   * Changes the device fields together as one undo step: the listed `peripherals`, the declared `inputs`
+   * Changes the device fields together as one undo step: the listed `peripherals`, who holds each (`ownership`), the declared `inputs`
    * (null removes them), the custom `gestures`, and `location` (only ever turns the permission on).
    * Returns an error sentence and changes nothing when any field is invalid.
    */

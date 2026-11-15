@@ -222,3 +222,8 @@ Stale comments flagged, not edited: `Web/packages/pear-runtime/src/viewport.ts` 
 - [x] `Web/studio/src/testPanel.ts` — Devices rows, `holdingText`.
 - [x] `Web/studio/src/main.ts` — preview rig, device menu, drop of a free device.
 - [x] `Web/packages/pear-runtime/test/rig.test.ts`, `Web/packages/pear-runtime/test/runtime.test.ts`, `Web/packages/pear-sim/test/sim.test.ts`, `Web/studio/test/peripherals.test.ts`, `Web/studio/test/authoring.test.ts`, `Web/studio/test/play.test.ts`, `Web/studio/test/testPanel.test.ts`.
+
+### 2026-11-14 — Stale comments updated
+Paths: `Web/packages/pear-runtime/src/viewport.ts`, `Web/packages/pear-runtime/src/scene.ts`, `Web/studio/src/project.ts`, `Web/studio/src/run.ts`
+
+Comment text only, at the user's instruction; closes the "Stale comments flagged, not edited" list of the simulator entry above. `viewport.ts` line 1 now covers trigger volumes and the players and devices drawn from a `RigView`. `scene.ts` line 2 lists `ownership` and `raise` among the web-only fields. `project.ts` line 1 and the `setSceneSetting` and `applyPeripheralChange` docs name instructions and `ownership`. The `run.ts` `bindCamera` and `setRunning` docs now separate Player view (mouse-look, head-follow) from Overview (editor camera, click a player or device, drag to place). Checked and left alone: the `run.ts` `rig` docs and the `viewport.ts` `setHeadPose` doc.

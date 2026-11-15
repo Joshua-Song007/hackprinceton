@@ -1,4 +1,4 @@
-// three.js render of a scene: boxes for entities, floor grid, axis gizmo, selection outline, head-pose camera.
+// three.js view of a scene and its simulator: boxes for entities, trigger volumes, floor grid, axis gizmo, selection outline, head-pose camera, and the players and devices (bodies, gaze, device markers, haptic rings) drawn from a RigView.
 // Colors come from the brand-kit CSS custom properties (studio-tokens.css), so theme switches reach the viewport.
 import * as THREE from 'three';
 import type { Pose } from '@pear/core';
