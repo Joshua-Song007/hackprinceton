@@ -220,7 +220,7 @@ struct LibraryView: View {
 
     @ViewBuilder private var discover: some View {
         if let featured {
-            FeaturedHero(entry: featured, compact: compact) {
+            FeaturedHero(entry: featured, model: model, compact: compact) {
                 path.append(PlayRequest(entry: featured))
             } onOpen: {
                 path.append(featured)
@@ -494,14 +494,18 @@ private struct GameCard: View {
 /// The featured game: art on the right fading into the panel, title and the two actions on the left.
 private struct FeaturedHero: View {
     let entry: CatalogEntry
+    let model: PlayerModel
     let compact: Bool
     let onPlay: () -> Void
     let onOpen: () -> Void
+    @State private var media: GameMedia?
 
     var body: some View {
         ZStack(alignment: .leading) {
             PearTheme.bgPanel
-            CoverArt(seed: entry.id, url: entry.coverURL)
+            CoverArt(
+                seed: entry.id, url: entry.coverURL,
+                cropped: media?.thumbnail.map { CroppedImage(url: model.mediaAssetURL($0), crop: $0.crop(.hero)) })
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .mask(LinearGradient(
                     stops: [.init(color: .clear, location: compact ? 0.1 : 0.3), .init(color: .black, location: 1)],
@@ -545,6 +549,7 @@ private struct FeaturedHero: View {
         .overlay(RoundedRectangle(cornerRadius: 20).strokeBorder(PearTheme.line))
         .contentShape(RoundedRectangle(cornerRadius: 20))
         .onTapGesture(perform: onOpen)
+        .task(id: entry.id) { media = await model.media(for: entry) }
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Featured, \(entry.title)")
     }

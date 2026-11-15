@@ -88,10 +88,14 @@ public struct Account: Codable, Sendable, Equatable {
     public var displayName: String
     /// What a friend types to send this account a request; empty until `/me` has been read (sign-in responses carry none).
     public var friendCode: String
-    public init(id: String, displayName: String, friendCode: String = "") {
+    /// `developer` for developer accounts; nil on older servers or when the server sends none.
+    public var role: String?
+    public var isDeveloper: Bool { role == "developer" }
+    public init(id: String, displayName: String, friendCode: String = "", role: String? = nil) {
         self.id = id
         self.displayName = displayName
         self.friendCode = friendCode
+        self.role = role
     }
 }
 
@@ -247,7 +251,8 @@ struct AccountWire: Decodable {
     let id: String
     let display_name: String
     var friend_code: String?
-    var account: Account { Account(id: id, displayName: display_name, friendCode: friend_code ?? "") }
+    var role: String?
+    var account: Account { Account(id: id, displayName: display_name, friendCode: friend_code ?? "", role: role) }
 }
 
 /// Dev and Apple sign-in response: `{token, account}`.
@@ -260,19 +265,72 @@ struct SignInWire: Decodable {
 struct GameWire: Decodable {
     let id: String
     let title: String
+    var owner_id: String?
+}
+
+/// What an upload stored: the content hash the version's media refs point at.
+public struct StoredAsset: Decodable, Sendable, Equatable {
+    public var name: String
+    public var sha256: String
+    public var size: Int
+    public var contentType: String
+    public init(name: String, sha256: String, size: Int, contentType: String) {
+        self.name = name
+        self.sha256 = sha256
+        self.size = size
+        self.contentType = contentType
+    }
+    private enum CodingKeys: String, CodingKey {
+        case name, sha256, size
+        case contentType = "content_type"
+    }
 }
 
 /// `db::NewGameVersion` going out, `db::GameVersion` coming back. Scripts are `{name: source}` objects, as the
 /// web Studio and the game server read them; assets are `{name: {contentType, data}}` with data in base64.
 struct VersionWire: Codable {
-    struct Asset: Codable { let contentType: String; let data: Data }
+    /// Inline (`{contentType, data}`, what Swift publishes) or stored by hash (`{sha256, size, content_type}`, what
+    /// Studio's media and asset uploads leave in a version).
+    enum Asset: Codable {
+        case inline(contentType: String, data: Data)
+        case ref(sha256: String, size: Int, contentType: String)
+
+        private enum Keys: String, CodingKey {
+            case contentType, data, sha256, size
+            case contentTypeSnake = "content_type"
+        }
+
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: Keys.self)
+            if c.contains(.data) {
+                self = .inline(contentType: try c.decode(String.self, forKey: .contentType), data: try c.decode(Data.self, forKey: .data))
+            } else {
+                self = .ref(
+                    sha256: try c.decode(String.self, forKey: .sha256), size: try c.decodeIfPresent(Int.self, forKey: .size) ?? 0,
+                    contentType: try c.decodeIfPresent(String.self, forKey: .contentTypeSnake) ?? "application/octet-stream")
+            }
+        }
+
+        func encode(to encoder: Encoder) throws {
+            var c = encoder.container(keyedBy: Keys.self)
+            switch self {
+            case .inline(let type, let data):
+                try c.encode(type, forKey: .contentType)
+                try c.encode(data, forKey: .data)
+            case .ref(let sha, let size, let type):
+                try c.encode(sha, forKey: .sha256)
+                try c.encode(size, forKey: .size)
+                try c.encode(type, forKey: .contentTypeSnake)
+            }
+        }
+    }
     var game_id: String?
     var version: Int?
     let scene: JSONValue
     let client_scripts: [String: String]
     let server_scripts: [String: String]
-    let assets: [String: Asset]
-    let metadata: [String: JSONValue]
+    var assets: [String: Asset]
+    var metadata: [String: JSONValue]
     let run_mode: String
 
     init(_ b: GameBundle) {
@@ -280,7 +338,7 @@ struct VersionWire: Codable {
         client_scripts = Dictionary(b.clientScripts.map { ($0.name, $0.source) }, uniquingKeysWith: { _, last in last })
         server_scripts = Dictionary(b.serverScripts.map { ($0.name, $0.source) }, uniquingKeysWith: { _, last in last })
         assets = Dictionary(
-            b.assets.map { ($0.name, Asset(contentType: $0.contentType, data: $0.data)) }, uniquingKeysWith: { _, last in last })
+            b.assets.map { ($0.name, Asset.inline(contentType: $0.contentType, data: $0.data)) }, uniquingKeysWith: { _, last in last })
         metadata = ["title": .string(b.title)]
         run_mode = b.runMode
     }
@@ -292,10 +350,14 @@ struct VersionWire: Codable {
         func scripts(_ d: [String: String]) -> [ScriptSource] {
             d.keys.sorted().map { ScriptSource(name: $0, source: d[$0]!) }
         }
+        // Inline assets only; stored (ref) ones are fetched by `CloudClient.fetchGame`.
+        let inline: [AssetFile] = assets.keys.sorted().compactMap { name in
+            guard case .inline(let type, let data)? = assets[name] else { return nil }
+            return AssetFile(name: name, contentType: type, data: data)
+        }
         return GameBundle(
             title: title, runMode: run_mode, scene: scene,
-            clientScripts: scripts(client_scripts), serverScripts: scripts(server_scripts),
-            assets: assets.keys.sorted().map { AssetFile(name: $0, contentType: assets[$0]!.contentType, data: assets[$0]!.data) })
+            clientScripts: scripts(client_scripts), serverScripts: scripts(server_scripts), assets: inline)
     }
 }
 
@@ -517,7 +579,79 @@ public actor CloudClient {
         let v = version.map(String.init) ?? "latest"
         let wire: VersionWire = try await send(
             "GET", ["api", "games", id, "versions", v], body: Optional<GameBundle>.none)
-        return FetchedGame(gameId: wire.game_id ?? id, version: wire.version ?? 0, bundle: wire.bundle)
+        var bundle = wire.bundle
+        // Stored assets other than the media images (e.g. a ref `ui.json`) are part of the game, so fetch them.
+        let mediaNames = Set(GameMedia.parse(wire.metadata["media"]).items.map(\.name))
+        for name in wire.assets.keys.sorted() where !mediaNames.contains(name) {
+            guard case .ref(let sha, _, let type)? = wire.assets[name] else { continue }
+            bundle.assets.append(AssetFile(name: name, contentType: type, data: try await assetData(sha256: sha)))
+        }
+        bundle.assets.sort { $0.name < $1.name }
+        return FetchedGame(gameId: wire.game_id ?? id, version: wire.version ?? 0, bundle: bundle)
+    }
+
+    /// Uploads a stored asset (`PUT /api/games/{id}/assets/{name}`, raw body); name matches `[A-Za-z0-9._-]{1,128}`.
+    public func uploadAsset(gameId: String, name: String, data: Data, contentType: String) async throws -> StoredAsset {
+        try await send(
+            "PUT", ["api", "games", gameId, "assets", name], body: Optional<GameBundle>.none, raw: (data, contentType))
+    }
+
+    /// Sets the game's cover picture (`PUT /api/games/{id}/cover`, raw JPEG; 204).
+    public func setCover(gameId: String, data: Data) async throws {
+        let _: Empty = try await send(
+            "PUT", ["api", "games", gameId, "cover"], body: Optional<GameBundle>.none, raw: (data, "image/jpeg"))
+    }
+
+    /// Ids of the signed-in account's games (`GET /api/games` already returns only the caller's).
+    public func ownedGameIds() async throws -> Set<String> {
+        let games: [GameWire] = try await send("GET", ["api", "games"], body: Optional<GameBundle>.none)
+        return Set(games.map(\.id))
+    }
+
+    /// The media of a version (`nil` = latest), without fetching any image bytes.
+    public func fetchMedia(gameId: String, version: Int? = nil) async throws -> GameMedia {
+        let v = version.map(String.init) ?? "latest"
+        let wire: VersionWire = try await send(
+            "GET", ["api", "games", gameId, "versions", v], body: Optional<GameBundle>.none)
+        return GameMedia.parse(wire.metadata["media"])
+    }
+
+    /// Publishes the latest version again with new media: scene, scripts, other assets and metadata are carried over untouched.
+    public func publishMedia(gameId: String, media: GameMedia) async throws -> PublishedVersion {
+        var wire: VersionWire = try await send(
+            "GET", ["api", "games", gameId, "versions", "latest"], body: Optional<GameBundle>.none)
+        for item in GameMedia.parse(wire.metadata["media"]).items { wire.assets[item.name] = nil }
+        for item in media.items {
+            wire.assets[item.name] = .ref(sha256: item.sha256, size: item.size, contentType: item.contentType)
+        }
+        wire.metadata["media"] = media.json
+        wire.game_id = nil
+        wire.version = nil
+        let v: VersionWire = try await send("POST", ["api", "games", gameId, "versions"], body: wire)
+        return PublishedVersion(gameId: v.game_id ?? gameId, version: v.version ?? 0)
+    }
+
+    /// Bytes of a stored asset (`GET /api/assets/{sha256}`, public).
+    public func assetData(sha256: String) async throws -> Data {
+        var request = URLRequest(url: assetURL(sha256: sha256))
+        request.httpMethod = "GET"
+        let data: Data
+        let response: URLResponse
+        do { (data, response) = try await session.data(for: request) }
+        catch { throw CloudError.transport(error.localizedDescription) }
+        guard let http = response as? HTTPURLResponse else { throw CloudError.invalidResponse }
+        switch http.statusCode {
+        case 200..<300: return data
+        case 401: throw CloudError.unauthorized
+        case 403: throw CloudError.forbidden
+        case 404: throw CloudError.notFound
+        default: throw CloudError.server(status: http.statusCode, message: String(decoding: data.prefix(512), as: UTF8.self))
+        }
+    }
+
+    /// Where a stored asset is served; public, so an image view can load it directly.
+    public nonisolated func assetURL(sha256: String) -> URL {
+        baseURL.appending(path: "api/assets/\(sha256)")
     }
 
     private func send<Body: Encodable, Response: Decodable>(
