@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 320" role="img" aria-label="Pear: movement games on devices you already own">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#0f2a20"/><stop offset="1" stop-color="#285943"/></linearGradient>
+    <mask id="pm" maskUnits="userSpaceOnUse" x="100" y="30" width="340" height="440"><rect x="100" y="30" width="340" height="440" fill="#fff"/><path d="M270 132C270 94 298 68 346 62C346 106 314 136 270 132Z" fill="#000" stroke="#000" stroke-width="22" stroke-linejoin="round"/></mask>
+  </defs>
+  <rect width="1280" height="320" rx="24" fill="url(#bg)"/>
+  <g transform="translate(120 20) scale(0.55)"><g transform="translate(256 256) rotate(12) scale(1.12) translate(-256 -252)"><path d="M262 127C290 127 312 148 310 178C308 226 381 250 381 322C381 394 322 445 256 445C190 445 131 394 131 322C131 250 216 226 214 178C212 148 234 127 262 127Z" fill="#e8f5ee" mask="url(#pm)"/><path d="M270 132C270 94 298 68 346 62C346 106 314 136 270 132Z" fill="#e8f5ee"/></g></g>
+  <text x="430" y="165" font-family="-apple-system,Segoe UI,Helvetica,Arial,sans-serif" font-size="108" font-weight="700" fill="#ffffff">Pear</text>
+  <text x="434" y="220" font-family="-apple-system,Segoe UI,Helvetica,Arial,sans-serif" font-size="30" fill="#b9dccb">Movement games on the Apple devices you already own</text>
+</svg>

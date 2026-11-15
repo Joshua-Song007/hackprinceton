@@ -29,7 +29,7 @@ PearCloud                          (no Pear deps; backend client for Studio and 
    └──── PearLibrary                (Phase 9: device profile + library model; PearCloud only)
 
 PearStudio (macOS app)  ──►  every package above except PearCompanion and PearLibrary
-PearPlayer (iOS + macOS app) ──►  PearLibrary, PearCloud (Phase 9; library shell, no runtime yet)
+PearPlayer (iOS + macOS app) ──►  PearLibrary, PearCloud (Phase 9 library shell; since commit 1f083b8 also runs games: GameSession/PlayView with PearRuntime, PearScript, PearInput, PearSim, PearCloud over NetworkRemoteChannel; touch input only, motion comes from PearCompanion)
 Games/Flagship          ──►  data only (scene + scripts) run through PearRuntime + PearScript
 Backend/ (Rust)         ──►  no Swift edges; reached over HTTP / WebSocket by PearCloud
                              (one file edge, not a package edge: `script_host.rs` includes PearScript's `prelude.js`; see Placement Notes)
@@ -70,7 +70,7 @@ Enforced in each `Package.swift`; a violation is a build failure, not a conventi
 | PearCollab | PearInput, PearRuntime | Syncs the project document only; never touches input |
 | PearSim ↔ PearBridge | each other | Siblings; both plug in through `InputSource` / `OutputSink` |
 | PearRuntime, PearScript, Games/* | PearCloud | Module 11 boundary: only a composition root talks to the backend (Studio; since Phase 9 also PearPlayer, **(plan decision)** until overview.md Module 11 changes) |
-| PearLibrary | PearRuntime, PearScript, PearInput, PearSim, PearBridge (this round) | **(plan decision)** the player shell is library-only; keeps the hardware-blind property and the Network Rule by dependency; revisit when Play embeds the runtime |
+| PearLibrary | PearRuntime, PearScript, PearInput, PearSim, PearBridge (this round) | **(plan decision)** the player shell is library-only; keeps the hardware-blind property and the Network Rule by dependency; revisit: Play now embeds the runtime (commit 1f083b8) |
 | PearCloud | any Pear package | Carries game content only, never input |
 
 ## Protocol Seams
@@ -88,7 +88,7 @@ Where one package is swapped for another without the consumer changing. Studio's
 | `CatalogSource` (PearLibrary, Phase 9) | PearCloud: `CloudClient` | PearLibrary `LibraryModel` |
 | `SessionStore` (PearLibrary, Phase 9) | PearLibrary: Keychain store · in-memory store (tests) | PearPlayer `PlayerModel` |
 | `GameSource` (PearLibrary, Phase 9) | PearCloud: `CloudClient` | PearLibrary `StubGameLauncher` |
-| `GameLauncher` (PearLibrary, Phase 9) | PearLibrary: `StubGameLauncher` (fetches the bundle only) · later a launcher that hands it to PearRuntime / PearScript | PearPlayer `PlayerModel` |
+| `GameLauncher` (PearLibrary, Phase 9) | PearLibrary: `StubGameLauncher` (fetches the bundle only) · `RuntimeGameLauncher` (Apps/PearPlayer, Play) · earlier plan: a launcher that hands it to PearRuntime / PearScript | PearPlayer `PlayerModel` |
 
 ## Type Ownership
 
@@ -291,7 +291,7 @@ Apps/
     watchOS/       WatchApp.swift  HeartRateWorkout.swift
                    WristGestureDetector.swift  WatchRelay.swift                       [P3]
 
-  PearPlayer/                                       (Phase 9: iOS + macOS player app, library shell)
+  PearPlayer/                                       (Phase 9: iOS + iPadOS + macOS player app; library shell, plus Play since 1f083b8)
     PearPlayer.xcodeproj/project.pbxproj            [P9]
     PearPlayer.entitlements  Info.plist             [P9, Info.plist extra]
     PearPlayer/

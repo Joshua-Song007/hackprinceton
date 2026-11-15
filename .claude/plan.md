@@ -72,7 +72,7 @@ Full text: planHistory/phase-08.md
 
 Built: backend catalog + Sign in with Apple; PearCloud catalog / Apple client; PearLibrary (device profile, playability, session store, library model, stub launcher); PearPlayer iOS + macOS app with sign-in, library, detail and theme.
 
-Still open: Apple Developer team, bundle id, entitlement; running games on the player (needs iOS on PearInput / PearRuntime / PearScript / PearOutput). Player UI never seen rendered. Player apps are now in overview.md scope.
+Still open: Apple Developer team, bundle id, entitlement. (Changed 2026-11-15: running games on the player was built in commit 1f083b8: GameSession/PlayView, touch input, NetworkRemoteChannel; iOS 18 targets for PearInput / PearRuntime / PearScript / PearOutput / PearSim; not verified end to end.) Player UI never seen rendered. Player apps are now in overview.md scope.
 
 Full text: planHistory/phase-09.md
 

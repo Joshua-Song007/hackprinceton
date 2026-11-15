@@ -32,7 +32,7 @@ Sign-in method (Apple preferred; built in Phase 9), the server's JS engine (rqui
 
 ## Additional surfaces (acknowledged, were flagged mismatches)
 - Web Studio: a TypeScript browser + Tauri desktop Studio (`Web/`) sits beside the native macOS Studio, same contracts, simulated input only.
-- Player app: `Apps/OmniPlayer` (iOS + macOS) signs in with Apple and browses the cloud library; it is a second composition root talking to the backend through OmniCloud. Running games on it is next.
+- Player app: `Apps/OmniPlayer` (iOS + macOS) signs in with Apple and browses the cloud library; it is a second composition root talking to the backend through OmniCloud. It also runs games: a GameSession/PlayView runs the scene and client scripts over a NetworkRemoteChannel to the game server, with touch input (commit 1f083b8; not verified end to end). Device motion comes from the PearCompanion apps, not the Player.
 - Plugin marketplace: signed plugin bundles in object storage, per-account installs and model keys.
 
 ## Colors and branding

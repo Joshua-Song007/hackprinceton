@@ -1,0 +1,71 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "side-tab",
+        "value": "*",
+        "files": [
+          "docs/brand-kit/project/components/bundle.css"
+        ],
+        "createdAt": "2026-11-14T22:55:47.474Z",
+        "reason": "Claude: 2px warn marker on a packet-log table row (DevTools convention), not a card accent"
+      },
+      {
+        "rule": "tiny-text",
+        "value": "*",
+        "files": [
+          "docs/brand-kit/project/components/HapticPulse/preview.html"
+        ],
+        "createdAt": "2026-11-14T22:55:47.771Z",
+        "reason": "Claude: 11px is the documented macOS small size for dense tool panels (brand book Type)"
+      },
+      {
+        "rule": "cramped-padding",
+        "value": "*",
+        "files": [
+          "docs/brand-kit/local/Toolbar.html"
+        ],
+        "createdAt": "2026-11-14T22:55:48.085Z",
+        "reason": "Claude: 24px native macOS toolbar controls (control-height token), matches Xcode"
+      },
+      {
+        "rule": "side-tab",
+        "value": "*",
+        "files": [
+          "docs/brand-kit/local/PacketLog.html"
+        ],
+        "createdAt": "2026-11-14T22:59:59.598Z",
+        "reason": "Claude: 2px warn marker on a packet-log table row (DevTools convention), not a card accent"
+      },
+      {
+        "rule": "cramped-padding",
+        "value": "*",
+        "files": [
+          "docs/brand-kit/local/PacketLog.html"
+        ],
+        "createdAt": "2026-11-14T22:59:59.736Z",
+        "reason": "Claude: native macOS density (24px controls, 22px table rows) per brand book Layout and sizing"
+      },
+      {
+        "rule": "cramped-padding",
+        "value": "*",
+        "files": [
+          "docs/brand-kit/local/ModeToggle.html"
+        ],
+        "createdAt": "2026-11-14T22:59:59.893Z",
+        "reason": "Claude: native macOS density (24px controls, 22px table rows) per brand book Layout and sizing"
+      },
+      {
+        "rule": "cramped-padding",
+        "value": "*",
+        "files": [
+          "docs/brand-kit/local/InspectorSection.html"
+        ],
+        "createdAt": "2026-11-14T23:00:00.038Z",
+        "reason": "Claude: native macOS density (24px controls, 22px table rows) per brand book Layout and sizing"
+      }
+    ]
+  }
+}
