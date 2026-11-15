@@ -7,11 +7,15 @@ export interface Account {
   subject: string;
   display_name: string;
   created_at: string;
+  /** Absent on servers that predate roles; treat as "player". */
+  role?: 'player' | 'developer';
 }
 export interface SignInRequest {
   provider: string;
   subject: string;
   display_name?: string;
+  /** Only for provider "developer". */
+  password?: string;
 }
 export interface SignInResponse {
   token: string;
@@ -23,6 +27,9 @@ export interface Game {
   title: string;
   created_at: string;
   updated_at: string;
+  owner_name?: string;
+  description?: string;
+  has_cover?: boolean;
 }
 export type RunModeName = 'screen' | 'device';
 export interface NewGameVersion {
@@ -68,7 +75,7 @@ export class ApiError extends Error {
 }
 
 const KIND_BY_STATUS: Record<number, ApiErrorKind> = {
-  400: 'badRequest', 401: 'unauthorized', 403: 'forbidden', 404: 'notFound', 503: 'unavailable',
+  400: 'badRequest', 413: 'badRequest', 415: 'badRequest', 401: 'unauthorized', 403: 'forbidden', 404: 'notFound', 503: 'unavailable',
 };
 const kindOf = (status: number): ApiErrorKind => KIND_BY_STATUS[status] ?? 'server';
 
@@ -180,7 +187,7 @@ export class CloudClient {
   }
 
   async signIn(request: SignInRequest): Promise<SignInResponse> {
-    const response = await this.request<SignInResponse>('POST', '/api/accounts/signin', { display_name: '', ...request });
+    const response = await this.request<SignInResponse>('POST', '/api/accounts/signin', request.provider === 'developer' ? request : { display_name: '', ...request });
     this.token = response.token;
     return response;
   }
@@ -200,6 +207,29 @@ export class CloudClient {
 
   listGames(): Promise<Game[]> {
     return this.request('GET', '/api/games');
+  }
+
+  /** Developers only: every hosted game, whoever owns it. */
+  listAllGames(): Promise<Game[]> {
+    return this.request('GET', '/api/games?all=1');
+  }
+
+  updateGame(gameId: string, fields: { title?: string; description?: string }): Promise<Game> {
+    return this.request('PUT', `/api/games/${encodeURIComponent(gameId)}`, fields);
+  }
+
+  /** Raw jpeg/png body, 2 MB at most (413 or 415 when refused). */
+  uploadCover(gameId: string, image: Blob): Promise<void> {
+    return this.request('PUT', `/api/games/${encodeURIComponent(gameId)}/cover`, undefined, image);
+  }
+
+  deleteCover(gameId: string): Promise<void> {
+    return this.request('DELETE', `/api/games/${encodeURIComponent(gameId)}/cover`);
+  }
+
+  /** Public image URL for an <img>; pass `bust` (e.g. updated_at) after an upload to skip the browser cache. */
+  coverUrl(gameId: string, bust?: string): string {
+    return `${this.baseUrl}/api/games/${encodeURIComponent(gameId)}/cover${bust ? `?v=${encodeURIComponent(bust)}` : ''}`;
   }
 
   createGame(title: string): Promise<Game> {
@@ -239,14 +269,15 @@ export class CloudClient {
     return `${origin.replace(/^http/, 'ws')}${path}${qs ? `?${qs}` : ''}`;
   }
 
-  private async request<T>(method: string, path: string, body?: unknown): Promise<T> {
+  private async request<T>(method: string, path: string, body?: unknown, raw?: Blob): Promise<T> {
     const headers: Record<string, string> = {};
     if (this.token) headers.Authorization = `Bearer ${this.token}`;
-    if (body !== undefined) headers['Content-Type'] = 'application/json';
+    if (raw) headers['Content-Type'] = raw.type;
+    else if (body !== undefined) headers['Content-Type'] = 'application/json';
     let response: Response;
     try {
       response = await this.fetchImpl(`${this.baseUrl}${path}`, {
-        method, headers, ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+        method, headers, ...(raw ? { body: raw } : body === undefined ? {} : { body: JSON.stringify(body) }),
       });
     } catch (e) {
       throw new ApiError('network', 0, `${method} ${path}: ${e instanceof Error ? e.message : String(e)}`);

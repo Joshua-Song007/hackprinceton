@@ -1,6 +1,7 @@
 // Composition root: wires the SDK packages (core, runtime, script, sim, cloud) to the panels.
 import { flattenScene, type RigView } from '@pear/runtime';
 import './theme.css';
+import { openAboutPanel } from './aboutPanel';
 import { AccountController, describeError, openAccountSheet } from './account';
 import { createInspectorPanel } from './inspector';
 import { DebugStore, createConsolePanel } from './debug-panel';
@@ -388,6 +389,7 @@ mountMenuBar(document.getElementById('menubar')!, [
       { separator: true },
       { label: 'Publish', run: () => void publish() },
       { label: 'Account and games...', run: () => openAccountSheet(account, prefs, { project, openSnapshot }) },
+      { label: 'Game About...', run: () => openAboutPanel(account, project.gameId ?? account.gameId) },
       { label: 'Settings...', run: () => openSettingsSheet(prefs) },
       { label: 'Sign out', run: () => void account.signOut().catch(() => showScreen('login')) },
     ],
