@@ -1,7 +1,7 @@
 // Peripherals panel: the devices a game uses (iPhone, Apple Watch, AirPods), what each one gives the scripts, and one-click handlers.
 // Every edit goes through `project.applyPeripheralChange`, so the scene JSON stays the single source of truth.
 import { SLOTS } from '@pear/core';
-import { PERIPHERAL_KINDS, parseGestures, parseInputs, parsePeripherals, type CustomGesture, type PeripheralKind } from '@pear/runtime';
+import { PERIPHERAL_KINDS, type CustomGesture, type PeripheralKind } from '@pear/runtime';
 import type { EditorBus } from './editor';
 import type { Selection } from './explorer';
 import { prop, section } from './inspector';
@@ -9,29 +9,13 @@ import type { PanelView } from './layout';
 import { inferInputs, slotDevice } from './needs';
 import {
   COMING_SOON, PERIPHERALS, addPeripheral, deviceOfSignal, devicesOf, handlerStub, missingSignals, removePeripheral, scriptNameFor,
-  seedInputs, signalDef, signalOn, toggleSignal, type PeripheralState, type SignalDef,
+  readPeripheralState, seedInputs, signalDef, signalOn, toggleSignal, type PeripheralState, type SignalDef,
 } from './peripherals';
 import type { Project } from './project';
 import { announce, button, el, icon, openSheet } from './ui';
 
 const AXES: Record<string, CustomGesture['axis']> = { x: [1, 0, 0], y: [0, 1, 0], z: [0, 0, 1], '-z': [0, 0, -1] };
 const axisName = (a: CustomGesture['axis']) => Object.entries(AXES).find(([, v]) => v.every((n, i) => n === a[i]))?.[0] ?? 'x';
-
-function readState(project: Project): PeripheralState {
-  const s = project.scene;
-  const safe = <T,>(read: () => T, fallback: T): T => {
-    try {
-      return read();
-    } catch {
-      return fallback;
-    }
-  };
-  return {
-    peripherals: safe(() => parsePeripherals(s.peripherals), []),
-    inputs: safe(() => (s.inputs ? parseInputs(s.inputs) : null), null),
-    gestures: safe(() => parseGestures(s.gestures), {}),
-  };
-}
 
 /** Writes the state as one undo step; turning Position on also grants the location permission scripts need. */
 function commit(project: Project, next: PeripheralState): boolean {
@@ -43,9 +27,9 @@ function commit(project: Project, next: PeripheralState): boolean {
 /** Sheet listing every device: Add for the ones a game can have, "Coming soon" for the rest. */
 export function openPeripheralPicker(project: Project, onAdded: () => void): void {
   openSheet('Add peripheral', (body, close) => {
-    const have = new Set(devicesOf(readState(project)));
+    const have = new Set(devicesOf(readPeripheralState(project.scene)));
     const add = (kind: PeripheralKind) => {
-      const next = addPeripheral(seedInputs(readState(project), project.clientScripts), kind);
+      const next = addPeripheral(seedInputs(readPeripheralState(project.scene), project.clientScripts), kind);
       if (!commit(project, next)) return;
       close();
       announce(`Added ${PERIPHERALS[kind].label}.`);
@@ -73,7 +57,7 @@ export function createPeripheralsPanel(project: Project, selection: Selection, e
 
   const change = (key: string, edit: (s: PeripheralState) => PeripheralState) => {
     focusKey = key;
-    if (!commit(project, edit(seedInputs(readState(project), project.clientScripts)))) focusKey = null;
+    if (!commit(project, edit(seedInputs(readPeripheralState(project.scene), project.clientScripts)))) focusKey = null;
   };
 
   const addHandler = (sig: SignalDef, deviceLabel: string) => {
@@ -154,7 +138,7 @@ export function createPeripheralsPanel(project: Project, selection: Selection, e
   };
 
   const render = () => {
-    const state = readState(project);
+    const state = readPeripheralState(project.scene);
     const devices = devicesOf(state);
     const used = inferInputs(project.clientScripts);
     const addPeripheralBtn = button('Add peripheral', () => openPeripheralPicker(project, () => {}), { icon: 'plus', variant: 'default' });

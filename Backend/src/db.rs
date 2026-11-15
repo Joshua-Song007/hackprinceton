@@ -244,6 +244,19 @@ pub async fn list_games_by_owner(db: &Db, owner_id: &str) -> DbResult<Vec<Game>>
     rows.iter().map(game_from_row).collect()
 }
 
+/// Deletes the game; its versions go with it (ON DELETE CASCADE). False when the game does not exist.
+pub async fn delete_game(db: &Db, game_id: &str) -> DbResult<bool> {
+    let pool = match db {
+        Db::Pg(pool) => pool,
+        Db::Mem(m) => return Ok(m.delete_game(game_id)),
+    };
+    let done = sqlx::query("DELETE FROM games WHERE id = $1::uuid")
+        .bind(game_id)
+        .execute(pool)
+        .await?;
+    Ok(done.rows_affected() > 0)
+}
+
 /// Owner account id of a game, or None when the game does not exist.
 pub async fn game_owner(db: &Db, game_id: &str) -> DbResult<Option<String>> {
     let pool = match db {
@@ -684,6 +697,10 @@ mod tests {
             (2, "device", "A", 1)
         );
         assert!(catalog.iter().all(|r| r.id != unpublished.id));
+        assert!(delete_game(&db, &unpublished.id).await.unwrap());
+        assert!(delete_game(&db, &g.id).await.unwrap());
+        assert!(fetch_game_version(&db, &g.id, None).await.unwrap().is_none());
+        assert!(!delete_game(&db, &g.id).await.unwrap());
         sqlx::query("DELETE FROM accounts WHERE id = $1::uuid")
             .bind(&a.id)
             .execute(&pool)

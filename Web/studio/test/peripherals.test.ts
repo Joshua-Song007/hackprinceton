@@ -6,7 +6,7 @@ import { ScriptSandbox, type WorkerLike } from '@pear/script';
 import { inferInputs, rigFor } from '../src/needs';
 import {
   COMING_SOON, PERIPHERALS, addPeripheral, deviceOfSignal, devicesOf, handlerStub, missingSignals, removePeripheral, scriptNameFor,
-  seedInputs, setSignal, signalOn, toggleSignal, type PeripheralState, type SignalId,
+  readPeripheralState, seedInputs, setSignal, signalOn, toggleSignal, type PeripheralState, type SignalId,
 } from '../src/peripherals';
 
 // A real worker thread running the sandbox evaluator (same adapter shape as e2e.test.ts).
@@ -136,5 +136,18 @@ describe('handler scripts', () => {
   afterAll(() => sandbox.dispose());
   it('every stub loads in the real sandbox', async () => {
     for (const id of ALL) await expect(sandbox.loadScript(`stub-${id}`, handlerStub(id)), id).resolves.toBeUndefined();
+  });
+});
+
+describe('readPeripheralState', () => {
+  it('reads the three device fields of a scene', () => {
+    const s = readPeripheralState({ peripherals: ['watch'], inputs: { head: true, gestures: ['tap'], players: [1, 4] }, gestures: { swing } });
+    expect(s.peripherals).toEqual(['watch']);
+    expect(s.inputs).toMatchObject({ head: true, gestures: ['tap'], players: [1, 4] });
+    expect(Object.keys(s.gestures)).toEqual(['swing']);
+  });
+  it('counts a missing or invalid field as empty', () => {
+    expect(readPeripheralState({})).toEqual({ peripherals: [], inputs: null, gestures: {} });
+    expect(readPeripheralState({ peripherals: ['tablet'], inputs: { gestures: ['wave'] }, gestures: { 'bad name': {} } })).toEqual({ peripherals: [], inputs: null, gestures: {} });
   });
 });

@@ -117,6 +117,14 @@ export class AccountController {
     this.emit();
   }
 
+  /** Deletes a cloud game. The list drops it, and when it was the selected game the selection clears. */
+  async deleteGame(gameId: string): Promise<void> {
+    await this.client.deleteGame(gameId);
+    this.games = this.games.filter((g) => g.id !== gameId);
+    if (this.gameId === gameId) this.select(null);
+    else this.emit();
+  }
+
   async createGame(title: string): Promise<void> {
     if (!title) throw new Error('Enter a title for the new game.');
     const game = await this.client.createGame(title);

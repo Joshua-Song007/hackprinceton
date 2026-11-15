@@ -31,3 +31,18 @@ Not file-bound: sound design, visuals and feedback polish (no gray boxes); playt
 - [x] `Backend/src/game_server/script_host.rs` — embedded JS engine running a game's server scripts with the same `serverScript` API as `ServerScriptEngine`. (rquickjs with `parallel`; `factory()` yields `NoopHost` until published server-script sources are reachable; prelude.js shared via `include_str!` from Packages/OmniScript, so Backend no longer builds standalone.)
 - [x] `Backend/tests/api.rs` — publish → fetch round-trip; non-owner publish rejected.
 - [x] `Backend/tests/script_host.rs` — same server-script fixture as `ServerScriptEngineTests.swift`, same results.
+
+## Later changes
+
+### 2026-11-14 — Delete a game
+Paths: `Backend/src/api/games.rs`, `Backend/src/db.rs`, `Backend/src/memstore.rs`, `Backend/src/game_server/session.rs`
+
+`DELETE /api/games/{id}` removes a game. Order: auth (401), valid uuid (400), database present (503), then the owner lookup: unknown game 404, another account's game 403; then the delete (a game removed by a concurrent request is 404) and 204. The versions go with the game (the `game_versions` foreign key already cascades; no other table references games). A live session of the game is closed: the players' senders drop so their sockets end, and the debug bus state is cleared as when the last player leaves. The published catalog is derived from games with versions, so a deleted game leaves it.
+
+Known, not changed: `/play/{id}` never checks that the game exists, so a player who reconnects to a deleted game id starts a session without server scripts. The Postgres branch of `db::delete_game` is covered only by the `DATABASE_URL` round trip, which was not run (no database here); the memory store and the route are covered by tests.
+
+Stale comments flagged, not edited: the header of `Backend/src/api/games.rs` (first line and the `Routes:` list lack `DELETE /api/games/{id}`).
+- [x] `Backend/src/api/games.rs` — `DELETE /api/games/{id}` handler and route, route tests on the memory store.
+- [x] `Backend/src/db.rs` — `delete_game`; Postgres round trip extended.
+- [x] `Backend/src/memstore.rs` — `delete_game` removes the game and its versions.
+- [x] `Backend/src/game_server/session.rs` — `Registry::close` and `close`.

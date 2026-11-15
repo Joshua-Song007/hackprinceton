@@ -169,3 +169,31 @@ Stale comments flagged, not edited: `Web/packages/pear-runtime/src/scene.ts` lin
 - [x] `Web/studio/test/peripherals.test.ts` — catalog, edits, stubs in the real sandbox.
 - [x] `Web/packages/pear-runtime/test/runtime.test.ts` — `parsePeripherals`.
 - [x] `Web/studio/test/authoring.test.ts` — `applyPeripheralChange`, `addHandlerScript`.
+
+### 2026-11-14 — Project delete and finding Peripherals
+Paths: `Web/packages/pear-cloud/src/client.ts`, `Web/studio/src/account.ts`, `Web/studio/src/project.ts`, `Web/studio/src/recent.ts`, `Web/studio/src/projectsScreen.ts`, `Web/studio/src/main.ts`, `Web/studio/src/layout.ts`, `Web/studio/src/explorer.ts`, `Web/studio/src/peripherals.ts`, `Web/studio/src/peripheralsPanel.ts`
+
+Projects can be deleted from the gallery. A cloud game you own gets Delete (confirm sheet; removes the game and its versions through the new backend route, then its preview and opened time; the editor unlinks it if it was open). The autosaved draft gets Discard (removes the stored draft; the editor keeps its project and saves a new draft on the next change). A project saved on this computer keeps Remove (forgets the entry; the web cannot delete a file). A game another account owns has no action. The confirm button closes the sheet first, so a failure shows on the page.
+
+Peripherals are easier to find. A saved layout from before the panel existed is offered the Peripherals tab once, beside Explorer (`pear.studio.layout.offered` remembers it, so closing the tab sticks; the presets mark it offered). The Explorer has a Peripherals group between Scene and Client scripts: an Add button for the picker, an empty-state line, and a row per device that opens the panel. `readPeripheralState` moved to `peripherals.ts` so the panel and the Explorer share it.
+
+Known, not changed: a draft or recent entry saved while linked to a deleted game keeps its `gameId`, so Publish from it reports the existing "no such game" message. A preview render still queued for a deleted game fails inside `ThumbnailQueue`, which already swallows errors.
+
+Not verified in a browser: the Delete and Discard sheets and buttons, the Explorer group and arrow-key order, the one-time Peripherals tab in a saved layout.
+
+Stale comments flagged, not edited: the first line of `Web/studio/src/explorer.ts` (lists entities and scripts only) and of `Web/studio/src/projectsScreen.ts` (tile actions named as Open).
+- [x] `Web/packages/pear-cloud/src/client.ts` — `deleteGame`.
+- [x] `Web/studio/src/account.ts` — `deleteGame`.
+- [x] `Web/studio/src/project.ts` — `deleteDraft`.
+- [x] `Web/studio/src/recent.ts` — `rowAction`.
+- [x] `Web/studio/src/projectsScreen.ts` — Delete and Discard with confirm sheets, `deleted` hook.
+- [x] `Web/studio/src/main.ts` — unlink on delete; Explorer callback.
+- [x] `Web/studio/src/layout.ts` — `panelsToOffer`, one-time offer.
+- [x] `Web/studio/src/explorer.ts` — Peripherals group.
+- [x] `Web/studio/src/peripherals.ts` — `readPeripheralState`.
+- [x] `Web/studio/src/peripheralsPanel.ts` — uses the shared reader.
+- [x] `Web/studio/test/layout.test.ts` — `panelsToOffer`.
+- [x] `Web/studio/test/screens.test.ts` — `rowAction`.
+- [x] `Web/studio/test/studio.test.ts` — `AccountController.deleteGame`.
+- [x] `Web/studio/test/peripherals.test.ts` — `readPeripheralState`.
+- [x] `Web/packages/pear-cloud/test/client.test.ts` — `deleteGame`.

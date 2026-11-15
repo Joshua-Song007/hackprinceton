@@ -1,6 +1,8 @@
 // Explorer: entity tree plus client and server script lists. Select an entity, open / add / rename / delete scripts.
+import type { PeripheralKind } from '@pear/runtime';
 import type { EditorBus } from './editor';
 import type { PanelView } from './layout';
+import { PERIPHERALS, devicesOf, readPeripheralState } from './peripherals';
 import { walkEntities, type Project, type ScriptKind } from './project';
 import { announce, button, el, icon, openMenu, openSheet, promptSheet } from './ui';
 
@@ -25,12 +27,12 @@ export class Selection {
   }
 }
 
-type Item = { kind: 'entity'; id: string } | { kind: 'script'; script: ScriptKind; name: string };
+type Item = { kind: 'entity'; id: string } | { kind: 'script'; script: ScriptKind; name: string } | { kind: 'device'; device: PeripheralKind };
 
-export function createExplorerPanel(project: Project, selection: Selection, editor: EditorBus, addPeripheral: () => void): PanelView {
+export function createExplorerPanel(project: Project, selection: Selection, editor: EditorBus, addPeripheral: () => void, showPeripherals: () => void): PanelView {
   const root = el('div', { class: 'pn', role: 'region', 'aria-label': 'Explorer' });
   let focusKey: string | null = null;
-  const keyOf = (i: Item) => (i.kind === 'entity' ? `e:${i.id}` : `s:${i.script}:${i.name}`);
+  const keyOf = (i: Item) => (i.kind === 'entity' ? `e:${i.id}` : i.kind === 'device' ? `d:${i.device}` : `s:${i.script}:${i.name}`);
 
   const add = (kind: ScriptKind) =>
     promptSheet(`Add ${kind} script`, 'Script name', '', 'Add', (name) => {
@@ -121,13 +123,23 @@ export function createExplorerPanel(project: Project, selection: Selection, edit
         ? button('Add', () => add(kind), { variant: 'small', ariaLabel: `Add ${kind} script` })
         : title === 'Scene'
           ? button('Add', () => openMenu(addBtn!, addItems(null, true)), { variant: 'small', ariaLabel: 'Add entity' })
-          : null;
+          : title === 'Peripherals'
+            ? button('Add', addPeripheral, { variant: 'small', ariaLabel: 'Add peripheral' })
+            : null;
       return el('div', { class: 'pn-group' }, [title, ...(addBtn ? [addBtn] : [])]);
     };
+    const deviceList = el('ul', { class: 'om-list', role: 'listbox', 'aria-label': 'Peripherals' });
+    const devices = devicesOf(readPeripheralState(project.scene));
+    for (const device of devices) {
+      const item: Item = { kind: 'device', device };
+      items.push(item);
+      deviceList.append(row(item, 0, PERIPHERALS[device].icon, PERIPHERALS[device].label, PERIPHERALS[device].blurb, false));
+    }
+    const noDevices = el('p', { class: 'om-sub', style: 'padding:4px 12px' }, ['No peripherals yet. Add the devices your players bring.']);
     const clientList = scriptList('client');
     const serverList = scriptList('server');
     const keys = el('span', { id: 'explorer-keys', class: 'sr-only' }, ['Arrow keys move, Enter opens a script, F2 renames, Ctrl+D duplicates an entity, Delete removes, Shift+F10 opens the context menu.']);
-    root.replaceChildren(keys, group('Scene'), list, group('Client scripts', 'client'), clientList, group('Server scripts', 'server'), serverList);
+    root.replaceChildren(keys, group('Scene'), list, group('Peripherals'), devices.length ? deviceList : noDevices, group('Client scripts', 'client'), clientList, group('Server scripts', 'server'), serverList);
     if (!items.some((i) => keyOf(i) === focusKey)) focusKey = items[0] ? keyOf(items[0]) : null;
     root.querySelectorAll<HTMLElement>('li').forEach((li) => (li.tabIndex = li.dataset.key === focusKey ? 0 : -1));
 
@@ -145,8 +157,14 @@ export function createExplorerPanel(project: Project, selection: Selection, edit
         else render();
         root.querySelector<HTMLElement>(`li[data-key="${CSS.escape(focusKey)}"]`)?.focus();
       } else if (e.key === 'Enter' && it.kind === 'script') editor.open({ kind: it.script, name: it.name });
-      else if (e.key === 'F2') it.kind === 'script' ? rename(it.script, it.name) : renameEntity(it.id);
-      else if (e.key === 'Delete') it.kind === 'script' ? remove(it.script, it.name) : deleteEntity(it.id);
+      else if (e.key === 'Enter' && it.kind === 'device') showPeripherals();
+      else if (e.key === 'F2') {
+        if (it.kind === 'script') rename(it.script, it.name);
+        else if (it.kind === 'entity') renameEntity(it.id);
+      } else if (e.key === 'Delete') {
+        if (it.kind === 'script') remove(it.script, it.name);
+        else if (it.kind === 'entity') deleteEntity(it.id);
+      }
       else if (e.key === 'd' && e.ctrlKey && it.kind === 'entity') {
         e.preventDefault();
         duplicateEntity(it.id);
@@ -163,7 +181,10 @@ export function createExplorerPanel(project: Project, selection: Selection, edit
       li.addEventListener('click', () => {
         focusKey = keyOf(item);
         if (item.kind === 'entity') selection.set(item.id);
-        else render();
+        else {
+          render();
+          if (item.kind === 'device') showPeripherals();
+        }
       });
       if (item.kind === 'entity') {
         li.addEventListener('contextmenu', (e) => {

@@ -35,6 +35,17 @@ describe('CloudClient requests', () => {
     expect(lastCall(fetch, 2).url).toBe('http://srv:8080/api/games');
   });
 
+  it('deletes a game with the token, resolves on 204 and reports a refusal', async () => {
+    const fetch = stub(new Response(null, { status: 204 }), json({}, 403), json({}, 404));
+    const c = new CloudClient({ fetch, token: 'tok' });
+    await expect(c.deleteGame('g 1')).resolves.toBeUndefined();
+    expect(lastCall(fetch).url).toBe('/api/games/g%201');
+    expect(lastCall(fetch).init.method).toBe('DELETE');
+    expect(lastCall(fetch).init.headers.Authorization).toBe('Bearer tok');
+    expect(await c.deleteGame('g-1').catch((e) => e)).toMatchObject({ kind: 'forbidden', status: 403 });
+    expect(await c.deleteGame('g-1').catch((e) => e)).toMatchObject({ kind: 'notFound', status: 404 });
+  });
+
   it('creates games, publishes, and fetches versions', async () => {
     const game = { id: 'g-1', owner_id: 'a1', title: 'T', created_at: 't', updated_at: 't' };
     const fetch = stub(json(game, 201), json({ ...version, id: 'v', game_id: 'g-1', version: 1, published_at: 't' }, 201), json({}), json({}));

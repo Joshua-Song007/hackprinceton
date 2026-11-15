@@ -268,6 +268,15 @@ impl Registry {
         }
     }
 
+    /// Ends a game's live session (its game was deleted): the players' senders drop, which ends their sockets.
+    /// No live session: nothing to do.
+    pub fn close(&self, game_id: &str) {
+        let mut map = self.lock();
+        if map.remove(game_id).is_some() {
+            bus().end(game_id);
+        }
+    }
+
     /// Handles one inbound text frame from a player. Malformed frames and stale connections are ignored.
     pub fn remote(&self, game_id: &str, player: &str, conn: u64, text: &str) {
         let Ok(frame) = serde_json::from_str::<Frame>(text) else { return };
@@ -316,6 +325,11 @@ fn registry() -> &'static Registry {
 /// Reloads a live session of the game onto a freshly published version (called by games.rs).
 pub fn reload(game_id: &str, version: &GameVersion) {
     registry().reload(game_id, Release::from(version));
+}
+
+/// Ends a live session of a game that was just deleted (called by games.rs).
+pub fn close(game_id: &str) {
+    registry().close(game_id);
 }
 
 async fn play(
@@ -454,6 +468,24 @@ mod tests {
             v.push(serde_json::from_str(&t).unwrap());
         }
         v
+    }
+
+    #[test]
+    fn close_drops_the_session_and_ends_every_players_channel() {
+        let (r, _log) = reg();
+        let (_ca, mut a) = player(&r, "g", "a");
+        let (_cb, mut b) = player(&r, "g", "b");
+        let (_cc, mut other) = player(&r, "h", "c");
+        drain(&mut a);
+        drain(&mut b);
+        r.close("g");
+        assert_eq!(r.player_count("g"), 0);
+        assert!(matches!(a.try_recv(), Err(tokio::sync::mpsc::error::TryRecvError::Disconnected)));
+        assert!(matches!(b.try_recv(), Err(tokio::sync::mpsc::error::TryRecvError::Disconnected)));
+        assert_eq!(r.player_count("h"), 1);
+        drain(&mut other);
+        r.close("g");
+        r.close("nobody");
     }
 
     #[test]

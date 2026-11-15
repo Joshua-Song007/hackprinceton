@@ -162,3 +162,27 @@ describe('account.ts publishIfChanged', () => {
     expect((await acc.publishIfChanged(p)).published).toBe(true);
   });
 });
+
+describe('account.ts deleteGame', () => {
+  it('drops the game from the list, clears a matching selection, and keeps the list when the server refuses', async () => {
+    const { AccountController } = await import('../src/account');
+    const acc = new AccountController(new PreferenceStore(null), false, null);
+    const game = (id: string) => ({ id, owner_id: 'me', title: id, created_at: 't', updated_at: 't' });
+    acc.games = [game('g1'), game('g2')];
+    acc.gameId = 'g1';
+    const deleted: string[] = [];
+    let refuse = false;
+    (acc as unknown as { client: unknown }).client = { deleteGame: async (id: string) => { if (refuse) throw new Error('forbidden'); deleted.push(id); } };
+    await acc.deleteGame('g2');
+    expect(acc.games.map((g) => g.id)).toEqual(['g1']);
+    expect(acc.gameId).toBe('g1');
+    refuse = true;
+    await expect(acc.deleteGame('g1')).rejects.toThrow('forbidden');
+    expect(acc.games.map((g) => g.id)).toEqual(['g1']);
+    refuse = false;
+    await acc.deleteGame('g1');
+    expect(acc.games).toEqual([]);
+    expect(acc.gameId).toBeNull();
+    expect(deleted).toEqual(['g2', 'g1']);
+  });
+});

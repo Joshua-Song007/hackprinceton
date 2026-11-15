@@ -1,8 +1,8 @@
 // Projects screen: a sticky top bar (search, sort, New project), a profile and statistics column, and Solo and Shared sections of tiles (preview, name, last opened, last edited, Open) for cloud games, projects saved on this computer and the autosaved draft; New project starts from a template.
 import { announce, button, el, openSheet } from './ui';
 import { describeError, type AccountController } from './account';
-import { TEMPLATES, loadDraft, loadDraftAt, templateSnapshot, type ProjectSnapshot } from './project';
-import { SORT_KEYS, SORT_LABELS, dropThumb, filterProjects, forgetOpened, forgetRecent, formatWhen, loadOpened, loadRecent, loadSort, loadThumbs, markOpened, mergeProjects, projectStats, saveSort, saveThumb, sortProjects, thumbHit, type ProjectRow, type RecentEntry, type SortKey, type Thumb } from './recent';
+import { TEMPLATES, deleteDraft, loadDraft, loadDraftAt, templateSnapshot, type ProjectSnapshot } from './project';
+import { SORT_KEYS, SORT_LABELS, dropThumb, filterProjects, forgetOpened, forgetRecent, formatWhen, loadOpened, loadRecent, loadSort, loadThumbs, markOpened, mergeProjects, projectStats, rowAction, saveSort, saveThumb, sortProjects, thumbHit, type ProjectRow, type RecentEntry, type SortKey, type Thumb } from './recent';
 import { openProjectFile, type SavedFile } from './projectFile';
 import { renderThumbnail, thumbStamp, ThumbnailQueue } from './thumbnail';
 
@@ -12,6 +12,8 @@ export interface ProjectsHooks {
   signOut(): void;
   /** Set when an editor session already exists, so the screen can offer a way back. */
   back?: (() => void) | undefined;
+  /** A cloud game was deleted from this screen; the editor unlinks it if it was open. */
+  deleted?(gameId: string): void;
 }
 
 export function renderProjectsScreen(root: HTMLElement, h: ProjectsHooks): void {
@@ -52,6 +54,36 @@ export function renderProjectsScreen(root: HTMLElement, h: ProjectsHooks): void 
     });
     watcher = seen;
 
+    // The sheet is modal and would hide the page's error line, so it closes first and the work reports on the page.
+    const confirm = (title: string, text: string, label: string, work: () => Promise<void>) =>
+      openSheet(title, (body, close) => {
+        body.append(
+          el('p', {}, [text]),
+          el('div', { class: 'sheet-actions' }, [
+            button('Cancel', close, { variant: 'default' }),
+            button(label, () => { close(); run(work)(); }, { danger: true }),
+          ]),
+        );
+      });
+    const deleteGame = (p: ProjectRow) => confirm(`Delete ${p.title}?`, 'Deletes this game and every published version from the cloud and disconnects anyone playing it. This cannot be undone.', 'Delete game', async () => {
+      await account.deleteGame(p.key);
+      await dropThumb(`cloud:${p.key}`);
+      await forgetOpened('cloud', p.key);
+      delete thumbs[`cloud:${p.key}`];
+      h.deleted?.(p.key);
+      announce(`Deleted ${p.title}.`);
+      render();
+    });
+    const discardDraft = () => confirm('Discard the draft?', 'Removes the autosaved draft. The editor keeps its current project and saves a new draft when you change it.', 'Discard draft', async () => {
+      await deleteDraft();
+      await dropThumb('draft:draft');
+      await forgetOpened('draft', 'draft');
+      delete thumbs['draft:draft'];
+      draft = undefined;
+      draftAt = undefined;
+      announce('Discarded the draft.');
+      render();
+    });
     const tile = (p: ProjectRow) => {
       const id = `${p.kind}:${p.key}`;
       const stamp = thumbStamp(p.stamp);
@@ -79,7 +111,9 @@ export function renderProjectsScreen(root: HTMLElement, h: ProjectsHooks): void 
         when(p.time, 'Edited'),
         el('div', { class: 'scr-actions' }, [
           button('Open', open, { ariaLabel: `Open ${p.title}` }),
-          ...(p.kind === 'local' ? [button('Remove', async () => { await forgetRecent(p.key); await dropThumb(id); await forgetOpened('local', p.key); recents = recents.filter((r) => r.id !== p.key); render(); }, { variant: 'borderless', ariaLabel: `Remove ${p.title} from recent` })] : []),
+          ...(rowAction(p) === 'delete' ? [button('Delete', () => deleteGame(p), { variant: 'borderless', danger: true, ariaLabel: `Delete ${p.title} from the cloud` })] : []),
+          ...(rowAction(p) === 'discard' ? [button('Discard', discardDraft, { variant: 'borderless', danger: true, ariaLabel: 'Discard the autosaved draft' })] : []),
+          ...(rowAction(p) === 'remove' ? [button('Remove', async () => { await forgetRecent(p.key); await dropThumb(id); await forgetOpened('local', p.key); recents = recents.filter((r) => r.id !== p.key); render(); }, { variant: 'borderless', ariaLabel: `Remove ${p.title} from recent` })] : []),
         ]),
       ]);
       const li = el('li', { class: 'scr-tile' }, [thumb, info]);

@@ -535,6 +535,8 @@ export async function withStore<T>(mode: IDBTransactionMode, run: (store: IDBObj
 // The time is written after the snapshot and its failure is swallowed, so it can never raise the autosave-failed report.
 export const saveDraft = (s: ProjectSnapshot): Promise<unknown> => withStore('readwrite', (st) => st.put(s, 'current')).then(() => withStore('readwrite', (st) => st.put(Date.now(), 'current-at')).catch(() => undefined));
 export const loadDraft = (): Promise<ProjectSnapshot | undefined> => withStore('readonly', (st) => st.get('current') as IDBRequest<ProjectSnapshot | undefined>);
+/** Removes the stored draft. The time is removed second and its failure swallowed, like `saveDraft`. */
+export const deleteDraft = (): Promise<unknown> => withStore('readwrite', (st) => st.delete('current')).then(() => withStore('readwrite', (st) => st.delete('current-at')).catch(() => undefined));
 /** ms since epoch of the last draft save; undefined for a draft saved before this was recorded. */
 export const loadDraftAt = (): Promise<number | undefined> => withStore('readonly', (st) => st.get('current-at') as IDBRequest<number | undefined>);
 

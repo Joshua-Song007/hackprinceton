@@ -206,6 +206,11 @@ export class CloudClient {
     return this.request('POST', '/api/games', { title });
   }
 
+  /** Deletes the game and every version of it. Only the owner may; anyone playing it is disconnected. */
+  deleteGame(gameId: string): Promise<void> {
+    return this.request('DELETE', `/api/games/${encodeURIComponent(gameId)}`);
+  }
+
   publish(gameId: string, version: NewGameVersion): Promise<GameVersion> {
     return this.request('POST', `/api/games/${encodeURIComponent(gameId)}/versions`, version);
   }

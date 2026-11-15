@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { nextScreen } from '../src/screens';
-import { MAX_RECENT, capOpened, filterProjects, formatWhen, loadSort, mergeProjects, projectStats, pushRecent, removeRecent, saveSort, sortProjects, thumbHit, type RecentEntry } from '../src/recent';
+import { MAX_RECENT, capOpened, filterProjects, formatWhen, loadSort, mergeProjects, projectStats, pushRecent, removeRecent, rowAction, saveSort, sortProjects, thumbHit, type RecentEntry } from '../src/recent';
 import { templateSnapshot } from '../src/project';
 import { renderThumbnail, thumbStamp } from '../src/thumbnail';
 
@@ -194,5 +194,18 @@ describe('recent projects', () => {
     expect(list[0]!.id).toBe('p5');
     expect(list.filter((e) => e.id === 'p5')).toHaveLength(1);
     expect(removeRecent(list, 'p5').some((e) => e.id === 'p5')).toBe(false);
+  });
+});
+
+describe('rowAction', () => {
+  it('deletes a cloud game you own, discards the draft, only forgets a local project, and leaves a shared game alone', () => {
+    expect(rowAction({ kind: 'cloud', scope: 'solo' })).toBe('delete');
+    expect(rowAction({ kind: 'cloud', scope: 'shared' })).toBeNull();
+    expect(rowAction({ kind: 'draft', scope: 'solo' })).toBe('discard');
+    expect(rowAction({ kind: 'local', scope: 'solo' })).toBe('remove');
+  });
+  it('matches what mergeProjects produces for another account\'s game', () => {
+    const rows = mergeProjects([{ id: 'a', title: 'A', updated_at: '2026-01-01T00:00:00Z', owner_id: 'me' }, { id: 'b', title: 'B', updated_at: '2026-01-01T00:00:00Z', owner_id: 'other' }], [], true, {}, undefined, 'me');
+    expect(Object.fromEntries(rows.map((r) => [r.key, rowAction(r)]))).toEqual({ a: 'delete', b: null, draft: 'discard' });
   });
 });

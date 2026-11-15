@@ -34,10 +34,20 @@ export interface LayoutHooks {
 const CURRENT_KEY = 'pear.studio.layout.current';
 const CORE_PANELS = ['viewport', 'explorer', 'inspector'];
 const NAMED_KEY = 'pear.studio.layouts';
+/** Panels added after layouts were first saved: each is offered once as a tab beside `beside`, so an old saved layout does not hide it for good. */
+const ADDED_PANELS: readonly { id: string; beside: string }[] = [{ id: 'peripherals', beside: 'explorer' }];
+const OFFERED_KEY = 'pear.studio.layout.offered';
 const SASH_STEP = 16;
 const COLLAPSED_SIZE = 28;
 type Direction = 'left' | 'right' | 'top' | 'bottom';
 const ARROWS: Record<string, Direction> = { ArrowLeft: 'left', ArrowRight: 'right', ArrowUp: 'top', ArrowDown: 'bottom' };
+
+/** The added panels to offer now: never offered before, not open, registered, and with their neighbour open. */
+export function panelsToOffer(
+  openIds: readonly string[], offered: readonly string[], specIds: readonly string[], added: readonly { id: string; beside: string }[] = ADDED_PANELS,
+): { id: string; beside: string }[] {
+  return added.filter((a) => !offered.includes(a.id) && !openIds.includes(a.id) && specIds.includes(a.id) && openIds.includes(a.beside));
+}
 
 export class LayoutManager {
   readonly api: DockviewApi;
@@ -82,8 +92,36 @@ export class LayoutManager {
   /** Restores the last layout, or builds the default one. A saved layout naming an unknown panel is discarded. */
   start(): void {
     const saved = this.storage.getItem(CURRENT_KEY);
-    if (saved && this.tryLoad(saved)) return;
+    if (saved && this.tryLoad(saved)) return void this.offerAddedPanels();
     this.applyPreset('default');
+  }
+
+  private offered(): string[] {
+    try {
+      const saved = JSON.parse(this.storage.getItem(OFFERED_KEY) ?? '[]') as unknown;
+      return Array.isArray(saved) ? saved.filter((x): x is string => typeof x === 'string') : [];
+    } catch {
+      return [];
+    }
+  }
+
+  private markOffered(ids: readonly string[]): void {
+    try {
+      this.storage.setItem(OFFERED_KEY, JSON.stringify([...new Set([...this.offered(), ...ids])]));
+    } catch { /* not remembered: the panel may be offered again */ }
+  }
+
+  /** A restored layout saved before an added panel existed gets that panel once, as an inactive tab. */
+  private offerAddedPanels(): void {
+    const due = panelsToOffer(this.api.panels.map((p) => p.id), this.offered(), [...this.specs.keys()]);
+    this.restoring = true;
+    try {
+      for (const a of due) this.add(a.id, { referencePanel: a.beside, direction: 'within' }, {}, true);
+    } finally {
+      this.restoring = false;
+    }
+    this.markOffered(ADDED_PANELS.map((a) => a.id));
+    if (due.length) this.storage.setItem(CURRENT_KEY, JSON.stringify(this.api.toJSON()));
   }
 
   private tryLoad(json: string): boolean {
@@ -150,6 +188,7 @@ export class LayoutManager {
     this.api.getPanel('console')?.api.setActive();
     this.api.getPanel('viewport')?.api.setActive();
     this.restoring = false;
+    this.markOffered(ADDED_PANELS.map((a) => a.id)); // the presets already include them
     this.storage.setItem(CURRENT_KEY, JSON.stringify(this.api.toJSON()));
   }
 

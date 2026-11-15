@@ -11,7 +11,7 @@
 
 use axum::extract::{Path, State};
 use axum::http::{HeaderMap, StatusCode};
-use axum::routing::{get, post};
+use axum::routing::{delete, get, post};
 use axum::{Json, Router};
 use serde::Deserialize;
 
@@ -142,9 +142,38 @@ async fn fetch_version(
         .ok_or(StatusCode::NOT_FOUND)
 }
 
+async fn remove_game(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(game_id): Path<String>,
+) -> Result<StatusCode, StatusCode> {
+    let account = require_account(&headers)?;
+    if !valid_uuid(&game_id) {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+    let pool = state.db.as_ref().ok_or(StatusCode::SERVICE_UNAVAILABLE)?;
+    match db::game_owner(pool, &game_id)
+        .await
+        .map_err(|e| db_err("owner", e))?
+    {
+        None => return Err(StatusCode::NOT_FOUND),
+        Some(owner) if owner != account.id => return Err(StatusCode::FORBIDDEN),
+        Some(_) => {}
+    }
+    if !db::delete_game(pool, &game_id)
+        .await
+        .map_err(|e| db_err("delete", e))?
+    {
+        return Err(StatusCode::NOT_FOUND); // a concurrent request deleted it first
+    }
+    session::close(&game_id); // anyone playing it is disconnected
+    Ok(StatusCode::NO_CONTENT)
+}
+
 pub fn routes() -> Router<AppState> {
     Router::new()
         .route("/api/games", post(create_game).get(list_games))
+        .route("/api/games/{id}", delete(remove_game))
         .route("/api/games/{id}/versions", post(publish_version))
         .route("/api/games/{id}/versions/{version}", get(fetch_version))
 }
@@ -199,9 +228,13 @@ mod tests {
     }
 
     async fn request(raw: &str) -> String {
+        request_with(None, raw).await
+    }
+
+    async fn request_with(db: Option<db::Db>, raw: &str) -> String {
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();
-        let app = routes().with_state(AppState { db: None });
+        let app = routes().with_state(AppState { db });
         tokio::spawn(async move {
             let _ = axum::serve(listener, app).await;
         });
@@ -227,6 +260,44 @@ mod tests {
             .map(|t| format!("Authorization: Bearer {t}\r\n"))
             .unwrap_or_default();
         format!("GET {path} HTTP/1.1\r\nHost: x\r\n{auth}Connection: close\r\n\r\n")
+    }
+
+    fn delete_req(path: &str, tok: Option<&str>) -> String {
+        let auth = tok
+            .map(|t| format!("Authorization: Bearer {t}\r\n"))
+            .unwrap_or_default();
+        format!("DELETE {path} HTTP/1.1\r\nHost: x\r\n{auth}Connection: close\r\n\r\n")
+    }
+
+    #[tokio::test]
+    async fn delete_is_owner_only_and_removes_the_game() {
+        let mem = db::Db::Mem(crate::memstore::MemStore::default());
+        let owner = token();
+        let other = crate::api::accounts::test_token("someone-else");
+        let g = db::create_game(&mem, "games-test-account", "T").await.unwrap();
+        let path = format!("/api/games/{}", g.id);
+        let r = request_with(Some(mem.clone()), &delete_req(&path, None)).await;
+        assert!(r.starts_with("HTTP/1.1 401"), "{r}");
+        let r = request_with(Some(mem.clone()), &delete_req("/api/games/not-a-uuid", Some(&owner))).await;
+        assert!(r.starts_with("HTTP/1.1 400"), "{r}");
+        let r = request_with(Some(mem.clone()), &delete_req(&path, Some(&other))).await;
+        assert!(r.starts_with("HTTP/1.1 403"), "{r}");
+        let r = request_with(Some(mem.clone()), &delete_req(&format!("/api/games/{GID}"), Some(&owner))).await;
+        assert!(r.starts_with("HTTP/1.1 404"), "{r}");
+        let r = request_with(Some(mem.clone()), &get_req("/api/games", Some(&owner))).await;
+        assert!(r.contains(&g.id), "{r}");
+        let r = request_with(Some(mem.clone()), &delete_req(&path, Some(&owner))).await;
+        assert!(r.starts_with("HTTP/1.1 204"), "{r}");
+        let r = request_with(Some(mem.clone()), &get_req("/api/games", Some(&owner))).await;
+        assert!(!r.contains(&g.id), "{r}");
+        let r = request_with(Some(mem), &delete_req(&path, Some(&owner))).await;
+        assert!(r.starts_with("HTTP/1.1 404"), "{r}");
+    }
+
+    #[tokio::test]
+    async fn delete_without_database_is_503() {
+        let r = request(&delete_req(&format!("/api/games/{GID}"), Some(&token()))).await;
+        assert!(r.starts_with("HTTP/1.1 503"), "{r}");
     }
 
     #[tokio::test]

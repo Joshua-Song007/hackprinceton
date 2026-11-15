@@ -124,6 +124,15 @@ impl MemStore {
         s.games.iter().filter(|g| g.owner_id == owner_id).cloned().collect()
     }
 
+    /// Removes the game and its versions; false when the game does not exist.
+    pub fn delete_game(&self, game_id: &str) -> bool {
+        let mut s = self.lock();
+        let before = s.games.len();
+        s.games.retain(|g| g.id != game_id);
+        s.versions.retain(|v| v.game_id != game_id);
+        s.games.len() != before
+    }
+
     pub fn game_owner(&self, game_id: &str) -> Option<String> {
         let s = self.lock();
         s.games.iter().find(|g| g.id == game_id).map(|g| g.owner_id.clone())
@@ -339,6 +348,22 @@ mod tests {
         assert!(m.fetch_game_version(&g1.id, Some(3)).is_none());
         assert!(m.insert_game_version("missing", &nv("x")).is_none());
         assert!(m.list_games_by_owner("o").iter().any(|g| g.id == g1.id && g.updated_at >= g1.created_at));
+    }
+
+    #[test]
+    fn delete_game_removes_it_and_its_versions_only() {
+        let m = MemStore::default();
+        let g1 = m.create_game("o", "G1");
+        let g2 = m.create_game("o", "G2");
+        m.insert_game_version(&g1.id, &nv("a")).unwrap();
+        m.insert_game_version(&g2.id, &nv("b")).unwrap();
+        assert!(m.delete_game(&g1.id));
+        assert!(m.game_owner(&g1.id).is_none());
+        assert!(m.fetch_game_version(&g1.id, None).is_none());
+        assert_eq!(m.fetch_game_version(&g2.id, None).unwrap().scene, json!({"tag": "b"}));
+        assert_eq!(m.list_games_by_owner("o").len(), 1);
+        assert!(!m.delete_game(&g1.id));
+        assert!(!m.delete_game("missing"));
     }
 
     fn nvs(scene: serde_json::Value, run_mode: &str) -> NewGameVersion {

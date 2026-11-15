@@ -70,7 +70,7 @@ const marketplace = new MarketplaceController({
 
 const panels: PanelSpec[] = [
   marketplacePanel(marketplace),
-  { id: 'explorer', title: 'Explorer', create: () => createExplorerPanel(project, selection, editor, () => openPeripheralPicker(project, () => layout.show('peripherals'))) },
+  { id: 'explorer', title: 'Explorer', create: () => createExplorerPanel(project, selection, editor, () => openPeripheralPicker(project, () => layout.show('peripherals')), () => layout.show('peripherals')) },
   { id: 'peripherals', title: 'Peripherals', create: () => createPeripheralsPanel(project, selection, editor) },
   { id: 'viewport', title: 'Viewport', create: () => createViewportPanel(viewport, run) },
   { id: 'inspector', title: 'Inspector', create: () => createInspectorPanel(project, selection) },
@@ -161,6 +161,7 @@ const showScreen = (s: Screen) => {
       }),
       signOut: () => void account.signOut().catch(() => showScreen('login')),
       back: hasProject ? () => showScreen('editor') : undefined,
+      deleted: (id) => { if (project.gameId === id) project.setCloud(null, null); },
     });
   }
 };

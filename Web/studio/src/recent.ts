@@ -83,6 +83,16 @@ export function filterProjects(rows: readonly ProjectRow[], query: string): Proj
   return q ? rows.filter((r) => r.title.toLowerCase().includes(q)) : [...rows];
 }
 
+/**
+ * What a tile may do beyond Open: `delete` removes a cloud game you own for good, `discard` drops the autosaved draft,
+ * `remove` forgets a project saved on this computer (the web cannot delete its file), none for a game another account owns.
+ */
+export function rowAction(row: Pick<ProjectRow, 'kind' | 'scope'>): 'delete' | 'discard' | 'remove' | null {
+  if (row.kind === 'draft') return 'discard';
+  if (row.kind === 'local') return 'remove';
+  return row.scope === 'solo' ? 'delete' : null;
+}
+
 export interface ProjectStats { total: number; solo: number; shared: number; cloud: number; local: number }
 
 /** Counts for the profile column; the autosaved draft counts as on this computer. */

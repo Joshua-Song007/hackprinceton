@@ -1,8 +1,9 @@
 // Peripherals catalog: the devices a game can list, the signals each one gives, and the pure edits the Peripherals panel makes.
 // Signals stay in the scene's `inputs` and `gestures`; `peripherals` only lists devices, so there is one source of truth.
 import { GESTURE_TYPES, type GestureType, type Slot } from '@pear/core';
-import { PERIPHERAL_KINDS, type CustomGesture, type PeripheralKind, type SceneInputs } from '@pear/runtime';
+import { PERIPHERAL_KINDS, parseGestures, parseInputs, parsePeripherals, type CustomGesture, type PeripheralKind, type SceneInputs } from '@pear/runtime';
 import { inferInputs, rigFor, slotDevice } from './needs';
+import type { SceneJson } from './project';
 
 export type SignalId = 'head' | 'position' | 'heartRate' | GestureType;
 
@@ -98,6 +99,22 @@ export function setSignal(inputs: SceneInputs | null, id: SignalId, on: boolean)
   if (id === 'position') return { ...base, position: on };
   if (id === 'heartRate') return { ...base, heartRate: on };
   return { ...base, gestures: GESTURE_TYPES.filter((g) => (g === id ? on : base.gestures.includes(g))) };
+}
+
+/** The device fields of a scene as the panel edits them; a field that does not parse counts as empty. */
+export function readPeripheralState(scene: SceneJson): PeripheralState {
+  const safe = <T,>(read: () => T, fallback: T): T => {
+    try {
+      return read();
+    } catch {
+      return fallback;
+    }
+  };
+  return {
+    peripherals: safe(() => parsePeripherals(scene.peripherals), []),
+    inputs: safe(() => (scene.inputs ? parseInputs(scene.inputs) : null), null),
+    gestures: safe(() => parseGestures(scene.gestures), {}),
+  };
 }
 
 /** Devices the game uses: the listed ones plus those its signals and motion gestures imply, in catalog order. */
