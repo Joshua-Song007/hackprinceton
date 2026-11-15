@@ -5,12 +5,15 @@ import type { SceneJson } from './project';
 
 export const THUMB_WIDTH = 480;
 export const THUMB_HEIGHT = 300;
+/** Bump when previews should look different (colors, framing): cached ones with another style are re-rendered. */
+export const THUMB_STYLE = 'pear-dark-1';
+export const thumbStamp = (stamp: string): string => `${stamp}#${THUMB_STYLE}`;
 
 let shared: Viewport | undefined;
 let unavailable = false;
 
 /** A JPEG data URL of the scene, or undefined when it does not parse or WebGL (or a DOM) is missing. */
-export function renderThumbnail(scene: SceneJson): string | undefined {
+export function renderThumbnail(scene: SceneJson, colorsFrom?: Element): string | undefined {
   if (unavailable) return undefined;
   try {
     const entities = flattenScene(parseScene(scene));
@@ -20,7 +23,7 @@ export function renderThumbnail(scene: SceneJson): string | undefined {
       unavailable = true; // no WebGL: stop retrying on every card
       return undefined;
     }
-    shared.setColors(readViewportColors());
+    shared.setColors(readViewportColors(colorsFrom));
     shared.setScene(entities);
     return shared.snapshot(THUMB_WIDTH, THUMB_HEIGHT);
   } catch {

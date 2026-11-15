@@ -54,6 +54,7 @@ export class Viewport {
   private scene = new THREE.Scene();
   private camera = new THREE.PerspectiveCamera(70, 1, 0.05, 200);
   private content = new THREE.Group();
+  private guides = new THREE.Group(); // floor grid and origin axes: editor aids, hidden in previews
   private entities: WorldEntity[] = [];
   private selected: string | null = null;
   private orbit: OrbitState = DEFAULT_ORBIT;
@@ -192,9 +193,14 @@ export class Viewport {
   snapshot(width: number, height: number): string {
     this.resize(width, height);
     const box = contentBounds(this.entities);
-    this.setOrbit(box ? frameBox({ ...DEFAULT_ORBIT, yaw: 0.6 }, box.center, box.size) : { ...DEFAULT_ORBIT, yaw: 0.6 });
-    this.renderer.render(this.scene, this.camera);
-    return this.renderer.domElement.toDataURL('image/jpeg', 0.8);
+    this.setOrbit(box ? frameBox({ ...DEFAULT_ORBIT, yaw: 0.6 }, box.center, box.size, 1.8) : { ...DEFAULT_ORBIT, yaw: 0.6 });
+    this.guides.visible = false;
+    try {
+      this.renderer.render(this.scene, this.camera);
+      return this.renderer.domElement.toDataURL('image/jpeg', 0.8);
+    } finally {
+      this.guides.visible = true;
+    }
   }
 
   /** Axis cube in the top-right corner: the world axes seen from the current camera orientation. */
@@ -268,12 +274,13 @@ export class Viewport {
     this.scene.background = new THREE.Color(c.viewport);
     this.buildGizmo();
 
-    const grid = new THREE.GridHelper(40, 40, c.grid, c.grid);
-    this.content.add(grid);
+    this.guides = new THREE.Group();
+    this.guides.add(new THREE.GridHelper(40, 40, c.grid, c.grid));
     for (const [dir, color] of [
       [[1, 0, 0], c.axisX], [[0, 1, 0], c.axisY], [[0, 0, 1], c.axisZ],
     ] as const)
-      this.content.add(new THREE.ArrowHelper(new THREE.Vector3(...dir), new THREE.Vector3(), 1.5, color, 0.3, 0.15));
+      this.guides.add(new THREE.ArrowHelper(new THREE.Vector3(...dir), new THREE.Vector3(), 1.5, color, 0.3, 0.15));
+    this.content.add(this.guides);
 
     const cube = new THREE.BoxGeometry(1, 1, 1);
     const ball = new THREE.SphereGeometry(0.5, 20, 14);

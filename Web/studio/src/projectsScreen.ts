@@ -2,9 +2,9 @@
 import { announce, button, el, openSheet } from './ui';
 import { describeError, type AccountController } from './account';
 import { TEMPLATES, loadDraft, loadDraftAt, templateSnapshot, type ProjectSnapshot } from './project';
-import { dropThumb, forgetOpened, forgetRecent, formatWhen, loadOpened, loadRecent, loadThumbs, markOpened, mergeProjects, saveThumb, thumbHit, type RecentEntry, type Thumb } from './recent';
+import { SORT_KEYS, SORT_LABELS, dropThumb, filterProjects, forgetOpened, forgetRecent, formatWhen, loadOpened, loadRecent, loadSort, loadThumbs, markOpened, mergeProjects, projectStats, saveSort, saveThumb, sortProjects, thumbHit, type ProjectRow, type RecentEntry, type SortKey, type Thumb } from './recent';
 import { openProjectFile, type SavedFile } from './projectFile';
-import { renderThumbnail, ThumbnailQueue } from './thumbnail';
+import { renderThumbnail, thumbStamp, ThumbnailQueue } from './thumbnail';
 
 export interface ProjectsHooks {
   account: AccountController;
@@ -26,12 +26,19 @@ export function renderProjectsScreen(root: HTMLElement, h: ProjectsHooks): void 
     void work().catch(fail);
   };
 
-  const list = el('ul', { class: 'scr-grid', role: 'list' });
+  const soloList = el('ul', { class: 'scr-grid', role: 'list', 'aria-label': 'Solo projects' });
+  const sharedList = el('ul', { class: 'scr-grid', role: 'list', 'aria-label': 'Shared projects' });
+  const soloCount = el('span', { class: 'om-secondary' });
+  const sharedCount = el('span', { class: 'om-secondary' });
+  const stats = el('dl', { class: 'scr-stats' });
   let draft: ProjectSnapshot | undefined;
   let draftAt: number | undefined;
   let recents: RecentEntry[] = [];
   let opened: Record<string, number> = {};
   let thumbs: Record<string, Thumb> = {};
+  let query = '';
+  let sort: SortKey = loadSort();
+  let shownCount = 0;
   // Previews start only after the cached ones are loaded, one render at a time, for tiles that scroll into view.
   let ready = false;
   const queue = new ThumbnailQueue();
@@ -44,32 +51,35 @@ export function renderProjectsScreen(root: HTMLElement, h: ProjectsHooks): void 
       for (const hit of hits) if (hit.isIntersecting) { seen?.unobserve(hit.target); starts.get(hit.target)?.(); }
     });
     watcher = seen;
-    const rows = mergeProjects(account.games, recents, !!draft, opened, draftAt).map((p) => {
+
+    const tile = (p: ProjectRow) => {
       const id = `${p.kind}:${p.key}`;
-      const where = p.kind === 'cloud' ? 'Cloud' : p.kind === 'draft' ? 'Unsaved draft' : 'This computer';
+      const stamp = thumbStamp(p.stamp);
+      const where = p.kind === 'cloud' ? 'Cloud' : p.kind === 'draft' ? 'Draft' : 'This computer';
       const open = p.kind === 'cloud'
         ? run(async () => { const snapshot = await account.openLatest(p.key); void markOpened('cloud', p.key); h.open(snapshot); })
         : () => { void markOpened(p.kind, p.key); h.open(p.kind === 'draft' ? draft! : p.recent!.snapshot); };
 
       const thumb = el('div', { class: 'scr-thumb' }, [el('span', { class: 'scr-thumb-none' }, ['No preview'])]);
       const show = (url: string) => thumb.replaceChildren(el('img', { src: url, alt: '', 'aria-hidden': 'true' }));
-      const cached = thumbHit(thumbs, id, p.stamp);
+      const cached = thumbHit(thumbs, id, stamp);
       if (cached) show(cached);
       const scene = async () => (p.kind === 'cloud' ? (await account.openLatest(p.key)).scene : p.kind === 'draft' ? draft!.scene : p.recent!.snapshot.scene);
       const start = () => queue.add(async () => {
-        const url = renderThumbnail(await scene());
-        if (url) await saveThumb(id, p.stamp, url);
+        const url = renderThumbnail(await scene(), root);
+        if (url) await saveThumb(id, stamp, url);
         return url;
-      }, (url) => { if (url) { thumbs[id] = { stamp: p.stamp, url }; show(url); } });
+      }, (url) => { if (url) { thumbs[id] = { stamp, url }; show(url); } });
 
+      const when = (ms: number | undefined, label: 'Opened' | 'Edited') => el('span', { class: ms === undefined ? 'scr-meta scr-dim' : 'scr-meta' }, [formatWhen(ms, label)]);
       const info = el('div', { class: 'scr-info' }, [
         el('span', { class: 'scr-name', title: p.title }, [p.title]),
-        el('span', { class: 'scr-meta' }, [where]),
-        el('span', { class: 'scr-meta' }, [formatWhen(p.opened, 'Opened')]),
-        el('span', { class: 'scr-meta' }, [formatWhen(p.time, 'Edited')]),
+        el('span', { class: 'scr-tag' }, [where]),
+        when(p.opened, 'Opened'),
+        when(p.time, 'Edited'),
         el('div', { class: 'scr-actions' }, [
           button('Open', open, { ariaLabel: `Open ${p.title}` }),
-          ...(p.kind === 'local' ? [button('Remove', async () => { await forgetRecent(p.key); await dropThumb(id); await forgetOpened('local', p.key); recents = recents.filter((r) => r.id !== p.key); render(); }, { variant: 'small', ariaLabel: `Remove ${p.title} from recent` })] : []),
+          ...(p.kind === 'local' ? [button('Remove', async () => { await forgetRecent(p.key); await dropThumb(id); await forgetOpened('local', p.key); recents = recents.filter((r) => r.id !== p.key); render(); }, { variant: 'borderless', ariaLabel: `Remove ${p.title} from recent` })] : []),
         ]),
       ]);
       const li = el('li', { class: 'scr-tile' }, [thumb, info]);
@@ -78,8 +88,24 @@ export function renderProjectsScreen(root: HTMLElement, h: ProjectsHooks): void 
         if (seen) { starts.set(li, start); seen.observe(li); } else start();
       }
       return li;
-    });
-    list.replaceChildren(...(rows.length ? rows : [el('li', { class: 'om-sub scr-empty' }, ['No projects yet. Create one with New project.'])]));
+    };
+    const empty = (name: 'solo' | 'shared') => {
+      const q = query.trim();
+      return el('li', { class: 'om-sub scr-empty' }, [q ? `No ${name} projects match “${q}”.` : name === 'solo' ? 'No solo projects yet. Create one with New project.' : 'Nothing shared with you yet.']);
+    };
+    const fill = (list: HTMLElement, count: HTMLElement, rows: ProjectRow[], name: 'solo' | 'shared') => {
+      count.textContent = String(rows.length);
+      list.replaceChildren(...(rows.length ? rows.map(tile) : [empty(name)]));
+    };
+
+    const all = mergeProjects(account.games, recents, !!draft, opened, draftAt, account.account?.id);
+    const shown = sortProjects(filterProjects(all, query), sort);
+    shownCount = shown.length;
+    fill(soloList, soloCount, shown.filter((r) => r.scope === 'solo'), 'solo');
+    fill(sharedList, sharedCount, shown.filter((r) => r.scope === 'shared'), 'shared');
+    const s = projectStats(all);
+    stats.replaceChildren(...([['Total projects', s.total], ['Solo', s.solo], ['Shared', s.shared], ['In the cloud', s.cloud], ['On this computer', s.local]] as const)
+      .flatMap(([label, n]) => [el('dt', {}, [label]), el('dd', { class: 'om-num' }, [String(n)])]));
   };
   render();
   account.refreshGames().then(render, fail);
@@ -107,19 +133,53 @@ export function renderProjectsScreen(root: HTMLElement, h: ProjectsHooks): void 
     );
   });
 
+  // Typing waits a moment before redrawing, so each key does not restart the preview queue; the result count is announced once it settles.
+  let renderTimer: ReturnType<typeof setTimeout> | undefined;
+  let noteTimer: ReturnType<typeof setTimeout> | undefined;
+  const note = () => {
+    clearTimeout(noteTimer);
+    noteTimer = setTimeout(() => announce(`${shownCount} ${shownCount === 1 ? 'project' : 'projects'}`), 400);
+  };
+  const search = el('input', { type: 'search', 'aria-label': 'Search projects', placeholder: 'Search projects', autocomplete: 'off' });
+  search.addEventListener('input', () => {
+    clearTimeout(renderTimer);
+    renderTimer = setTimeout(() => { query = search.value; render(); note(); }, 150);
+  });
+  const order = el('select', { 'aria-label': 'Sort projects' }, SORT_KEYS.map((k) => el('option', { value: k, selected: k === sort }, [SORT_LABELS[k]])));
+  order.addEventListener('change', () => {
+    sort = SORT_KEYS.find((k) => k === order.value) ?? 'activity';
+    saveSort(sort);
+    render();
+    note();
+  });
+  const create = button('New project', newProject, { variant: 'default', icon: 'plus' });
+  create.classList.add('scr-new');
+
   const who = account.account?.display_name || account.account?.subject || '';
-  root.replaceChildren(el('div', { class: 'scr-card scr-wide' }, [
-    el('div', { class: 'scr-head' }, [
-      el('h1', {}, ['Projects']),
-      el('span', { class: 'om-secondary' }, [`Signed in as ${who}`]),
+  const avatar = el('span', { class: 'scr-avatar', 'aria-hidden': 'true' }, [(who.trim()[0] ?? '?').toUpperCase()]);
+  const side = el('aside', { class: 'scr-side', 'aria-label': 'Profile and statistics' }, [
+    el('div', { class: 'scr-profile' }, [
+      avatar,
+      el('div', { class: 'scr-who' }, [el('span', { class: 'scr-name', title: who }, [who]), el('span', { class: 'scr-meta scr-dim' }, ['Signed in'])]),
+    ]),
+    button('Sign out', h.signOut, { variant: 'small' }),
+    stats,
+    el('div', { class: 'scr-side-actions' }, [
+      button('Open file...', run(async () => {
+        const opened = await openProjectFile();
+        if (opened) { void markOpened('local', opened.name); h.open(opened.snapshot, { name: opened.name, handle: opened.handle }); }
+      }), { variant: 'small' }),
       ...(h.back ? [button('Back to editor', h.back, { variant: 'small' })] : []),
-      button('Sign out', h.signOut, { variant: 'small' }),
-      button('New project', newProject, { variant: 'default' }),
+    ]),
+  ]);
+  const section = (title: string, count: HTMLElement, list: HTMLElement) => el('section', { class: 'scr-section' }, [el('h2', {}, [title, count]), list]);
+  root.replaceChildren(el('div', { class: 'scr-card scr-wide' }, [
+    el('div', { class: 'scr-bar' }, [
+      el('h1', {}, ['Projects']),
+      el('div', { class: 'scr-find' }, [el('div', { class: 'om-field scr-search' }, [search]), el('div', { class: 'om-field' }, [order])]),
+      create,
     ]),
     error,
-    el('section', { class: 'scr-section' }, [el('h2', {}, ['Your projects']), list, button('Open file...', run(async () => {
-      const opened = await openProjectFile();
-      if (opened) { void markOpened('local', opened.name); h.open(opened.snapshot, { name: opened.name, handle: opened.handle }); }
-    }), { variant: 'small' })]),
+    el('div', { class: 'scr-shell' }, [side, el('div', { class: 'scr-main' }, [section('Solo', soloCount, soloList), section('Shared', sharedCount, sharedList)])]),
   ]));
 }

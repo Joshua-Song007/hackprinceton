@@ -111,3 +111,15 @@ The Projects screen is a gallery of tiles in two columns (one under 640 px): a r
 Paths: `Web/studio/src/recent.ts`, `Web/studio/src/projectsScreen.ts`
 
 The three comments the gallery entry above lists as stale (`ProjectRow.time`, the `mergeProjects` doc, the `projectsScreen.ts` header) were rewritten on request; no code changed.
+
+### 2026-11-14 — Projects screen v2
+Paths: `Web/studio/src/projectsScreen.ts`, `Web/studio/src/recent.ts`, `Web/studio/src/thumbnail.ts`, `Web/studio/src/theme.css`, `Web/studio/index.html`, `Web/packages/pear-runtime/src/viewport.ts`, `Web/packages/pear-runtime/src/orbit.ts`
+
+The Projects screen has a sticky full-width top bar (title, centered search and sort, a larger New project button with a plus icon) and a left column with the profile (avatar, name, Sign out), statistics (total, solo, shared, in the cloud, on this computer), Open file and Back to editor. The tiles are in a "Solo" and a "Shared" section. Solo = local projects, the draft and cloud games owned by the account; Shared = cloud games owned by another account (the backend lists only owned games, so Shared stays empty until sharing exists). Search filters by title (debounced 150 ms); sort is Last activity, Last edited, Last opened or Name, saved in `localStorage` (`pear.studio.gallery.sort`). Tiles show a source tag (Cloud, This computer, Draft) in place of the location line; Remove is a quiet button. Previews hide the floor grid and axes and frame tighter (`frameBox` margin 1.8); `THUMB_STYLE` is part of the cache stamp, so older previews were re-rendered. The gallery and login use a darker Pear palette (Emerald and Tea pulled down in value, contrast computed) scoped to `.scr`, dark theme only; gallery buttons are 32 px and New project is 44 px. Not built, now Phase 11 in `plan.md`: Published stat and real Shared data (backend), a New project tile, relative dates, Pear styling for sheets, menus and the editor, bundled Fraunces and Geist. Not changed: the gallery keeps "Open file..." (three periods) because every menu label uses three periods. Not seen in a browser: sticky behavior, search focus, preview framing, colors. Stale comments kept: `recent.ts` line 1 (file header), `projectsScreen.ts` line 1 (header), `viewport.ts` `snapshot` doc ("draws without the axis gizmo"). The `omni-runtime` paths in the entries above are the old names of `pear-runtime`.
+- [x] `Web/studio/src/projectsScreen.ts` — bar, profile column, Solo and Shared sections, search and sort.
+- [x] `Web/studio/src/recent.ts` — `scope`, `sortProjects`, `filterProjects`, `projectStats`, `loadSort`, `saveSort`.
+- [x] `Web/studio/src/thumbnail.ts` — `THUMB_STYLE`, `thumbStamp`, colors read from the screen.
+- [x] `Web/studio/src/theme.css` — dark Pear tone, sticky bar, two-column shell, larger controls.
+- [x] `Web/studio/index.html` — plus icon.
+- [x] `Web/packages/pear-runtime/src/viewport.ts` — `guides` group hidden in `snapshot()`.
+- [x] `Web/packages/pear-runtime/src/orbit.ts` — `frameBox` margin.

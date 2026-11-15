@@ -1,6 +1,6 @@
 # Build Plan
 
-Product name is Pear; code keeps the Pear prefix. Phases 1-5, 8-10 and Cross-Cutting are compressed (full text in planHistory/, read via grep). Only Phase 6 (stretch) and 7 are open here.
+Product name is Pear; code keeps the Pear prefix. Phases 1-5, 8-10 and Cross-Cutting are compressed (full text in planHistory/, read via grep). Only Phase 6 (stretch), 7 and 11 are open here.
 
 - Checklist, worked top-to-bottom. Each item is exactly one file with a single responsibility — `stage`/`apply` should be able to touch one checklist item without needing to also change any other file. Phases are ordered by dependency (later phases consume earlier ones).
 - Paths are relative to the repo root. Packages use SwiftPM layout: `Packages/<Pkg>/Package.swift`, `Sources/<Pkg>/`, `Tests/<Pkg>Tests/`. Dependency rules come from the package table in `overview.md`; any item that bends them carries a parenthetical note.
@@ -371,6 +371,22 @@ Full text: planHistory/phase-10.md
 - [ ] `Packages/PearCollab/Sources/PearCollab/PeerSync.swift` — Bonjour peer discovery and change exchange.
 - [ ] `Packages/PearCollab/Sources/PearCollab/Presence.swift` — collaborator cursors, selections, "who's editing" state. Syncs the project only; never touches input.
 - [ ] `Apps/PearStudio/PearStudio/Collab/PresenceOverlayView.swift` — cursors in the script editor, selection highlights in the viewport, entity badges.
+
+---
+
+## Phase 11: Web Studio projects screen follow-ups
+
+Not built from the Projects screen v2 work (see planHistory/phase-08.md, Later changes): sharing and publish state in the game list, Pear styling outside the gallery, small gallery polish. Order is free; the backend items go together.
+
+- [ ] `Backend/src/db.rs` — `Game` (or the list query) carries owner name, share list and `published` / latest version for `GET /games`; Published stat and real Shared data need it.
+- [ ] `Backend/src/memstore.rs` — same fields in the in-memory store, so the dev server matches Postgres.
+- [ ] `Backend/src/api/games.rs` — return the new fields from the games list and accept sharing a game with another account.
+- [ ] `Web/packages/pear-cloud/src/client.ts` — `Game` gains the new fields; client method for sharing.
+- [ ] `Web/studio/src/projectsScreen.ts` — Published stat, a "New project" tile in the grid, Shared section fed by real data.
+- [ ] `Web/studio/src/recent.ts` — relative dates in `formatWhen` ("Today, 8:16 PM", "Yesterday").
+- [ ] `Web/studio/src/theme.css` — style `dialog.sheet` and menus outside `.scr` in the dark Pear tone while open over the gallery.
+- [ ] `Web/studio/src/studio-tokens.css` — move the editor tokens and the light theme (Paper) to the Pear palette; keep the darker tone chosen for the gallery.
+- [ ] `Web/studio/index.html` — bundle or link Fraunces and Geist (none are in the repo) and use Fraunces for the 28 px "Projects" heading.
 
 ---
 

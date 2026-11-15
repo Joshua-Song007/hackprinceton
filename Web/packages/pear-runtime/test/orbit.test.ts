@@ -69,6 +69,14 @@ describe('editor camera', () => {
     expect(s.target).toEqual([4, 1, -3]);
     expect(s.distance).toBeGreaterThan(2);
   });
+
+  it('frameBox margin sets how far back the camera sits; the default is unchanged', () => {
+    const size = [4, 4, 4] as const;
+    const base = frameBox(DEFAULT_ORBIT, [0, 0, 0], size);
+    const tight = frameBox(DEFAULT_ORBIT, [0, 0, 0], size, 1.8);
+    expect(base.distance).toBeCloseTo(Math.hypot(4, 4, 4) / 2 * 2.5);
+    expect(tight.distance).toBeLessThan(base.distance);
+  });
 });
 
 import { rayPlaneY } from '../src/orbit';

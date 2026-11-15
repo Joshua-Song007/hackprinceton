@@ -73,9 +73,9 @@ export function zoomBy(s: OrbitState, wheelDelta: number): OrbitState {
 }
 
 /** Centers on a box (position, scale) from the current direction. */
-export function frameBox(s: OrbitState, center: Xyz, size: Xyz): OrbitState {
+export function frameBox(s: OrbitState, center: Xyz, size: Xyz, margin = 2.5): OrbitState {
   const radius = Math.max(0.5, Math.hypot(size[0], size[1], size[2]) / 2);
-  return { ...s, target: center, distance: clamp(radius * 2.5, MIN_DISTANCE, MAX_DISTANCE) };
+  return { ...s, target: center, distance: clamp(radius * margin, MIN_DISTANCE, MAX_DISTANCE) };
 }
 
 /**
