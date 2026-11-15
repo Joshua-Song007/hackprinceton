@@ -23,6 +23,7 @@ const kit = await call('kit_reference');
 assert.match(kit, /PEARUI v1/);
 assert.match(kit, /SCENARIO/);
 assert.match(kit, /Worked example/);
+assert.match(kit, /haversine/);
 console.log('kit_reference:', kit.length, 'chars');
 
 const games = JSON.parse(await call('list_games'));
