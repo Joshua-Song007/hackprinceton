@@ -1,0 +1,13 @@
+/* Lobbies panel. Colours come from studio-tokens.css only. */
+.lb-root { height: 100%; display: flex; flex-direction: column; background: var(--bg-panel); color: var(--text); min-width: 0; }
+.lb-toolbar { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--line); background: var(--bg-window); }
+.lb-status { margin-left: auto; font-size: 12px; color: var(--text-secondary); }
+.lb-list { flex: 1; min-height: 0; overflow: auto; padding: 8px 12px; }
+.lb-empty, .lb-none { color: var(--text-secondary); font-size: 12px; }
+.lb-game h3 { margin: 12px 0 6px; font-size: 13px; }
+.lb-lobby { border: 1px solid var(--line); border-radius: 6px; padding: 8px; margin-bottom: 8px; }
+.lb-lobby header { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.lb-code { font: 600 13px ui-monospace, Menlo, Consolas, monospace; letter-spacing: .12em; }
+.lb-meta { flex: 1; font-size: 12px; color: var(--text-secondary); }
+.lb-players { list-style: none; margin: 6px 0 0; padding: 0; }
+.lb-players li { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 2px 0; font-size: 12px; }
