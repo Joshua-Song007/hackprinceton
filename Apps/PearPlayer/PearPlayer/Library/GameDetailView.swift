@@ -7,6 +7,8 @@ struct GameDetailView: View {
     let model: PlayerModel
     /// Set by the home hero's Play: start fetching as soon as the page opens.
     var autoplay = false
+    /// A friend's Quick Draw lobby to join with that autoplay.
+    var lobby: String?
 
     private enum PlayState {
         case idle
@@ -15,6 +17,10 @@ struct GameDetailView: View {
     }
 
     @State private var play: PlayState = .idle
+    /// nil until the bundle says; device games only.
+    @State private var phoneOnly: Bool?
+    @State private var openLobbies: [LobbyInfo] = []
+    @State private var typedCode = ""
     #if os(iOS)
     @Environment(\.horizontalSizeClass) private var sizeClass
     private var wide: Bool { sizeClass == .regular }
@@ -65,7 +71,9 @@ struct GameDetailView: View {
                 columns {
                 VStack(alignment: .leading, spacing: PearTheme.Space.s6) {
                 VStack(alignment: .leading, spacing: PearTheme.Space.s3) {
-                    if playability.isPlayable {
+                    if playability.isPlayable, phoneOnly == true {
+                        lobbyChoices
+                    } else if playability.isPlayable {
                         Button {
                             Task { await playTapped() }
                         } label: {
@@ -140,7 +148,14 @@ struct GameDetailView: View {
             .frame(maxWidth: .infinity)
         }
         .background { PearBackdrop(seed: entry.id) }
-        .task { if autoplay, case .idle = play, model.playability(of: entry).isPlayable { await playTapped() } }
+        .task {
+            phoneOnly = await model.isPhoneOnly(entry)
+            if phoneOnly == true { await refreshLobbies() }
+            // A phone-only game needs a lobby: the hero's Play (no lobby) lands on the choices instead.
+            if autoplay, case .idle = play, model.playability(of: entry).isPlayable, phoneOnly != true || lobby != nil {
+                await playTapped(lobby: lobby)
+            }
+        }
         .navigationTitle(entry.title.isEmpty ? "Game" : entry.title)
         #if os(macOS)
         .toolbarBackground(PearTheme.bgWindow, for: .windowToolbar)
@@ -164,10 +179,81 @@ struct GameDetailView: View {
         }
     }
 
-    private func playTapped() async {
+    /// Host a fresh lobby, join by code, or pick an open lobby (Quick Draw and other phone-only games).
+    @ViewBuilder private var lobbyChoices: some View {
+        VStack(alignment: .leading, spacing: PearTheme.Space.s4) {
+            Button {
+                Task { await playTapped(lobby: QDLobby.randomCode()) }
+            } label: {
+                if case .working = play {
+                    ProgressView().tint(PearTheme.onAccent).frame(minWidth: 200)
+                } else {
+                    Label("Host a lobby", systemImage: "plus.circle.fill")
+                        .font(PearTheme.sans(18, .semibold))
+                        .frame(minWidth: 220, minHeight: 52)
+                }
+            }
+            .buttonStyle(PearPrimaryButtonStyle())
+            .controlSize(.large)
+            .disabled(isWorking)
+
+            HStack(spacing: PearTheme.Space.s3) {
+                TextField("Lobby code", text: $typedCode)
+                    .font(PearTheme.mono(20))
+                    #if os(iOS)
+                    .textInputAutocapitalization(.characters)
+                    #endif
+                    .autocorrectionDisabled()
+                    .padding(.horizontal, PearTheme.Space.s4)
+                    .frame(minHeight: 52)
+                    .background(PearTheme.bgField, in: RoundedRectangle(cornerRadius: PearTheme.radiusControl))
+                    .overlay(RoundedRectangle(cornerRadius: PearTheme.radiusControl).strokeBorder(PearTheme.lineControl))
+                    .accessibilityLabel("Lobby code")
+                Button("Join with code") {
+                    if let code = QDLobby.normalize(typedCode) { Task { await playTapped(lobby: code) } }
+                }
+                .buttonStyle(PearSecondaryButtonStyle())
+                .disabled(isWorking || QDLobby.normalize(typedCode) == nil)
+            }
+
+            HStack {
+                Text("OPEN LOBBIES").font(PearTheme.header()).tracking(PearTheme.headerTracking).foregroundStyle(PearTheme.textSecondary)
+                Spacer()
+                Button { Task { await refreshLobbies() } } label: { Image(systemName: "arrow.clockwise") }
+                    .accessibilityLabel("Refresh lobbies")
+                    .buttonStyle(.plain).foregroundStyle(PearTheme.textSecondary)
+            }
+            if openLobbies.isEmpty {
+                Text("No open lobbies. Host one and share the code.").font(PearTheme.sans(16)).foregroundStyle(PearTheme.textSecondary)
+            }
+            ForEach(openLobbies) { l in
+                Button {
+                    Task { await playTapped(lobby: l.code) }
+                } label: {
+                    HStack {
+                        Text(l.code).font(PearTheme.mono(20)).foregroundStyle(PearTheme.accent)
+                        Text(l.players.isEmpty ? "Empty" : l.players.map(\.name).joined(separator: ", "))
+                            .font(PearTheme.sans(16)).foregroundStyle(PearTheme.text).lineLimit(1)
+                        Spacer()
+                        Image(systemName: "chevron.right").foregroundStyle(PearTheme.textSecondary)
+                    }
+                    .padding(.horizontal, PearTheme.Space.s4).frame(minHeight: 52)
+                    .background(PearTheme.bgPanel, in: RoundedRectangle(cornerRadius: PearTheme.radiusControl))
+                }
+                .buttonStyle(.plain)
+                .disabled(isWorking)
+                .accessibilityLabel("Join lobby \(l.code), \(l.players.count) players")
+            }
+            result
+        }
+    }
+
+    private func refreshLobbies() async { openLobbies = await model.lobbies(for: entry) }
+
+    private func playTapped(lobby: String? = nil) async {
         play = .working
         do {
-            try await model.play(entry)
+            try await model.play(entry, lobby: lobby)
             play = .idle
         } catch {
             if let cloud = error as? CloudError, cloud == .unauthorized || cloud == .notSignedIn {
