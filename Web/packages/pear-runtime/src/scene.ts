@@ -1,4 +1,5 @@
-// scene.json loader. Same shape, defaults and error messages as SceneDescription.swift + SceneLoader.swift.
+// scene.json loader. Same shape, defaults and error messages as SceneDescription.swift + SceneLoader.swift for the fields Swift has;
+// `inputs`, `peripherals` and `gestures` exist only here (the Swift decoder ignores them).
 import { GESTURE_TYPES, SLOTS, quat, vec3, type GestureType, type Quat, type Slot, type Vec3 } from '@pear/core';
 
 export class SceneError extends Error {

@@ -17,8 +17,8 @@ export function inferInputs(clientScripts: Record<string, string>): SceneInputs 
 }
 
 /**
- * Devices that provide the inputs in the simulator. Head rides on the AirPods head device, position is a phone
- * GPS fix, gestures also on the phone, heart rate on the watch.
+ * Devices that provide the inputs in the simulator, plus every device the scene lists as a peripheral. Head rides on
+ * the AirPods head device, position is a phone GPS fix, gestures also on the phone, heart rate on the watch.
  */
 export function rigFor(inputs: SceneInputs | null | undefined, custom: Record<string, CustomGesture> = {}, peripherals: readonly PeripheralKind[] = []): SimDeviceKind[] {
   const kinds = new Set<SimDeviceKind>(peripherals);

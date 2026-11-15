@@ -1,4 +1,4 @@
-/* Pear — generated from tokens.json */
+/* Pear — Studio tokens, copied by hand from tokens.json (no generator) */
 :root, [data-theme="dark"] {
   --bg-window: #232427; /* Toolbar, title bar and status bar: the window chrome. */
   --bg-panel: #2a2b2f; /* Sidebars, inspector, debug area. Panels are split by `line`, never floated as cards. */
@@ -11,7 +11,7 @@
   --line-control: #7a7c84; /* Borders of fields, buttons and segmented controls. 3:1 on bg-panel and bg-field. */
   --text: #e4e5e7; /* Primary text on bg-window, bg-panel, bg-field, bg-selected and viewport. */
   --text-secondary: #a4a6ad; /* Labels, units, secondary lines, column headers. 4.5:1 on bg-window, bg-panel and bg-field. */
-  --accent: #c2efb3; /* Controls and selection: the default button, focused selection, links, the viewport selection outline. As text, on bg-panel and bg-field. */
+  --accent: #c2efb3; /* Controls and selection: the default button, focused selection, links. As text, on bg-panel and bg-field. */
   --on-accent: #285943; /* Text and icons on an accent fill. */
   --selection: #e5b181; /* Selected entity in the viewport (fill and edges): a warm hue, so it stands apart from the light unselected edges. */
   --focus: var(--accent); /* Keyboard focus ring: 2px solid, 1px offset. Alias of accent. */

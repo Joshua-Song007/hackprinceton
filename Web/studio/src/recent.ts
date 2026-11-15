@@ -1,4 +1,5 @@
-// Recent local projects: the last few projects saved or opened in this browser (the web cannot list a folder).
+// Project list model: the last few projects saved or opened in this browser (the web cannot list a folder), merged with cloud games into
+// gallery rows (solo or shared, sort, filter, statistics), plus the per-browser opened times and preview thumbnails.
 import { withStore, type ProjectSnapshot } from './project';
 
 export interface RecentEntry { id: string; name: string; savedAt: number; snapshot: ProjectSnapshot }

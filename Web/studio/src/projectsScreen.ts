@@ -1,4 +1,4 @@
-// Projects screen: a gallery of tiles (preview, name, last opened, last edited, Open) for cloud games, projects saved on this computer and the autosaved draft; New project starts from a template.
+// Projects screen: a sticky top bar (search, sort, New project), a profile and statistics column, and Solo and Shared sections of tiles (preview, name, last opened, last edited, Open) for cloud games, projects saved on this computer and the autosaved draft; New project starts from a template.
 import { announce, button, el, openSheet } from './ui';
 import { describeError, type AccountController } from './account';
 import { TEMPLATES, loadDraft, loadDraftAt, templateSnapshot, type ProjectSnapshot } from './project';

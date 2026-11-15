@@ -374,7 +374,7 @@ export class Project {
     return this.updateEntity(id, (x) => void x.components!.splice(index, 1));
   }
 
-  /** Keys: name, requiredTier, runMode, permissions.location, playerOrigin. Returns an error sentence, or undefined on success. */
+  /** Keys: name, requiredTier, runMode, permissions.location, playerOrigin, inputs, peripherals, gestures. Returns an error sentence, or undefined on success. */
   setSceneSetting(key: string, value: unknown): string | undefined {
     switch (key) {
       case 'name':

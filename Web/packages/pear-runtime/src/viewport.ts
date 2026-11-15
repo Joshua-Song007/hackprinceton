@@ -1,5 +1,5 @@
 // three.js render of a scene: boxes for entities, floor grid, axis gizmo, selection outline, head-pose camera.
-// Colors come from the brand-kit CSS custom properties (tokens.css), so theme switches reach the viewport.
+// Colors come from the brand-kit CSS custom properties (studio-tokens.css), so theme switches reach the viewport.
 import * as THREE from 'three';
 import type { Pose } from '@pear/core';
 import type { WorldEntity } from './scene';
@@ -16,7 +16,7 @@ export interface ViewportColors {
   axisZ: string;
 }
 
-/** Dark theme values of tokens.css, used when the page has not loaded the tokens. */
+/** Dark theme values of studio-tokens.css, used when the page has not loaded the tokens. */
 export const DARK_VIEWPORT_COLORS: ViewportColors = {
   viewport: '#3d3e43', grid: '#4c4d53', accent: '#c2efb3', selection: '#e5b181', text: '#e4e5e7',
   axisX: '#f0716b', axisY: '#7cc96a', axisZ: '#6aa7f0',
@@ -188,7 +188,7 @@ export class Viewport {
 
   /**
    * A preview of the current scene as a JPEG data URL (projects screen): resizes the canvas, frames the content from
-   * a three-quarter view, draws without the axis gizmo and reads the canvas in the same task as the render, so no
+   * a three-quarter view, draws without the grid and axis arrows and reads the canvas in the same task as the render, so no
    * preserveDrawingBuffer is needed. Meant for a Viewport of its own, not the editor's.
    */
   snapshot(width: number, height: number): string {
