@@ -81,9 +81,9 @@ export function menuPosition(anchor: { left: number; bottom: number }, scale: nu
 }
 
 /** Modal sheet on a native <dialog>: focus trap, Escape and backdrop come from the platform. Returns close. */
-export function openSheet(title: string, build: (body: HTMLElement, close: () => void) => void): () => void {
+export function openSheet(title: string, build: (body: HTMLElement, close: () => void) => void, options: { className?: string } = {}): () => void {
   const titleId = `sheet-title-${++sheetCount}`;
-  const dialog = el('dialog', { class: 'sheet', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': titleId });
+  const dialog = el('dialog', { class: options.className ? `sheet ${options.className}` : 'sheet', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': titleId });
   const body = el('div');
   dialog.append(el('h2', { id: titleId }, [title]), body);
   const close = () => {

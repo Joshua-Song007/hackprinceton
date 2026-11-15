@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { emptyForm, newGameSnapshot, templatePlayers, validateNewGame, type NewGameForm } from '../src/newGame';
+import { emptyForm, newGameProblems, newGameSnapshot, templatePlayers, validateNewGame, type NewGameForm } from '../src/newGame';
 import { Project } from '../src/project';
 
 const filled = (over: Partial<NewGameForm> = {}): NewGameForm => ({
@@ -33,6 +33,24 @@ describe('validateNewGame', () => {
   it('asks for a name on every role, and a game with no roles is fine', () => {
     expect(validateNewGame(filled({ roles: [{ name: 'Player', brief: '', kind: 'player' }, { name: ' ', brief: 'x', kind: 'ref' }] }))).toEqual(['Give every role a name, or remove the empty ones.']);
     expect(validateNewGame(filled({ roles: [] }))).toEqual([]);
+  });
+});
+
+describe('newGameProblems', () => {
+  it('names the field each problem belongs to, in the order of the form', () => {
+    expect(newGameProblems(emptyForm('blank')).map((p) => p.field)).toEqual(['title', 'summary', 'players', 'win', 'lose']);
+    expect(newGameProblems(filled())).toEqual([]);
+  });
+
+  it('a bad or inverted range is one players problem, and an unnamed role is a roles problem', () => {
+    expect(newGameProblems(filled({ min: '5', max: '3' })).map((p) => p.field)).toEqual(['players']);
+    expect(newGameProblems(filled({ min: '0', max: '' })).map((p) => p.field)).toEqual(['players']);
+    expect(newGameProblems(filled({ roles: [{ name: '', brief: '', kind: 'player' }] })).map((p) => p.field)).toEqual(['roles']);
+  });
+
+  it('validateNewGame is the same sentences', () => {
+    const form = emptyForm('blank');
+    expect(validateNewGame(form)).toEqual(newGameProblems(form).map((p) => p.message));
   });
 });
 

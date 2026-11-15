@@ -76,3 +76,11 @@ Blank is a floor and nothing else (only the player count declared); the old cube
 - [x] `Web/studio/src/testPanel.ts`, `Web/studio/src/playtestView.ts`, `Web/studio/src/instructionsPanel.ts`, `Web/studio/src/main.ts`, `Web/studio/src/project.ts`
 - [x] `Web/studio/test/playtestPlan.test.ts`, `Web/studio/test/agentPlayers.test.ts`, `Web/studio/test/agentRun.test.ts`, `Web/studio/test/studio.test.ts`, `Web/studio/test/authoring.test.ts`, `Web/studio/test/deep-agent-demo.test.ts`, `Web/studio/test/newGame.test.ts`
 
+### 2026-11-15 — New game form fixes (follow-up to Phase 12.6)
+Paths: `Web/studio/src/newGame.ts`, `Web/studio/src/ui.ts`, `Web/studio/src/theme.css`, `Web/studio/test/newGame.test.ts`
+
+From a UX critique of the form: the sheet scrolls inside itself with Cancel and Create game pinned in a footer beside a one-line summary ("3 things still needed: ..."), so the primary action is always in view. Create is always enabled; pressing it with something missing shows each problem under its field, focuses the first one and keeps the sheet open. A field's message appears only after the field was left or Create was pressed. Required fields carry an asterisk with a legend; optional ones say so. Roles and phases are cards (name and kind on one labelled row, a full-width brief, a quiet red Remove in the card header, Add role and Add phase below, disabled at the limits). The template select is labelled "Start from" with a muted blurb. Placeholders use the secondary text colour at full opacity everywhere. `openSheet` takes an optional `className`.
+- [x] `Web/studio/src/newGame.ts` — `newGameProblems` (field by field; `validateNewGame` returns the same sentences), the new form layout.
+- [x] `Web/studio/src/ui.ts`, `Web/studio/src/theme.css`
+- [x] `Web/studio/test/newGame.test.ts` — `newGameProblems` cases.
+
