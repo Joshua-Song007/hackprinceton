@@ -70,3 +70,5 @@
 - Merge: one batch merge into `main`, run tests once, push once (auto-deploy ships it). Git per user's in-session approval.
 - After merge: `git worktree remove` merged, clean worktrees.
 - Questions: only when truly blocking; batch into one ask; otherwise pick a default, state it in one line, proceed.
+- Multi-laptop (V2 autonomy): this laptop (`michael-laptop`, `Mungbeanbeanie`) = head orchestrator only; work runs on the 2 remote worker laptops. Local workers (`--local-workers`, in-session Agent workers) ONLY when the deadline is near AND the remote pace will clearly miss full completion + polish; state the reason in one line before launching.
+- Credit limit: this laptop must never hit its Claude limit. Run the orchestrator with a `WORKER_TOKEN_LIMIT` cap; keep in-session work to coordination, ops and merges; on any 429 or near-limit sign, stop local model launches first.
