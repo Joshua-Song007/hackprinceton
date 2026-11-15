@@ -44,11 +44,12 @@ function fakes() {
     close() {},
   };
   const applied: Action[] = [];
-  const state = { walking: false };
+  const state = { walking: false, t: 0 };
   const host: AgentHost = {
     observation: () => observation(requests.length),
     apply: (a) => void applied.push(a),
     walking: () => state.walking,
+    gameTime: () => state.t,
     intro: () => ({ role: { id: 'r', name: 'R', brief: 'b', kind: 'player' }, instructions: { title: 'T' } }),
   };
   return { requests, waiting, reports, transport, applied, state, host };
@@ -300,5 +301,94 @@ describe('the pause clock in a run', () => {
     w.advance(1);
     expect(got.filter(([n]) => n === 'timer')).toEqual([['timer', 'later']]);
     server.dispose();
+  });
+});
+
+describe('AgentDriver play-by-play', () => {
+  const heard = (f: ReturnType<typeof fakes>, cues: Observation['heard']) => {
+    f.host.observation = () => ({ ...observation(f.state.t), heard: cues });
+  };
+
+  it('logs what it heard, what it did and what it was unsure about, in game time, and says what it is doing', async () => {
+    const w = world(), f = fakes(), d = driver(f, w);
+    heard(f, [{ t: 0, kind: 'speech', text: 'go!', from: 'player-3' }, { t: 0, kind: 'note', text: 'no phone in hand' }, { t: 0, kind: 'haptic', text: 'tap 1' }]);
+    expect(d.doing).toBe('Waiting');
+    f.state.t = 4;
+    d.tick();
+    expect(d.doing).toBe('Thinking...');
+    f.state.t = 5;
+    f.waiting[0]!.resolve({ actions: [{ type: 'say', text: 'ready?' }, { type: 'walk_to', x: 2, z: 3 }, { type: 'wait', seconds: 2 }], unsure: [{ phase: 'p1', line: 'Pass it', why: 'to whom?' }] });
+    await flush();
+    f.state.walking = true;
+    d.tick();
+    expect(d.doing).toBe('walks to x 2.0, z 3.0');
+    expect(d.log.map((l) => [l.kind, l.text, l.gameTime])).toEqual([
+      ['heard', 'hears player-3 say "go!"', 4],
+      ['problem', 'could not: no phone in hand', 4],
+      ['heard', 'feels a buzz: tap 1', 4],
+      ['unsure', 'was not sure about "Pass it" (phase p1): to whom?', 4],
+      ['did', 'says "ready?"', 5],
+      ['did', 'walks to x 2.0, z 3.0', 5],
+    ]);
+    expect(d.log.every((l) => l.from === 'player-2')).toBe(true);
+  });
+
+  it('an error is a problem line, and three in a row stop the agent for good, while a success in between starts the count again', async () => {
+    const w = world(), f = fakes(), d = driver(f, w, { every: 0, backoff: 0 });
+    for (const answer of ['fail', 'fail', 'ok', 'fail', 'fail', 'fail'] as const) {
+      d.tick();
+      const waiting = f.waiting.at(-1)!;
+      if (answer === 'fail') waiting.reject(new Error('no key')); else waiting.resolve({ actions: [], unsure: [] });
+      await flush();
+      d.tick();
+    }
+    expect(f.requests).toHaveLength(6);
+    expect(d.exhausted).toBe(true);
+    expect(d.status).toBe('limit');
+    expect(d.doing).toBe('Stopped: the Deep Agent reported errors');
+    expect(d.log.filter((l) => l.kind === 'problem').map((l) => l.text)).toEqual(['no key', 'stopped after 3 failed calls in a row']);
+    d.tick();
+    expect(f.requests).toHaveLength(6);
+  });
+
+  it('a quiet budget ends the agent without a problem note, and it counts as exhausted only once nothing is queued or in flight', async () => {
+    const w = world(), f = fakes(), d = driver(f, w, { cap: 1, every: 0, quiet: true });
+    expect(d.exhausted).toBe(false);
+    d.tick();
+    expect(d.exhausted).toBe(false);
+    f.waiting[0]!.resolve({ actions: [{ type: 'say', text: 'hi' }], unsure: [] });
+    await flush();
+    expect(d.exhausted).toBe(false);
+    d.tick();
+    expect(d.exhausted).toBe(true);
+    d.tick();
+    expect(d.status).toBe('limit');
+    expect(d.doing).toBe('Out of decisions');
+    expect(d.notes).toEqual([]);
+    expect(d.log.map((l) => l.kind)).toEqual(['did']);
+  });
+
+  it('keeps the last 200 lines', async () => {
+    const w = world(), f = fakes(), d = driver(f, w, { every: 0, cap: 100 });
+    for (let i = 0; i < 60; i++) {
+      d.tick();
+      f.waiting.at(-1)!.resolve({ actions: Array.from({ length: 5 }, (_, n) => ({ type: 'say' as const, text: `${i}-${n}` })), unsure: [] });
+      await flush();
+      d.tick();
+    }
+    expect(d.log).toHaveLength(200);
+    expect(d.log.at(-1)!.text).toBe('says "59-4"');
+  });
+
+  it('the look back shows as looking back, then done', async () => {
+    const w = world(), f = fakes(), d = driver(f, w);
+    d.tick();
+    f.waiting[0]!.resolve({ actions: [], unsure: [] });
+    await flush();
+    const done = d.lookBack();
+    expect(d.doing).toBe('Looking back...');
+    f.reports[0]!.resolve({ unsure: [], summary: '' });
+    await done;
+    expect(d.doing).toBe('Done');
   });
 });

@@ -6,7 +6,7 @@ import { button, el } from './ui';
 export function renderPlaytest(report: PlaytestReport, sendToChat: (text: string) => string | undefined): HTMLElement {
   const lines = playtestLines(report);
   const result = el('p', { class: 'om-sub', role: 'status' });
-  const send = button('Send to chat', () => { result.textContent = sendReport(report, sendToChat); }, { variant: 'small', ariaLabel: 'Send playtest notes to the Deep Agent chat' });
+  const send = button('Fix with Deep Agent', () => { result.textContent = sendReport(report, sendToChat); }, { variant: 'small', ariaLabel: 'Fix with Deep Agent: put the playtest notes in the chat to revise the instructions' });
   send.disabled = !playtestPrompt(report);
   return el('div', { class: 'pn-playtest', role: 'region', 'aria-label': 'Playtest report' }, [
     el('p', { class: 'om-sub' }, [lines.summary]),

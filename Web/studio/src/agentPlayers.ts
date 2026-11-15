@@ -3,6 +3,7 @@
 import { parseActions, type Action, type Observation } from '@pear/runtime';
 import type { AgentTransport, DecideRequest } from './agentTransport';
 import type { PauseClock } from './pauseClock';
+import { describeAction, describeCue, describeUnsure, type AgentLogEntry } from './playtestPlan';
 
 export const PERSONAS = ['follows', 'skims', 'cheats', 'confused'] as const;
 export type Persona = (typeof PERSONAS)[number];
@@ -11,6 +12,9 @@ export const AGENT_EVERY_S = 1.5;
 export const AGENT_CALL_CAP = 60;
 export const AGENT_WALK_TIMEOUT_S = 10;
 export const AGENT_BACKOFF_S = 10;
+/** Failed decides in a row after which an agent gives up: a plugin with no key would otherwise spend the whole budget failing. */
+export const AGENT_MAX_FAILURES = 3;
+const LOG_LIMIT = 200;
 
 /** Who an agent player is: its persona and the instructions role it plays ('' for none). */
 export interface AgentSeat {
@@ -40,6 +44,8 @@ export interface AgentHost {
   walking(): boolean;
   /** The role and instructions this player was handed. */
   intro(): { role: DecideRequest['role']; instructions: unknown };
+  /** Game seconds since the run began, for the play-by-play. */
+  gameTime(): number;
 }
 
 export interface AgentDriverOptions {
@@ -53,6 +59,8 @@ export interface AgentDriverOptions {
   cap?: number;
   walkTimeout?: number;
   backoff?: number;
+  /** The call cap is a playtest budget the creator chose, so reaching it is not a problem to report. */
+  quiet?: boolean;
 }
 
 export class AgentDriver {
@@ -63,6 +71,11 @@ export class AgentDriver {
   summary = '';
   looked = false;
   lastGameTime = 0;
+  /** What this agent did, heard and was unsure about, oldest first (the play-by-play). */
+  readonly log: AgentLogEntry[] = [];
+  private failures = 0;
+  private failed = false;
+  private currentText = '';
   private queue: Action[] = [];
   private current: { kind: 'wait' | 'walk'; until: number } | null = null;
   private acting = false;
@@ -92,6 +105,31 @@ export class AgentDriver {
     return this.o.clock.now() / 1000;
   }
 
+  private addLog(kind: AgentLogEntry['kind'], text: string, gameTime = this.o.host.gameTime()): void {
+    this.log.push({ gameTime, from: this.o.id, kind, text });
+    if (this.log.length > LOG_LIMIT) this.log.shift();
+  }
+
+  /** How many decisions this agent may make. */
+  get callLimit(): number {
+    return this.cap;
+  }
+
+  /** What the agent is doing right now, in words, for its card. */
+  get doing(): string {
+    if (this.looked) return this.disposed ? 'Done' : 'Looking back...';
+    if (this.disposed) return 'Stopped';
+    if (this.failed) return 'Stopped: the Deep Agent reported errors';
+    if (this.status === 'limit') return 'Out of decisions';
+    if (this.thinking) return 'Thinking...';
+    return this.currentText || 'Waiting';
+  }
+
+  /** True once the agent will do nothing more: its decisions are used up (or it gave up after errors) and nothing is in flight or queued. */
+  get exhausted(): boolean {
+    return (this.calls >= this.cap || this.failed) && !this.thinking && !this.current && this.queue.length === 0;
+  }
+
   /** Called every 100 ms by the run: advances the current plan, or asks for a new one when it is time. */
   tick(): void {
     if (this.disposed || this.looked || this.thinking || this.status === 'limit') return;
@@ -103,9 +141,11 @@ export class AgentDriver {
     }
     while (!this.current && this.queue.length) {
       const action = this.queue.shift()!;
+      this.currentText = describeAction(action);
       if (action.type === 'wait') this.current = { kind: 'wait', until: now + action.seconds };
       else {
         if (action.type === 'say') this.lastSay = action.text;
+        this.addLog('did', this.currentText);
         this.o.host.apply(action);
         if (action.type === 'walk_to' && this.o.host.walking()) this.current = { kind: 'walk', until: now + this.walkTimeout };
       }
@@ -119,6 +159,7 @@ export class AgentDriver {
       this.nextAt = now + this.every;
     }
     this.status = 'idle';
+    this.currentText = '';
     if (now >= this.nextAt) void this.decide();
   }
 
@@ -127,14 +168,16 @@ export class AgentDriver {
     if (this.seen.has(key)) return;
     this.seen.add(key);
     this.notes.push({ from: this.o.id, gameTime, ...entry });
+    this.addLog(entry.kind === 'unsure' ? 'unsure' : 'problem', entry.kind === 'unsure' ? describeUnsure(entry) : entry.why, gameTime);
   }
 
   private async decide(): Promise<void> {
     const observation = this.o.host.observation();
     this.lastGameTime = observation.gameTime;
+    for (const c of observation.heard) this.addLog(c.kind === 'note' ? 'problem' : 'heard', describeCue(c), observation.gameTime);
     if (this.calls >= this.cap) {
       this.status = 'limit';
-      this.note({ phase: '', line: '', why: `Agent call limit reached (${this.cap}); this player stopped acting.`, kind: 'run' }, observation.gameTime);
+      if (!this.o.quiet) this.note({ phase: '', line: '', why: `Agent call limit reached (${this.cap}); this player stopped acting.`, kind: 'run' }, observation.gameTime);
       return;
     }
     this.calls++;
@@ -156,6 +199,7 @@ export class AgentDriver {
       if (this.disposed || this.looked) return;
       for (const n of reply.unsure) this.note({ ...n, kind: 'unsure' }, observation.gameTime);
       this.queue = parseActions(reply.actions);
+      this.failures = 0;
       this.acting = true;
       this.nextAt = this.seconds();
     } catch (e) {
@@ -164,12 +208,16 @@ export class AgentDriver {
       this.queue = [];
       this.acting = false;
       this.nextAt = this.seconds() + this.backoff;
+      if (++this.failures >= AGENT_MAX_FAILURES) {
+        this.failed = true;
+        this.addLog('problem', `stopped after ${AGENT_MAX_FAILURES} failed calls in a row`, observation.gameTime);
+      }
     } finally {
       release();
       this.releases.delete(release);
       if (!this.disposed && !this.looked) {
         this.thinking = false;
-        this.status = this.queue.length ? 'acting' : 'idle';
+        this.status = this.failed ? 'limit' : this.queue.length ? 'acting' : 'idle';
       }
     }
   }

@@ -2,7 +2,7 @@ import { parseScene } from '@pear/runtime';
 import { describe, expect, it } from 'vitest';
 import { eulerToQuat, Project, quatToEuler, templateSnapshot } from '../src/project';
 
-const fresh = () => new Project(templateSnapshot('blank'));
+const fresh = () => new Project(templateSnapshot('tapcounter'));
 const parses = (p: Project) => expect(() => parseScene(p.scene)).not.toThrow();
 
 describe('authoring', () => {

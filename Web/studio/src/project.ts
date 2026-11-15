@@ -5,6 +5,7 @@ import { parseGestures, parseInputs, parseInstructions, parseOwnership, parsePer
 import flagshipScene from '../../../Games/Flagship/scene.json';
 import hotPotatoScene from '../../../Games/HotPotato/scene.json';
 import { blankClientScripts, blankScene, blankServerScripts } from './templates/blank';
+import { tapCounterClientScripts, tapCounterScene, tapCounterServerScripts } from './templates/tapcounter';
 
 const flagshipFiles = import.meta.glob('../../../Games/Flagship/scripts/*.js', { query: '?raw', import: 'default', eager: true }) as Record<string, string>;
 const flagshipScripts = Object.fromEntries(Object.entries(flagshipFiles).map(([path, src]) => [/([^/]+)\.js$/.exec(path)![1]!, src]));
@@ -28,7 +29,8 @@ export interface ProjectSnapshot {
 export type ProjectChange = 'open' | 'scene' | 'script' | 'scripts' | 'saved' | 'cloud' | 'instructions' | 'proposal';
 
 export const TEMPLATES = [
-  { id: 'blank', label: 'Blank', blurb: 'A floor, one cube, a client script and a server script that counts taps. The smallest working loop.' },
+  { id: 'blank', label: 'Blank', blurb: 'A floor and nothing else: write the instructions, then add what the game needs.' },
+  { id: 'tapcounter', label: 'Tap counter (example)', blurb: 'A cube that sends a tap to a server script that counts them: the smallest working loop for scripts, remote events and server state.' },
   { id: 'hotpotato', label: 'Hot potato', blurb: 'Multiplayer tag: the holder is eliminated when a timer runs out. Teaches server timers, positions and remote events.' },
   { id: 'flagship', label: 'Flagship (Hollow Choir)', blurb: 'Audio and heart-rate horror game using head tracking, gestures and a server-run round.' },
 ] as const;
@@ -50,6 +52,9 @@ export type TemplateId = (typeof TEMPLATES)[number]['id'];
 export function templateSnapshot(id: TemplateId): ProjectSnapshot {
   if (id === 'blank') {
     return structuredClone({ scene: blankScene, clientScripts: blankClientScripts, serverScripts: blankServerScripts, gameId: null, version: null });
+  }
+  if (id === 'tapcounter') {
+    return structuredClone({ scene: tapCounterScene, clientScripts: tapCounterClientScripts, serverScripts: tapCounterServerScripts, gameId: null, version: null });
   }
   const potato = id === 'hotpotato';
   const scene = structuredClone(potato ? hotPotatoScene : flagshipScene) as SceneJson;

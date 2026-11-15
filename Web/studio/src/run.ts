@@ -10,8 +10,9 @@ import {
 import { LocalServer, ScriptSandbox, type ScriptOutput } from '@pear/script';
 import prelude from '../../../Packages/PearScript/Sources/PearScript/Resources/prelude.js?raw';
 import { SIM_DEVICE_KINDS, SimDevices, UsisPlayer, attachGestureKeys, attachMouseLook, type SimDeviceKind, type SimDevicesOptions } from '@pear/sim';
-import { AgentDriver, type AgentNoteRecord, type AgentSeat, type Persona } from './agentPlayers';
+import { AgentDriver, type AgentNoteRecord, type AgentSeat } from './agentPlayers';
 import { socketTransport, type AgentTransport, type DecideRequest } from './agentTransport';
+import { seatCrew, startProblem, type AgentLogEntry, type CrewId } from './playtestPlan';
 import { buildPlaytestReport, type PlaytestReport } from './playtestReport';
 import type { AccountController } from './account';
 import { describeError } from './account';
@@ -628,6 +629,24 @@ export interface RunStatus {
   players: number | null;
 }
 
+/** What the creator chose to start a playtest: how many players, who they are, and how many decisions each agent may make. */
+export interface PlaytestOptions {
+  players: number;
+  crew: CrewId;
+  calls: number;
+}
+
+export interface PlaytestState {
+  options: PlaytestOptions;
+  state: 'running' | 'finishing' | 'done';
+}
+
+/** One play-by-play line with how its player is shown ("player-2 (Referee)"). */
+export interface PlaytestLine {
+  entry: AgentLogEntry;
+  who: string;
+}
+
 export type PlayerSource = 'manual' | 'replay' | 'live' | 'bot';
 export type BotMode = 'chase' | 'flee' | 'gestures';
 export const TIME_SCALES = [0.5, 1, 2, 4] as const;
@@ -675,8 +694,6 @@ export interface RunDeps {
   reveal?(panelId: string): void;
   /** The Deep Agent runtime's WebSocket URL for agent players, or null when the plugin is not installed. */
   agentUrl?(): string | null;
-  /** Whether Play fills every player with an agent right away (a browser setting, off unless the creator turned it on). */
-  seatAgentsAtPlay?(): boolean;
   /** Play on a phone-only game (Quick Draw) ends here: the links of the two real phones, no simulated players, no viewport. */
   onPhones?(links: PhoneLink[]): void;
 }
@@ -688,15 +705,6 @@ const loadRig = (): SimDeviceKind[] => {
     if (Array.isArray(saved)) return SIM_DEVICE_KINDS.filter((k) => saved.includes(k));
   } catch { /* no storage: default rig */ }
   return [...SIM_DEVICE_KINDS];
-};
-
-const SEAT_AGENTS_KEY = 'pear.studio.seatAgents';
-/** The browser setting "Seat agents when Play starts" (off until the creator turns it on: every agent call costs model usage). */
-export const loadSeatAgents = (): boolean => {
-  try { return localStorage.getItem(SEAT_AGENTS_KEY) === 'true'; } catch { return false; }
-};
-export const saveSeatAgents = (on: boolean): void => {
-  try { localStorage.setItem(SEAT_AGENTS_KEY, String(on)); } catch { /* not persisted */ }
 };
 
 /** Capability hint: what the game's tier needs from the simulated rig, or null when it is met. */
@@ -764,6 +772,10 @@ export class RunController {
   /** The last playtest report (kept after the run stops, cleared when the next run begins), and whether the agents are looking back now. */
   report: PlaytestReport | null = null;
   finishing = false;
+  /** The playtest the creator started from the Playtest panel (kept after the run stops, cleared when the next run begins). */
+  playtest: PlaytestState | null = null;
+  private pendingPlaytest: PlaytestOptions | null = null;
+  private keptLog: PlaytestLine[] = [];
   /** Agents taken off a player (driven, wandering, another source, switched off) whose notes still belong in the report. */
   private retired: AgentDriver[] = [];
 
@@ -906,6 +918,7 @@ export class RunController {
     if (live.every((d) => d.looked)) return 'The playtest is finished.';
     if (!live.some((d) => d.calls)) return 'The agents have not played yet.';
     const transport = this.agentTransport;
+    if (this.playtest) this.playtest = { ...this.playtest, state: 'finishing' };
     this.finishing = true;
     for (const l of this.listeners) l();
     try {
@@ -914,13 +927,14 @@ export class RunController {
       this.report = this.buildReport(live.every((d) => d.looked));
     } finally {
       this.finishing = false;
+      if (this.playtest?.state === 'finishing') this.playtest = { ...this.playtest, state: 'done' };
       for (const l of this.listeners) l();
     }
     return undefined;
   }
 
   /** Makes a player an agent (a Deep Agent plays it from the instructions) or, with null, a plain player again. Returns an error sentence, or undefined. */
-  setAgent(id: string, seat: AgentSeat | null): string | undefined {
+  setAgent(id: string, seat: AgentSeat | null, budget?: { calls: number; quiet: boolean }): string | undefined {
     const p = this.players.find((x) => x.id === id);
     if (!p) return undefined;
     if (!seat) {
@@ -941,13 +955,14 @@ export class RunController {
     if (p.source === 'bot') p.source = 'manual';
     this.agentTransport ??= socketTransport(() => this.deps.agentUrl?.() ?? null);
     p.agent = new AgentDriver({
-      id, seat, run: `${this.runId}-${++this.agentSeq}`, transport: this.agentTransport,
+      id, seat, run: `${this.runId}-${++this.agentSeq}`, transport: this.agentTransport, ...(budget ? { cap: budget.calls, quiet: budget.quiet } : {}),
       clock: { now: this.clock.now, hold: () => this.hold(), release: () => this.release() },
       host: {
         observation: () => this.observationFor(id)!,
         apply: (a) => this.applyAgent(p, a),
         walking: () => p.goal !== null,
         intro: () => this.introFor(p, seat),
+        gameTime: () => this.gameTime(),
       },
     });
     for (const l of this.listeners) l();
@@ -1123,6 +1138,11 @@ export class RunController {
     }
   }
 
+  /** Whether the Deep Agent plugin is installed, so agents can run. */
+  get agentsAvailable(): boolean {
+    return !!this.deps.agentUrl?.();
+  }
+
   /** Publishes the draft if it changed, then hands out the phone links of that exact version. Needs a signed-in account with a game picked. */
   private async runPhones(): Promise<void> {
     const { account, project } = this.deps;
@@ -1179,6 +1199,8 @@ export class RunController {
     const { project, debug, editor, viewport, account } = this.deps;
     this.stop();
     this.report = null;
+    this.playtest = null;
+    this.keptLog = [];
     editor.clearErrors();
     let scene: SceneDescription;
     try {
@@ -1228,7 +1250,7 @@ export class RunController {
     run.start();
     this.wanderTimer = setInterval(() => this.wander(), 200);
     this.walkTimer = setInterval(() => this.walk(), 50);
-    if (kind === 'local') this.agentTimer = setInterval(() => { for (const p of this.players) p.agent?.tick(); }, 100);
+    if (kind === 'local') this.agentTimer = setInterval(() => this.agentTick(), 100);
     this.session = { scene, ...(gameId ? { gameId } : {}), ...(version !== undefined ? { version } : {}) };
     if (kind === 'local') this.startPlayServer(run);
     const rig = this.rig.length ? this.rig.map((k) => SIM_DEVICE_NAMES[k]).join(', ') : 'no devices';
@@ -1253,27 +1275,58 @@ export class RunController {
     this.statusTimer = setInterval(() => this.refresh(), 500);
     this.refresh(kind);
     // Play starts with the game's minimum players. Not on the server: added players there still share the creator's account (P8).
-    const min = kind === 'local' ? this.deps.project.playerLimits().min : 1;
+    const pending = this.pendingPlaytest;
+    const min = kind === 'local' ? pending?.players ?? this.deps.project.playerLimits().min : 1;
     this.applyScale();
     for (let i = 1; i < min && this.local === run; i++) await this.addPlayer();
-    if (kind === 'local' && this.local === run && this.deps.seatAgentsAtPlay?.()) {
-      const problem = this.seatAgents();
-      if (problem) this.out('warn', `Agents were not seated: ${problem}`);
+    if (kind === 'local' && pending && this.local === run) {
+      const seats = seatCrew(this.players.length, pending.crew, this.deps.project.instructions?.roles ?? []);
+      let first: string | undefined;
+      this.players.forEach((p, n) => { first ??= this.setAgent(p.id, seats[n]!, { calls: pending.calls, quiet: true }); });
+      if (first) this.out('warn', `Agents were not seated: ${first}`);
+      this.playtest = { options: pending, state: 'running' };
     }
   }
 
-  /** Gives every player nobody drives an agent: the persona, and the instructions' roles in turn (none when the game has no roles). Returns the first sentence that stopped a seat, or undefined. */
-  seatAgents(persona: Persona = 'follows'): string | undefined {
-    const roles = this.deps.project.instructions?.roles ?? [];
-    let first: string | undefined;
-    let n = 0;
-    for (const p of this.players) {
-      if (p.id === this.driven) continue;
-      const role = roles.length ? roles[n % roles.length]!.id : '';
-      n++;
-      first ??= this.setAgent(p.id, { persona, role });
+  /** Starts a playtest: a fresh local Play with the chosen number of players, every one an agent (nobody driven). Returns a sentence when it cannot start. */
+  async startPlaytest(options: PlaytestOptions): Promise<string | undefined> {
+    const { project } = this.deps;
+    const problem = startProblem({ hasInstructions: !!project.instructions, hasPlugin: !!this.deps.agentUrl?.(), limits: project.playerLimits(), players: options.players });
+    if (problem) return problem;
+    if (this.running && this.status.kind !== 'local') return 'Stop the current run first.';
+    if (this.phoneOnly()) return 'This game plays on two real phones, so agents cannot play it.';
+    this.pendingPlaytest = options;
+    try {
+      await this.runLocal();
+    } finally {
+      this.pendingPlaytest = null;
     }
-    return first;
+    return undefined;
+  }
+
+  private agentTick(): void {
+    for (const p of this.players) p.agent?.tick();
+    if (this.playtest?.state !== 'running') return;
+    const live = this.players.flatMap((p) => (p.agent ? [p.agent] : []));
+    if (live.length && live.every((d) => d.exhausted)) void this.finishPlaytest();
+  }
+
+  private collectLog(drivers: readonly AgentDriver[]): PlaytestLine[] {
+    const roles = this.deps.project.instructions?.roles ?? [];
+    return drivers
+      .flatMap((d) => {
+        const role = roles.find((r) => r.id === d.seat.role)?.name;
+        const who = role ? `${d.id} (${role})` : d.id;
+        return d.log.map((entry) => ({ entry, who }));
+      })
+      .sort((a, b) => a.entry.gameTime - b.entry.gameTime)
+      .slice(-200);
+  }
+
+  /** The play-by-play of every agent so far, oldest first; after the run stops, the last one the run had. */
+  playtestLog(): PlaytestLine[] {
+    const drivers = [...this.retired, ...this.players.flatMap((p) => (p.agent ? [p.agent] : []))];
+    return drivers.length || this.players.length ? this.collectLog(drivers) : this.keptLog;
   }
 
   /** Play: server scripts run in this page; the server's debug output goes to the same DebugStore rows /debug feeds. */
@@ -1543,6 +1596,10 @@ export class RunController {
     this.agentTimer = null;
     const agents = this.players.flatMap((p) => (p.agent ? [p.agent] : []));
     if (this.finishing || agents.some((d) => !d.looked && (d.calls || d.notes.length)) || this.retired.some((d) => d.calls || d.notes.length)) this.report = this.buildReport(false);
+    if (this.playtest) {
+      this.keptLog = this.collectLog([...this.retired, ...agents]);
+      this.playtest = { ...this.playtest, state: 'done' };
+    }
     this.retired = [];
     for (const p of this.players) p.agent?.dispose();
     this.agentTransport?.close();

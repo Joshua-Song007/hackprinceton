@@ -31,7 +31,7 @@ function setup(opts: { instructions?: boolean; url?: string | null; local?: bool
   const logs: string[] = [];
   const viewport = { setRunning: vi.fn() };
   const deps = {
-    project: { instructions: opts.instructions === false ? null : instructions },
+    project: { instructions: opts.instructions === false ? null : instructions, playerLimits: () => ({ min: 2, max: 4, from: 'instructions' }) },
     debug: { addOutput: (_l: string, text: string) => void logs.push(text), setServerConnected: vi.fn() },
     viewport,
     agentUrl: () => (opts.url === undefined ? 'ws://runtime' : opts.url),
@@ -268,31 +268,85 @@ describe('nobody driven', () => {
     expect(run.setAgent('player-1', { persona: 'follows', role: '' })).toBeUndefined();
   });
 
-  it('seat agents gives every player nobody drives an agent, with the roles in turn', () => {
+  it('a seat can carry a call budget and a quiet limit', () => {
     const { run, players } = setup();
-    expect(run.seatAgents()).toBeUndefined();
-    expect(players[0]!.agent).toBeNull();
-    expect(players.slice(1).map((p) => p.agent?.seat)).toEqual([
-      { persona: 'follows', role: 'ref' }, { persona: 'follows', role: 'runner' }, { persona: 'follows', role: 'ref' },
-    ]);
-    expect(players[1]!.run.role).toBe('ref');
-    expect(players[2]!.run.role).toBe('player');
     run.drive(null);
-    expect(run.seatAgents('skims')).toBeUndefined();
-    expect(players.map((p) => p.agent?.seat.persona)).toEqual(['skims', 'skims', 'skims', 'skims']);
-    expect(players[0]!.agent?.seat.role).toBe('ref');
+    expect(run.setAgent('player-2', { persona: 'skims', role: 'runner' }, { calls: 20, quiet: true })).toBeUndefined();
+    const driver = players[1]!.agent as unknown as { cap: number; o: { quiet: boolean } };
+    expect(driver.cap).toBe(20);
+    expect(driver.o.quiet).toBe(true);
+    expect(run.setAgent('player-3', { persona: 'skims', role: '' })).toBeUndefined();
+    expect((players[2]!.agent as unknown as { cap: number }).cap).toBe(60);
   });
+});
 
-  it('a game with no roles seats agents without a role', () => {
+describe('starting a playtest', () => {
+  const options = { players: 3, crew: 'realistic' as const, calls: 40 };
+
+  it('says what is missing instead of starting', async () => {
+    expect(await setup({ instructions: false }).run.startPlaytest(options)).toMatch(/instructions first/);
+    expect(await setup({ url: null }).run.startPlaytest(options)).toMatch(/Install the Deep Agent plugin/);
     const s = setup();
-    (s.run as unknown as { deps: { project: { instructions: unknown } } }).deps.project.instructions = parseInstructions({ title: 'T' });
-    expect(s.run.seatAgents()).toBeUndefined();
-    expect(s.players.slice(1).map((p) => p.agent?.seat.role)).toEqual(['', '', '']);
+    expect(await s.run.startPlaytest({ ...options, players: 0 })).toMatch(/Choose between/);
+    expect(await s.run.startPlaytest({ ...options, players: 33 })).toMatch(/Choose between/);
   });
 
-  it('says why when it cannot seat anyone', () => {
-    expect(setup({ url: null }).run.seatAgents()).toMatch(/Install the Deep Agent plugin/);
-    expect(setup({ instructions: false }).run.seatAgents()).toMatch(/instructions first/);
-    expect(setup({ local: false }).run.seatAgents()).toMatch(/local Play/);
+  it('will not replace a server or join run', async () => {
+    const s = setup();
+    (s.internals as unknown as { local: unknown }).local = {};
+    s.run.status = { ...s.run.status, kind: 'server' };
+    expect(await s.run.startPlaytest(options)).toBe('Stop the current run first.');
+  });
+});
+
+describe('watching a playtest', () => {
+  const entry = (from: string, gameTime: number, text: string) => ({ gameTime, from, kind: 'did' as const, text });
+
+  it('merges the play-by-play of every agent by game time, with the role name beside each player', () => {
+    const { run, players } = setup();
+    run.drive(null);
+    run.setAgent('player-2', { persona: 'follows', role: 'ref' });
+    run.setAgent('player-3', { persona: 'skims', role: 'runner' });
+    players[1]!.agent!.log.push(entry('player-2', 5, 'says "go"'), entry('player-2', 9, 'waits 2 s'));
+    players[2]!.agent!.log.push(entry('player-3', 7, 'walks to x 1.0, z 1.0'));
+    expect(run.playtestLog().map((l) => [l.who, l.entry.gameTime])).toEqual([['player-2 (Referee)', 5], ['player-3 (Runner)', 7], ['player-2 (Referee)', 9]]);
+  });
+
+  it('ends the playtest by itself once every agent has used its decisions, and not before', async () => {
+    const s = setup();
+    const reports: { resolve(r: { unsure: never[]; summary: string }): void }[] = [];
+    s.internals.agentTransport = { decide: () => new Promise(() => {}), report: () => new Promise((resolve) => reports.push({ resolve } as never)), close() {} };
+    s.run.drive(null);
+    s.run.setAgent('player-2', { persona: 'follows', role: '' }, { calls: 2, quiet: true });
+    s.run.setAgent('player-3', { persona: 'follows', role: '' }, { calls: 2, quiet: true });
+    const [a, b] = [s.players[1]!.agent!, s.players[2]!.agent!];
+    a.calls = 2;
+    b.calls = 1;
+    (s.run as unknown as { playtest: unknown }).playtest = { options: { players: 3, crew: 'realistic', calls: 2 }, state: 'running' };
+    const tick = () => (s.run as unknown as { agentTick(): void }).agentTick();
+    tick();
+    expect(s.run.finishing).toBe(false);
+    expect(b.status).toBe('thinking'); // the first tick sent its last decision: not done while it is in flight
+    (b as unknown as { thinking: boolean }).thinking = false;
+    tick();
+    expect(s.run.finishing).toBe(true);
+    expect(s.run.playtest?.state).toBe('finishing');
+    reports.forEach((r) => r.resolve({ unsure: [], summary: 'ok' }));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(s.run.finishing).toBe(false);
+    expect(s.run.playtest?.state).toBe('done');
+    expect(s.run.report?.lookedBack).toBe(true);
+  });
+
+  it('stopping keeps the play-by-play and marks the playtest done', () => {
+    const { run, players } = setup();
+    run.drive(null);
+    run.setAgent('player-2', { persona: 'follows', role: '' });
+    players[1]!.agent!.log.push(entry('player-2', 3, 'says "hi"'));
+    players[1]!.agent!.calls = 1;
+    (run as unknown as { playtest: unknown }).playtest = { options: { players: 4, crew: 'careful', calls: 20 }, state: 'running' };
+    run.stop();
+    expect(run.playtest?.state).toBe('done');
+    expect(run.playtestLog().map((l) => l.entry.text)).toEqual(['says "hi"']);
   });
 });

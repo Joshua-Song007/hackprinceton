@@ -40,6 +40,7 @@ describe('templatePlayers and the starting form', () => {
   it('only a count the template chose is filled in', () => {
     expect(templatePlayers('hotpotato')).toEqual([2, 32]);
     expect(templatePlayers('blank')).toBeNull();
+    expect(templatePlayers('tapcounter')).toBeNull();
     expect(templatePlayers('flagship')).toBeNull();
     expect(emptyForm('hotpotato')).toMatchObject({ min: '2', max: '32' });
     expect(emptyForm('blank')).toMatchObject({ min: '', max: '', roles: [{ name: 'Player', kind: 'player' }], phases: [] });

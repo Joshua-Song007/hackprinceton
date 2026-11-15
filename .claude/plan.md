@@ -119,7 +119,7 @@ Not built from the Projects screen v2 work (see planHistory/phase-08.md, Later c
 
 ## Phase 12: Instructions and agent players (compressed)
 
-Built: 12.1 to 12.5 (instructions data and lint, Deep Agents plugin instructions mode and agent players, observation and pausable clock, playtest report, Instructions panel). Local Play only; instructions win over `scene.json`; cloud saves keep them in `metadata.instructions`.
+Built: 12.1 to 12.5 (instructions data and lint, Deep Agents plugin instructions mode and agent players, observation and pausable clock, playtest report, Instructions panel). Local Play only; instructions win over `scene.json`; cloud saves keep them in `metadata.instructions`. (Changed 2026-11-15: added the lose condition, the New game form, one player limit and an undriven start (12.6, see planHistory/phase-08.md), and an empty Blank template with a Playtest panel for agents (12.7); see planHistory/phase-12.md.)
 
 Still open: nothing scheduled. Not planned: server or join agent runners; a how-to-play screen in the Player app; published games carrying instructions beyond `metadata` (Phase 11 backend items).
 

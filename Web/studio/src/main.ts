@@ -18,11 +18,12 @@ import { createPeripheralsPanel, openPeripheralPicker } from './peripheralsPanel
 import { deviceMenuItems } from './deviceMenu';
 import { placeDevice, previewRig, readPeripheralState } from './peripherals';
 import { createInstructionsPanel } from './instructionsPanel';
+import { createPlaytestPanel } from './playtestPanel';
 import { createTestPanel } from './testPanel';
 import { openPhoneSheet } from './phonePlay';
 import { openNewGameSheet } from './newGame';
 import { walkEntities, Project, TEMPLATES, attachAutosave, limitsText, templateSnapshot, type ProjectSnapshot, type TemplateId } from './project';
-import { RunController, ViewportHost, createViewportPanel, loadSeatAgents } from './run';
+import { RunController, ViewportHost, createViewportPanel } from './run';
 import { announce, button, el, openMenu, openSheet, promptSheet, rovingToolbar, type MenuItem } from './ui';
 import { installShortcuts, mod, mountMenuBar } from './menubar';
 import { renderLoginScreen } from './loginScreen';
@@ -55,7 +56,7 @@ const joinVersion = async (version: number | 'latest') => {
   history.replaceState(null, '', `${location.pathname}?${new URLSearchParams({ join: v.game_id, version: String(v.version), as: testPlayer!.name })}`);
   await run.join(v.game_id, v.version);
 };
-const run = new RunController({ project, debug, account, viewport, editor, reveal: (id) => layout.show(id), onReload: testPlayer ? joinVersion : undefined, onPhones: openPhoneSheet, agentUrl: () => marketplace.runtimeUrlOf('langchain-deepagents')?.ws ?? null, seatAgentsAtPlay: loadSeatAgents });
+const run = new RunController({ project, debug, account, viewport, editor, reveal: (id) => layout.show(id), onReload: testPlayer ? joinVersion : undefined, onPhones: openPhoneSheet, agentUrl: () => marketplace.runtimeUrlOf('langchain-deepagents')?.ws ?? null });
 
 const chat = createChatLink();
 const sendToChat = (text: string): string | undefined => {
@@ -88,7 +89,8 @@ const panels: PanelSpec[] = [
   { id: 'inspector', title: 'Inspector', create: () => createInspectorPanel(project, selection) },
   { id: 'editor', title: 'Script editor', create: () => createEditorPanel(project, editor) },
   { id: 'console', title: 'Console', create: () => createConsolePanel(debug) },
-  { id: 'test', title: 'Test', create: () => createTestPanel(project, run, sendToChat) },
+  { id: 'test', title: 'Test', create: () => createTestPanel(project, run, () => layout.show('playtest')) },
+  { id: 'playtest', title: 'Playtest', create: () => createPlaytestPanel(project, run, sendToChat, (id) => layout.show(id)) },
   { id: 'instructions', title: 'Instructions', create: () => createInstructionsPanel(project, run, sendToChat) },
 ];
 // Desktop: a dockview popout window (window.open, same JS context) keeps the panel live with the main window's state.
@@ -409,6 +411,7 @@ mountMenuBar(document.getElementById('menubar')!, [
       { label: 'Frame selected', shortcut: 'F', run: frame },
       { label: 'Reset camera', run: () => viewport.resetCamera() },
       { label: 'Game instructions', run: () => layout.show('instructions') },
+      { label: 'Playtest', run: () => layout.show('playtest') },
       { separator: true },
       layoutLabel('default', 'Layout: default'),
       layoutLabel('script-focus', 'Layout: script focus'),

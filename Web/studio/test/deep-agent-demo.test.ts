@@ -83,7 +83,7 @@ describe('Deep Agent demo scripts in Run local on the Blank template', () => {
   afterEach(() => run?.stop());
 
   function open() {
-    const project = new Project(templateSnapshot('blank'));
+    const project = new Project(templateSnapshot('tapcounter'));
     writeScript(project, 'client', 'cube', CUBE_CLIENT_SCRIPT);
     writeScript(project, 'server', 'tags', TAGS_SERVER_SCRIPT);
     const outputs: { script: string; output: EffectOutput }[] = [];
@@ -137,7 +137,7 @@ describe('Deep Agent demo scripts in Run local on the Blank template', () => {
   });
 
   it('tags.server.js is stored as a server script and loads in the sandbox', async () => {
-    const project = new Project(templateSnapshot('blank'));
+    const project = new Project(templateSnapshot('tapcounter'));
     writeScript(project, 'server', 'tags', TAGS_SERVER_SCRIPT);
     expect(Object.keys(project.serverScripts)).toContain('tags');
     expect(project.serverScripts['tags']).toMatch(/^export default /);

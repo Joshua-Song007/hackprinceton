@@ -279,7 +279,7 @@ export function createInstructionsPanel(project: Project, run: RunController, se
   const refreshReport = (): void => {
     if (shown === run.report) return;
     shown = run.report;
-    reportBox.replaceChildren(group('Playtest report'), run.report ? renderPlaytest(run.report, sendToChat) : el('p', { class: 'pn-empty' }, ['Play with agent players in the Test panel, then press Finish playtest.']));
+    reportBox.replaceChildren(group('Playtest report'), run.report ? renderPlaytest(run.report, sendToChat) : el('p', { class: 'pn-empty' }, ['Start a playtest in the Playtest panel to see what agents found unclear.']));
   };
 
   const offProject = project.onChange((c) => {

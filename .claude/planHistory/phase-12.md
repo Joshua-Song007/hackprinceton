@@ -61,3 +61,18 @@ Not in overview.md; added at user request 2026-11-14 (overview.md stays unchange
 - [x] `Web/studio/test/instructions.test.ts` — helper cases added to the existing file: edits cleaned by the parse, add and remove with limits, steps text round trip, diff of each kind of change, lint messages. The panel's DOM is not unit-tested (node environment, no DOM).
 
 Not planned: server or join agent runners; a how-to-play screen in the Player app; published games carrying instructions beyond `metadata` (Phase 11 backend items).
+
+## Later changes
+
+### 2026-11-15 — Empty Blank and the Playtest panel (Phase 12.7)
+Paths: `Web/studio/src/templates/blank.ts`, `Web/studio/src/templates/tapcounter.ts`, `Web/studio/src/playtestPlan.ts`, `Web/studio/src/playtestPanel.ts`, `Web/studio/src/agentPlayers.ts`, `Web/studio/src/run.ts`, `Web/studio/src/testPanel.ts`, `Web/studio/src/main.ts`
+
+Blank is a floor and nothing else (only the player count declared); the old cube and tap counter are the "Tap counter (example)" template. Agents have one home, the Playtest panel: choose how many players, who they are (a crew in plain words) and how long (a decision budget per agent), press Start. Roles come from the instructions (each referee role once, then the player roles in turn). Each agent has a live card (role, behaviour, what it is doing now, decisions used, last said, Take over) and one play-by-play of what every agent did, heard and was unsure about; problems are red lines. An agent that fails three decisions in a row stops. The playtest ends when every agent has used its budget or the creator presses Stop and see report, then the report opens with Fix with Deep Agent. The per-player Agent, persona and role controls, Seat agents and the "Seat agents when Play starts" setting from 12.6 are gone from the Test panel; it keeps Drive, Stop driving, Wander, Remove and a button to open the Playtest panel. (The 12.6 entry is in `planHistory/phase-08.md`.)
+- [x] `Web/studio/src/templates/blank.ts`, `Web/studio/src/templates/tapcounter.ts`
+- [x] `Web/studio/src/playtestPlan.ts` — crews, budgets, role assignment, readiness, the words of the play-by-play.
+- [x] `Web/studio/src/playtestPanel.ts`
+- [x] `Web/studio/src/agentPlayers.ts` — play-by-play log, `doing`, `exhausted`, failure stop, quiet budget.
+- [x] `Web/studio/src/run.ts` — `startPlaytest`, `playtest` state, auto end, `playtestLog`, `setAgent` budget.
+- [x] `Web/studio/src/testPanel.ts`, `Web/studio/src/playtestView.ts`, `Web/studio/src/instructionsPanel.ts`, `Web/studio/src/main.ts`, `Web/studio/src/project.ts`
+- [x] `Web/studio/test/playtestPlan.test.ts`, `Web/studio/test/agentPlayers.test.ts`, `Web/studio/test/agentRun.test.ts`, `Web/studio/test/studio.test.ts`, `Web/studio/test/authoring.test.ts`, `Web/studio/test/deep-agent-demo.test.ts`, `Web/studio/test/newGame.test.ts`
+

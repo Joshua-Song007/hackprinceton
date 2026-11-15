@@ -71,8 +71,19 @@ describe('project.ts', () => {
 });
 
 describe('blank template', () => {
-  it('has a floor, one cube with a script, and a client script that fires click on tap', () => {
+  it('is a floor and nothing else: no scripts, only the player count declared', () => {
     const p = new Project(templateSnapshot('blank'));
+    expect(flattenScene(p.description()).map((e) => e.id)).toEqual(['Floor']);
+    expect(p.clientScripts).toEqual({});
+    expect(p.serverScripts).toEqual({});
+    expect(p.scene.inputs).toEqual({ players: [1, 32] });
+    expect(p.description().inputs).toMatchObject({ head: false, position: false, heartRate: false, gestures: [], players: [1, 32] });
+  });
+});
+
+describe('tap counter template', () => {
+  it('has a floor, one cube with a script, and a client script that fires click on tap', () => {
+    const p = new Project(templateSnapshot('tapcounter'));
     expect(flattenScene(p.description()).map((e) => e.id)).toEqual(['Floor', 'Cube']);
     expect(Object.keys(p.serverScripts)).toEqual(['counter']);
     expect(p.serverScripts.counter).toContain('ctx.state.clicks');
