@@ -27,6 +27,10 @@ struct Inner {
     friendships: Vec<(String, String, bool)>,
     /// account id -> (provider, sealed key).
     model_keys: std::collections::HashMap<String, (String, String)>,
+    /// account id -> argon2id PHC hash (developer accounts only).
+    password_hashes: std::collections::HashMap<String, String>,
+    /// game id -> (content type, bytes) of the cover picture.
+    covers: std::collections::HashMap<String, (String, Vec<u8>)>,
 }
 
 /// Cheap to clone: clones share the same data.
@@ -78,6 +82,20 @@ pub fn now_rfc3339() -> String {
     )
 }
 
+/// Microseconds since the epoch of an RFC3339 timestamp from `now_rfc3339` (the SQL side is
+/// `EXTRACT(EPOCH FROM updated_at) * 1000000`).
+fn epoch_micros(ts: &str) -> i64 {
+    let n = |r: std::ops::Range<usize>| ts.get(r).and_then(|x| x.parse::<i64>().ok()).unwrap_or(0);
+    let (y, m, d) = (n(0..4), n(5..7), n(8..10));
+    // Days from civil date (Howard Hinnant's algorithm, inverse of the one in now_rfc3339).
+    let y = if m <= 2 { y - 1 } else { y };
+    let era = y.div_euclid(400);
+    let yoe = y.rem_euclid(400);
+    let doy = (153 * (if m > 2 { m - 3 } else { m + 9 }) + 2) / 5 + d - 1;
+    let days = era * 146_097 + yoe * 365 + yoe / 4 - yoe / 100 + doy - 719_468;
+    ((days * 86_400 + n(11..13) * 3_600 + n(14..16) * 60 + n(17..19)) * 1_000_000) + n(20..26)
+}
+
 impl MemStore {
     fn lock(&self) -> MutexGuard<'_, Inner> {
         self.0.lock().unwrap_or_else(|p| p.into_inner())
@@ -101,10 +119,43 @@ impl MemStore {
             provider: provider.into(),
             subject: subject.into(),
             display_name: display_name.into(),
+            role: "player".into(),
             created_at: now_rfc3339(),
         };
         s.accounts.push(a.clone());
         a
+    }
+
+    /// Same rule as `db::upsert_developer`: creates or updates (provider "developer", username), role developer.
+    pub fn upsert_developer(&self, username: &str, display_name: &str, password_hash: &str) -> Account {
+        let mut s = self.lock();
+        let a = match s.accounts.iter().position(|a| a.provider == "developer" && a.subject == username) {
+            Some(i) => {
+                s.accounts[i].display_name = display_name.into();
+                s.accounts[i].role = "developer".into();
+                s.accounts[i].clone()
+            }
+            None => {
+                let a = Account {
+                    id: new_id(),
+                    provider: "developer".into(),
+                    subject: username.into(),
+                    display_name: display_name.into(),
+                    role: "developer".into(),
+                    created_at: now_rfc3339(),
+                };
+                s.accounts.push(a.clone());
+                a
+            }
+        };
+        s.password_hashes.insert(a.id.clone(), password_hash.into());
+        a
+    }
+
+    pub fn developer_credentials(&self, username: &str) -> Option<(Account, String)> {
+        let s = self.lock();
+        let a = s.accounts.iter().find(|a| a.provider == "developer" && a.subject == username && a.role == "developer")?;
+        Some((a.clone(), s.password_hashes.get(&a.id)?.clone()))
     }
 
     pub fn update_display_name(&self, id: &str, display_name: &str) -> Option<Account> {
@@ -119,18 +170,69 @@ impl MemStore {
         let g = Game {
             id: new_id(),
             owner_id: owner_id.into(),
+            owner_name: String::new(),
             title: title.into(),
+            description: String::new(),
+            has_cover: false,
             created_at: now.clone(),
             updated_at: now,
         };
-        self.lock().games.push(g.clone());
+        let mut s = self.lock();
+        s.games.push(g.clone());
+        Self::decorate(&s, &g)
+    }
+
+    /// Fills the fields Postgres derives by join: the owner's current display name and whether a cover exists.
+    fn decorate(s: &Inner, g: &Game) -> Game {
+        let mut g = g.clone();
+        g.owner_name = s.accounts.iter().find(|a| a.id == g.owner_id).map(|a| a.display_name.clone()).unwrap_or_default();
+        g.has_cover = s.covers.contains_key(&g.id);
         g
     }
 
     /// In creation order, like the SQL `ORDER BY created_at, id`.
     pub fn list_games_by_owner(&self, owner_id: &str) -> Vec<Game> {
         let s = self.lock();
-        s.games.iter().filter(|g| g.owner_id == owner_id).cloned().collect()
+        s.games.iter().filter(|g| g.owner_id == owner_id).map(|g| Self::decorate(&s, g)).collect()
+    }
+
+    pub fn list_all_games(&self) -> Vec<Game> {
+        let s = self.lock();
+        s.games.iter().map(|g| Self::decorate(&s, g)).collect()
+    }
+
+    pub fn get_game(&self, game_id: &str) -> Option<Game> {
+        let s = self.lock();
+        s.games.iter().find(|g| g.id == game_id).map(|g| Self::decorate(&s, g))
+    }
+
+    pub fn update_game_meta(&self, game_id: &str, title: Option<&str>, description: Option<&str>) -> Option<Game> {
+        let mut s = self.lock();
+        let g = s.games.iter_mut().find(|g| g.id == game_id)?;
+        if let Some(t) = title {
+            g.title = t.into();
+        }
+        if let Some(d) = description {
+            g.description = d.into();
+        }
+        g.updated_at = now_rfc3339();
+        let g = g.clone();
+        Some(Self::decorate(&s, &g))
+    }
+
+    pub fn set_cover(&self, game_id: &str, cover: Option<(&str, &[u8])>) -> bool {
+        let mut s = self.lock();
+        let Some(g) = s.games.iter_mut().find(|g| g.id == game_id) else { return false };
+        g.updated_at = now_rfc3339();
+        match cover {
+            Some((ty, bytes)) => s.covers.insert(game_id.into(), (ty.into(), bytes.to_vec())),
+            None => s.covers.remove(game_id),
+        };
+        true
+    }
+
+    pub fn get_cover(&self, game_id: &str) -> Option<(String, Vec<u8>)> {
+        self.lock().covers.get(game_id).cloned()
     }
 
     /// Removes the game and its versions; false when the game does not exist.
@@ -138,6 +240,7 @@ impl MemStore {
         let mut s = self.lock();
         let before = s.games.len();
         s.games.retain(|g| g.id != game_id);
+        s.covers.remove(game_id);
         s.versions.retain(|v| v.game_id != game_id);
         s.games.len() != before
     }
@@ -364,6 +467,8 @@ impl MemStore {
                     latest_version: latest.version,
                     run_mode: latest.run_mode.clone(),
                     required_tier: catalog_tier(&latest.scene["requiredTier"]),
+                    description: g.description.clone(),
+                    cover_version: s.covers.contains_key(&g.id).then(|| epoch_micros(&g.updated_at)),
                 })
             })
             .collect()
@@ -464,6 +569,8 @@ mod tests {
                 latest_version: 2,
                 run_mode: "device".into(),
                 required_tier: 2,
+                description: String::new(),
+                cover_version: None,
             }
         );
     }
@@ -494,6 +601,33 @@ mod tests {
         std::thread::sleep(std::time::Duration::from_millis(2));
         m.insert_game_version(&g1.id, &nv("c")).unwrap();
         assert_eq!(ids(&m), vec![g1.id.clone(), g2.id.clone()]);
+    }
+
+    #[test]
+    fn developer_cover_and_metadata_parity() {
+        let m = MemStore::default();
+        let d = m.upsert_developer("dev", "Dev", "hash1");
+        assert_eq!(d.role, "developer");
+        assert_eq!(m.upsert_developer("dev", "Dev 2", "hash2").id, d.id);
+        assert_eq!(m.developer_credentials("dev").map(|c| (c.0.display_name, c.1)), Some(("Dev 2".into(), "hash2".into())));
+        let p = m.upsert_account("dev", "dev", "Player"); // same subject, other provider: not a developer
+        assert_eq!(p.role, "player");
+        assert!(m.developer_credentials("nope").is_none());
+        let g = m.create_game(&p.id, "G");
+        assert_eq!((g.owner_name.as_str(), g.has_cover), ("Player", false));
+        m.insert_game_version(&g.id, &nv("a")).unwrap();
+        assert_eq!(m.list_catalog()[0].cover_version, None);
+        assert!(m.set_cover(&g.id, Some(("image/png", &[1, 2]))));
+        assert_eq!(m.get_cover(&g.id), Some(("image/png".into(), vec![1, 2])));
+        let after = m.get_game(&g.id).unwrap();
+        assert!(after.has_cover);
+        assert_eq!(m.list_catalog()[0].cover_version, Some(epoch_micros(&after.updated_at)));
+        let g2 = m.update_game_meta(&g.id, Some("T"), Some("D")).unwrap();
+        assert_eq!((g2.title.as_str(), g2.description.as_str()), ("T", "D"));
+        assert!(m.set_cover(&g.id, None) && m.get_cover(&g.id).is_none());
+        assert!(!m.set_cover("missing", None));
+        assert_eq!(m.list_all_games().len(), 1);
+        assert_eq!(epoch_micros("2024-01-02T03:04:05.123456Z"), 1_704_164_645_123_456);
     }
 
     #[test]

@@ -42,7 +42,7 @@ async fn sign_in(addr: Addr, name: &str) -> User {
         "POST",
         "/api/accounts/signin",
         None,
-        Some(&json!({"provider": "test", "subject": name, "display_name": name})),
+        Some(&json!({"provider": "dev", "subject": name, "display_name": name})),
     )
     .await;
     assert_eq!(st, 200, "signin: {body}");

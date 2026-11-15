@@ -1,4 +1,4 @@
-// Publish a game version, list games, fetch a version; only the owner may publish.
+// Publish a game version, list games, fetch a version; only the owner (or a developer account) may publish.
 // [provisional: needs-tien-review] Fetch requires a signed-in account (any account, not only the owner);
 // public fetch for players is a later decision (permissions are not decided in overview.md Module 11).
 // Auth is `accounts::authenticate`; queries go through db.rs only. Order per request: auth, validate, db.
@@ -6,22 +6,32 @@
 // Routes:
 //   POST /api/games                         {title}            -> 201 Game
 //   GET  /api/games                                            -> 200 [Game] (the caller's games)
+//   GET  /api/games?all=1                                      -> 200 [Game] (every game; developers only, else 403)
+//   PUT  /api/games/{id}                    {title?, description?} -> 200 Game (owner or developer)
+//   PUT  /api/games/{id}/cover              raw jpeg/png <= 2 MB -> 204 | 413 | 415 (owner or developer)
+//   DELETE /api/games/{id}/cover                               -> 204 (owner or developer)
+//   GET  /api/games/{id}/cover                                 -> 200 image bytes | 404 (public, no auth)
 //   GET  /api/games/{id}/lobbies                               -> 200 [{code, players: [{id, name}]}] live lobbies
 //   POST /api/games/{id}/versions           NewGameVersion     -> 201 GameVersion (owner only)
 //   GET  /api/games/{id}/versions/{version} number or "latest" -> 200 GameVersion
 
-use axum::extract::{Path, State};
-use axum::http::{HeaderMap, StatusCode};
+use axum::body::Bytes;
+use axum::extract::{DefaultBodyLimit, Path, RawQuery, State};
+use axum::http::{header, HeaderMap, StatusCode};
+use axum::response::{IntoResponse, Response};
 use axum::routing::{delete, get, post};
 use axum::{Json, Router};
 use serde::{Deserialize, Serialize};
 
-use crate::api::accounts::authenticate;
+use crate::api::accounts::{authenticate, query_param};
+use crate::api::avatars::sniff;
 use crate::game_server::session;
 use crate::db::{self, Account, Game, GameVersion, NewGameVersion};
 use crate::AppState;
 
 const MAX_TITLE_LEN: usize = 256;
+const MAX_DESCRIPTION_LEN: usize = 4000;
+const MAX_COVER_BYTES: usize = 2 * 1024 * 1024;
 
 #[derive(Debug, Deserialize)]
 pub struct CreateGameRequest {
@@ -90,13 +100,105 @@ async fn create_game(
 async fn list_games(
     State(state): State<AppState>,
     headers: HeaderMap,
+    RawQuery(query): RawQuery,
 ) -> Result<Json<Vec<Game>>, StatusCode> {
     let account = require_account(&headers)?;
+    let all = query_param(query.as_deref(), "all") == Some("1");
+    if all && !account.is_developer() {
+        return Err(StatusCode::FORBIDDEN);
+    }
     let pool = state.db.as_ref().ok_or(StatusCode::SERVICE_UNAVAILABLE)?;
-    db::list_games_by_owner(pool, &account.id)
+    let games = if all { db::list_all_games(pool).await } else { db::list_games_by_owner(pool, &account.id).await };
+    games.map(Json).map_err(|e| db_err("list", e))
+}
+
+/// 404 when the game does not exist, 403 unless the caller owns it or is a developer.
+async fn require_editor(pool: &db::Db, account: &Account, game_id: &str) -> Result<(), StatusCode> {
+    match db::game_owner(pool, game_id).await.map_err(|e| db_err("owner", e))? {
+        None => Err(StatusCode::NOT_FOUND),
+        Some(owner) if owner != account.id && !account.is_developer() => Err(StatusCode::FORBIDDEN),
+        Some(_) => Ok(()),
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct UpdateGameRequest {
+    title: Option<String>,
+    description: Option<String>,
+}
+
+async fn update_game(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(game_id): Path<String>,
+    Json(req): Json<UpdateGameRequest>,
+) -> Result<Json<Game>, StatusCode> {
+    let account = require_account(&headers)?;
+    if !valid_uuid(&game_id)
+        || (req.title.is_none() && req.description.is_none())
+        || req.title.as_deref().is_some_and(|t| !valid_title(t))
+        || req.description.as_deref().is_some_and(|d| d.len() > MAX_DESCRIPTION_LEN)
+    {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+    let pool = state.db.as_ref().ok_or(StatusCode::SERVICE_UNAVAILABLE)?;
+    require_editor(pool, &account, &game_id).await?;
+    db::update_game_meta(pool, &game_id, req.title.as_deref().map(str::trim), req.description.as_deref())
         .await
+        .map_err(|e| db_err("update", e))?
         .map(Json)
-        .map_err(|e| db_err("list", e))
+        .ok_or(StatusCode::NOT_FOUND)
+}
+
+async fn put_cover(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(game_id): Path<String>,
+    body: Bytes,
+) -> Result<StatusCode, StatusCode> {
+    let account = require_account(&headers)?;
+    if !valid_uuid(&game_id) {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+    let declared = headers.get(header::CONTENT_TYPE).and_then(|v| v.to_str().ok()).unwrap_or_default();
+    if !matches!(declared, "image/jpeg" | "image/png") || sniff(&body) != Some(declared) {
+        return Err(StatusCode::UNSUPPORTED_MEDIA_TYPE);
+    }
+    let pool = state.db.as_ref().ok_or(StatusCode::SERVICE_UNAVAILABLE)?;
+    require_editor(pool, &account, &game_id).await?;
+    if !db::set_cover(pool, &game_id, Some((declared, &body))).await.map_err(|e| db_err("cover", e))? {
+        return Err(StatusCode::NOT_FOUND);
+    }
+    Ok(StatusCode::NO_CONTENT)
+}
+
+async fn remove_cover(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(game_id): Path<String>,
+) -> Result<StatusCode, StatusCode> {
+    let account = require_account(&headers)?;
+    if !valid_uuid(&game_id) {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+    let pool = state.db.as_ref().ok_or(StatusCode::SERVICE_UNAVAILABLE)?;
+    require_editor(pool, &account, &game_id).await?;
+    if !db::set_cover(pool, &game_id, None).await.map_err(|e| db_err("cover", e))? {
+        return Err(StatusCode::NOT_FOUND);
+    }
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// Public like the avatars: AsyncImage and <img> cannot send an Authorization header, ids are random uuids.
+async fn fetch_cover(State(state): State<AppState>, Path(game_id): Path<String>) -> Result<Response, StatusCode> {
+    if !valid_uuid(&game_id) {
+        return Err(StatusCode::NOT_FOUND);
+    }
+    let pool = state.db.as_ref().ok_or(StatusCode::SERVICE_UNAVAILABLE)?;
+    match db::get_cover(pool, &game_id).await.map_err(|e| db_err("cover", e))? {
+        Some((ty, bytes)) => Ok(([(header::CONTENT_TYPE, ty), (header::CACHE_CONTROL, "no-cache".to_string())], bytes).into_response()),
+        None => Err(StatusCode::NOT_FOUND),
+    }
 }
 
 async fn publish_version(
@@ -110,14 +212,7 @@ async fn publish_version(
         return Err(StatusCode::BAD_REQUEST);
     }
     let pool = state.db.as_ref().ok_or(StatusCode::SERVICE_UNAVAILABLE)?;
-    match db::game_owner(pool, &game_id)
-        .await
-        .map_err(|e| db_err("owner", e))?
-    {
-        None => return Err(StatusCode::NOT_FOUND),
-        Some(owner) if owner != account.id => return Err(StatusCode::FORBIDDEN),
-        Some(_) => {}
-    }
+    require_editor(pool, &account, &game_id).await?;
     let v = db::insert_game_version(pool, &game_id, &body)
         .await
         .map_err(|e| db_err("publish", e))?;
@@ -153,14 +248,7 @@ async fn remove_game(
         return Err(StatusCode::BAD_REQUEST);
     }
     let pool = state.db.as_ref().ok_or(StatusCode::SERVICE_UNAVAILABLE)?;
-    match db::game_owner(pool, &game_id)
-        .await
-        .map_err(|e| db_err("owner", e))?
-    {
-        None => return Err(StatusCode::NOT_FOUND),
-        Some(owner) if owner != account.id => return Err(StatusCode::FORBIDDEN),
-        Some(_) => {}
-    }
+    require_editor(pool, &account, &game_id).await?;
     if !db::delete_game(pool, &game_id)
         .await
         .map_err(|e| db_err("delete", e))?
@@ -199,7 +287,11 @@ async fn list_lobbies(headers: HeaderMap, Path(id): Path<String>) -> Result<Json
 pub fn routes() -> Router<AppState> {
     Router::new()
         .route("/api/games", post(create_game).get(list_games))
-        .route("/api/games/{id}", delete(remove_game))
+        .route("/api/games/{id}", delete(remove_game).put(update_game))
+        .route(
+            "/api/games/{id}/cover",
+            get(fetch_cover).put(put_cover).delete(remove_cover).layer(DefaultBodyLimit::max(MAX_COVER_BYTES)),
+        )
         .route("/api/games/{id}/lobbies", get(list_lobbies))
         .route("/api/games/{id}/versions", post(publish_version))
         .route("/api/games/{id}/versions/{version}", get(fetch_version))

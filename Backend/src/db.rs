@@ -24,6 +24,7 @@ const MIGRATION_0001: &str = include_str!("../migrations/0001_init.sql");
 const MIGRATION_0002: &str = include_str!("../migrations/0002_plugins.sql");
 const MIGRATION_0003: &str = include_str!("../migrations/0003_marketplace_cloud.sql");
 const MIGRATION_0004: &str = include_str!("../migrations/0004_friends.sql");
+const MIGRATION_0005: &str = include_str!("../migrations/0005_developer.sql");
 
 /// Lazy pool: no connection is made until a query runs.
 pub fn connect_lazy(url: &str) -> DbResult<PgPool> {
@@ -32,6 +33,7 @@ pub fn connect_lazy(url: &str) -> DbResult<PgPool> {
 
 /// Applies 0001_init.sql, 0002_plugins.sql and 0003_marketplace_cloud.sql, each once: a step is
 /// skipped when its table (`accounts`, `plugins`, `plugin_versions`) already exists.
+/// 0005_developer.sql only adds columns, so it is skipped when `accounts.role` already exists.
 pub async fn migrate(pool: &PgPool) -> DbResult<()> {
     for (table, sql) in [("accounts", MIGRATION_0001), ("plugins", MIGRATION_0002), ("plugin_versions", MIGRATION_0003), ("friendships", MIGRATION_0004)] {
         let exists: bool = sqlx::query("SELECT to_regclass($1) IS NOT NULL")
@@ -43,6 +45,16 @@ pub async fn migrate(pool: &PgPool) -> DbResult<()> {
             sqlx::raw_sql(sql).execute(pool).await?;
         }
     }
+    let has_role: bool = sqlx::query(
+        "SELECT EXISTS (SELECT 1 FROM information_schema.columns \
+         WHERE table_schema = 'public' AND table_name = 'accounts' AND column_name = 'role')",
+    )
+    .fetch_one(pool)
+    .await?
+    .try_get(0)?;
+    if !has_role {
+        sqlx::raw_sql(MIGRATION_0005).execute(pool).await?;
+    }
     Ok(())
 }
 
@@ -52,14 +64,25 @@ pub struct Account {
     pub provider: String,
     pub subject: String,
     pub display_name: String,
+    /// "player" or "developer" (developers may edit every game).
+    pub role: String,
     pub created_at: String,
+}
+
+impl Account {
+    pub fn is_developer(&self) -> bool {
+        self.role == "developer"
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Game {
     pub id: String,
     pub owner_id: String,
+    pub owner_name: String,
     pub title: String,
+    pub description: String,
+    pub has_cover: bool,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -147,15 +170,27 @@ fn account_from_row(r: &sqlx::postgres::PgRow) -> DbResult<Account> {
         provider: r.try_get("provider")?,
         subject: r.try_get("subject")?,
         display_name: r.try_get("display_name")?,
+        role: r.try_get("role")?,
         created_at: r.try_get("created_at")?,
     })
 }
+
+const ACCOUNT_COLS: &str = "id::text AS id, provider, subject, display_name, role, created_at::text AS created_at";
+
+/// Game columns for a query over `games g LEFT JOIN accounts a ON a.id = g.owner_id`.
+const GAME_COLS: &str = "g.id::text AS id, g.owner_id::text AS owner_id, COALESCE(a.display_name, '') AS owner_name, \
+    g.title, g.description, (g.cover IS NOT NULL) AS has_cover, \
+    g.created_at::text AS created_at, g.updated_at::text AS updated_at";
+const GAME_FROM: &str = "games g LEFT JOIN accounts a ON a.id = g.owner_id";
 
 fn game_from_row(r: &sqlx::postgres::PgRow) -> DbResult<Game> {
     Ok(Game {
         id: r.try_get("id")?,
         owner_id: r.try_get("owner_id")?,
+        owner_name: r.try_get("owner_name")?,
         title: r.try_get("title")?,
+        description: r.try_get("description")?,
+        has_cover: r.try_get("has_cover")?,
         created_at: r.try_get("created_at")?,
         updated_at: r.try_get("updated_at")?,
     })
@@ -202,7 +237,7 @@ pub async fn upsert_account(
          ON CONFLICT (provider, subject) DO UPDATE SET \
          display_name = CASE WHEN EXCLUDED.display_name <> '' THEN EXCLUDED.display_name \
          ELSE accounts.display_name END \
-         RETURNING id::text AS id, provider, subject, display_name, created_at::text AS created_at",
+         RETURNING id::text AS id, provider, subject, display_name, role, created_at::text AS created_at",
     )
     .bind(provider)
     .bind(subject)
@@ -220,7 +255,7 @@ pub async fn update_display_name(db: &Db, id: &str, display_name: &str) -> DbRes
     };
     let row = sqlx::query(
         "UPDATE accounts SET display_name = $2 WHERE id = $1::uuid \
-         RETURNING id::text AS id, provider, subject, display_name, created_at::text AS created_at",
+         RETURNING id::text AS id, provider, subject, display_name, role, created_at::text AS created_at",
     )
     .bind(id)
     .bind(display_name)
@@ -234,11 +269,10 @@ pub async fn create_game(db: &Db, owner_id: &str, title: &str) -> DbResult<Game>
         Db::Pg(pool) => pool,
         Db::Mem(m) => return Ok(m.create_game(owner_id, title)),
     };
-    let row = sqlx::query(
-        "INSERT INTO games (owner_id, title) VALUES ($1::uuid, $2) \
-         RETURNING id::text AS id, owner_id::text AS owner_id, title, \
-         created_at::text AS created_at, updated_at::text AS updated_at",
-    )
+    let row = sqlx::query(&format!(
+        "WITH g AS (INSERT INTO games (owner_id, title) VALUES ($1::uuid, $2) RETURNING *) \
+         SELECT {GAME_COLS} FROM {GAME_FROM}"
+    ))
     .bind(owner_id)
     .bind(title)
     .fetch_one(pool)
@@ -251,15 +285,131 @@ pub async fn list_games_by_owner(db: &Db, owner_id: &str) -> DbResult<Vec<Game>>
         Db::Pg(pool) => pool,
         Db::Mem(m) => return Ok(m.list_games_by_owner(owner_id)),
     };
-    let rows = sqlx::query(
-        "SELECT id::text AS id, owner_id::text AS owner_id, title, \
-         created_at::text AS created_at, updated_at::text AS updated_at \
-         FROM games WHERE owner_id = $1::uuid ORDER BY created_at, id",
-    )
+    let rows = sqlx::query(&format!(
+        "SELECT {GAME_COLS} FROM {GAME_FROM} WHERE g.owner_id = $1::uuid ORDER BY g.created_at, g.id"
+    ))
     .bind(owner_id)
     .fetch_all(pool)
     .await?;
     rows.iter().map(game_from_row).collect()
+}
+
+/// Every game (developers only, enforced by the caller), in creation order.
+pub async fn list_all_games(db: &Db) -> DbResult<Vec<Game>> {
+    let pool = match db {
+        Db::Pg(pool) => pool,
+        Db::Mem(m) => return Ok(m.list_all_games()),
+    };
+    let rows = sqlx::query(&format!("SELECT {GAME_COLS} FROM {GAME_FROM} ORDER BY g.created_at, g.id"))
+        .fetch_all(pool)
+        .await?;
+    rows.iter().map(game_from_row).collect()
+}
+
+pub async fn get_game(db: &Db, game_id: &str) -> DbResult<Option<Game>> {
+    let pool = match db {
+        Db::Pg(pool) => pool,
+        Db::Mem(m) => return Ok(m.get_game(game_id)),
+    };
+    let row = sqlx::query(&format!("SELECT {GAME_COLS} FROM {GAME_FROM} WHERE g.id = $1::uuid"))
+        .bind(game_id)
+        .fetch_optional(pool)
+        .await?;
+    row.as_ref().map(game_from_row).transpose()
+}
+
+/// Sets the given title and/or description and bumps `updated_at`; None when the game does not exist.
+pub async fn update_game_meta(db: &Db, game_id: &str, title: Option<&str>, description: Option<&str>) -> DbResult<Option<Game>> {
+    let pool = match db {
+        Db::Pg(pool) => pool,
+        Db::Mem(m) => return Ok(m.update_game_meta(game_id, title, description)),
+    };
+    let done = sqlx::query(
+        "UPDATE games SET title = COALESCE($2, title), description = COALESCE($3, description), updated_at = now() \
+         WHERE id = $1::uuid",
+    )
+    .bind(game_id)
+    .bind(title)
+    .bind(description)
+    .execute(pool)
+    .await?;
+    if done.rows_affected() == 0 {
+        return Ok(None);
+    }
+    get_game(db, game_id).await
+}
+
+/// Stores (Some) or clears (None) the cover picture and bumps `updated_at`; false when the game does not exist.
+pub async fn set_cover(db: &Db, game_id: &str, cover: Option<(&str, &[u8])>) -> DbResult<bool> {
+    let pool = match db {
+        Db::Pg(pool) => pool,
+        Db::Mem(m) => return Ok(m.set_cover(game_id, cover)),
+    };
+    let done = sqlx::query("UPDATE games SET cover = $2, cover_type = $3, updated_at = now() WHERE id = $1::uuid")
+        .bind(game_id)
+        .bind(cover.map(|c| c.1.to_vec()))
+        .bind(cover.map(|c| c.0.to_string()))
+        .execute(pool)
+        .await?;
+    Ok(done.rows_affected() > 0)
+}
+
+/// (content type, bytes) of the game's cover, or None when it has none.
+pub async fn get_cover(db: &Db, game_id: &str) -> DbResult<Option<(String, Vec<u8>)>> {
+    let pool = match db {
+        Db::Pg(pool) => pool,
+        Db::Mem(m) => return Ok(m.get_cover(game_id)),
+    };
+    let row = sqlx::query("SELECT cover_type, cover FROM games WHERE id = $1::uuid AND cover IS NOT NULL")
+        .bind(game_id)
+        .fetch_optional(pool)
+        .await?;
+    match row {
+        Some(r) => Ok(Some((r.try_get("cover_type")?, r.try_get("cover")?))),
+        None => Ok(None),
+    }
+}
+
+/// Creates or updates the developer account (provider "developer", subject = username) with this
+/// argon2id hash; re-running resets the password. Used by the `create-developer` CLI only.
+pub async fn upsert_developer(db: &Db, username: &str, display_name: &str, password_hash: &str) -> DbResult<Account> {
+    let pool = match db {
+        Db::Pg(pool) => pool,
+        Db::Mem(m) => return Ok(m.upsert_developer(username, display_name, password_hash)),
+    };
+    let row = sqlx::query(&format!(
+        "INSERT INTO accounts (provider, subject, display_name, role, password_hash) \
+         VALUES ('developer', $1, $2, 'developer', $3) \
+         ON CONFLICT (provider, subject) DO UPDATE SET display_name = EXCLUDED.display_name, \
+         role = 'developer', password_hash = EXCLUDED.password_hash \
+         RETURNING {ACCOUNT_COLS}"
+    ))
+    .bind(username)
+    .bind(display_name)
+    .bind(password_hash)
+    .fetch_one(pool)
+    .await?;
+    account_from_row(&row)
+}
+
+/// The developer account for this username and its password hash; None for an unknown user (or an
+/// account without a hash).
+pub async fn developer_credentials(db: &Db, username: &str) -> DbResult<Option<(Account, String)>> {
+    let pool = match db {
+        Db::Pg(pool) => pool,
+        Db::Mem(m) => return Ok(m.developer_credentials(username)),
+    };
+    let row = sqlx::query(&format!(
+        "SELECT {ACCOUNT_COLS}, password_hash FROM accounts \
+         WHERE provider = 'developer' AND subject = $1 AND role = 'developer' AND password_hash IS NOT NULL"
+    ))
+    .bind(username)
+    .fetch_optional(pool)
+    .await?;
+    match row {
+        Some(r) => Ok(Some((account_from_row(&r)?, r.try_get("password_hash")?))),
+        None => Ok(None),
+    }
 }
 
 /// Deletes the game; its versions go with it (ON DELETE CASCADE). False when the game does not exist.
@@ -362,6 +512,9 @@ pub struct CatalogRow {
     pub latest_version: i32,
     pub run_mode: String,
     pub required_tier: i32,
+    pub description: String,
+    /// Cache-busting version of the cover (microseconds of `updated_at`); None when the game has no cover.
+    pub cover_version: Option<i64>,
 }
 
 /// Tier a scene asks for: its `requiredTier` when that is a JSON integer, clamped to 1..=3;
@@ -379,7 +532,8 @@ pub async fn list_catalog(db: &Db) -> DbResult<Vec<CatalogRow>> {
     };
     let rows = sqlx::query(
         "SELECT g.id::text AS id, g.title, a.display_name AS author, v.version AS latest_version, \
-         v.run_mode, (v.scene->'requiredTier')::text AS required_tier \
+         v.run_mode, (v.scene->'requiredTier')::text AS required_tier, g.description, \
+         CASE WHEN g.cover IS NULL THEN NULL ELSE (EXTRACT(EPOCH FROM g.updated_at) * 1000000)::bigint END AS cover_version \
          FROM games g JOIN accounts a ON a.id = g.owner_id \
          JOIN LATERAL (SELECT version, run_mode, scene FROM game_versions \
          WHERE game_id = g.id ORDER BY version DESC LIMIT 1) v ON true \
@@ -401,6 +555,8 @@ pub async fn list_catalog(db: &Db) -> DbResult<Vec<CatalogRow>> {
                 latest_version: r.try_get("latest_version")?,
                 run_mode: r.try_get("run_mode")?,
                 required_tier: catalog_tier(&tier),
+                description: r.try_get("description")?,
+                cover_version: r.try_get("cover_version")?,
             })
         })
         .collect()
