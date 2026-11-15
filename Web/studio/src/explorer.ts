@@ -1,6 +1,7 @@
 // Explorer: entity tree plus client and server script lists. Select an entity, open / add / rename / delete scripts.
 import type { PeripheralKind } from '@pear/runtime';
 import type { EditorBus } from './editor';
+import { entityScripts, usedBy, usedByText } from './explorerText';
 import type { PanelView } from './layout';
 import { PERIPHERALS, devicesOf, readPeripheralState } from './peripherals';
 import { walkEntities, type Project, type ScriptKind } from './project';
@@ -49,9 +50,15 @@ export function createExplorerPanel(project: Project, selection: Selection, edit
         el('div', { class: 'sheet-actions' }, [button('Cancel', close), button('Delete script', () => {
           project.deleteScript(kind, name);
           close();
-        }, { variant: 'default' })]),
+        }, { danger: true })]),
       );
     });
+  const scriptMenu = (anchor: HTMLElement, kind: ScriptKind, name: string) =>
+    openMenu(anchor, [
+      { label: 'Open', shortcut: 'Enter', run: () => editor.open({ kind, name }) },
+      { label: 'Rename', shortcut: 'F2', run: () => rename(kind, name) },
+      { label: 'Delete', shortcut: 'Delete', run: () => remove(kind, name) },
+    ]);
 
   const addEntity = (parent: string | null, kind: 'box' | 'sphere' | 'trigger' | 'empty') => {
     const id = project.addEntity(parent, kind);
@@ -101,30 +108,35 @@ export function createExplorerPanel(project: Project, selection: Selection, edit
 
   const render = () => {
     const items: Item[] = [];
+    const emptyLine = (text: string) => el('p', { class: 'om-sub', style: 'padding:4px 12px' }, [text]);
     const list = el('ul', { class: 'om-list', role: 'listbox', 'aria-label': 'Scene entities' });
+    let entityCount = 0;
     walkEntities(project.scene, (e, id) => {
       items.push({ kind: 'entity', id });
+      entityCount++;
       const depth = id.split('/').length - 1;
-      const types = (e.components ?? []).map((c) => String(c.type)).join(', ');
+      const types = entityScripts(e.components);
       list.append(row({ kind: 'entity', id }, depth, 'cube', String(e.name ?? ''), types, selection.entityId === id));
     });
     const scriptList = (kind: ScriptKind) => {
+      const names = Object.keys(project.scripts(kind));
+      if (!names.length) return emptyLine(kind === 'client' ? "No client scripts. Add one to react to taps and other events on a player's device." : 'No server scripts. Add one to run game logic on the server.');
       const ul = el('ul', { class: 'om-list', role: 'listbox', 'aria-label': `${kind} scripts`, 'aria-describedby': 'explorer-keys' });
-      for (const name of Object.keys(project.scripts(kind))) {
+      for (const name of names) {
         const item: Item = { kind: 'script', script: kind, name };
         items.push(item);
         const open = editor.active?.kind === kind && editor.active.name === name;
-        ul.append(row(item, 0, 'script', `${name}.js`, '', open));
+        ul.append(row(item, 0, 'script', `${name}.js`, kind === 'client' ? usedByText(usedBy(project.scene, name)) : '', open));
       }
       return ul;
     };
     const group = (title: string, kind?: ScriptKind) => {
       const addBtn: HTMLButtonElement | null = kind
-        ? button('Add', () => add(kind), { variant: 'small', ariaLabel: `Add ${kind} script` })
+        ? button('Add script', () => add(kind), { variant: 'small', ariaLabel: `Add script (${kind})` })
         : title === 'Scene'
-          ? button('Add', () => openMenu(addBtn!, addItems(null, true)), { variant: 'small', ariaLabel: 'Add entity' })
+          ? button('Add object', () => openMenu(addBtn!, addItems(null, true)), { variant: 'small', ariaLabel: 'Add object to the scene' })
           : title === 'Peripherals'
-            ? button('Add', addPeripheral, { variant: 'small', ariaLabel: 'Add peripheral' })
+            ? button('Add peripheral', addPeripheral, { variant: 'small', ariaLabel: 'Add peripheral' })
             : null;
       return el('div', { class: 'pn-group pn-group--h' }, [title, ...(addBtn ? [addBtn] : [])]);
     };
@@ -139,7 +151,7 @@ export function createExplorerPanel(project: Project, selection: Selection, edit
     const clientList = scriptList('client');
     const serverList = scriptList('server');
     const keys = el('span', { id: 'explorer-keys', class: 'sr-only' }, ['Arrow keys move, Enter opens a script, F2 renames, Ctrl+D duplicates an entity, Delete removes, Shift+F10 opens the context menu.']);
-    root.replaceChildren(keys, group('Scene'), list, group('Peripherals'), devices.length ? deviceList : noDevices, group('Client scripts', 'client'), clientList, group('Server scripts', 'server'), serverList);
+    root.replaceChildren(keys, group('Scene'), entityCount ? list : emptyLine('Nothing in the scene yet. Add a box, sphere, trigger or empty.'), group('Peripherals'), devices.length ? deviceList : noDevices, group('Client scripts', 'client'), clientList, group('Server scripts', 'server'), serverList);
     if (!items.some((i) => keyOf(i) === focusKey)) focusKey = items[0] ? keyOf(items[0]) : null;
     root.querySelectorAll<HTMLElement>('li').forEach((li) => (li.tabIndex = li.dataset.key === focusKey ? 0 : -1));
 
@@ -171,6 +183,9 @@ export function createExplorerPanel(project: Project, selection: Selection, edit
       } else if ((e.key === 'ContextMenu' || (e.key === 'F10' && e.shiftKey)) && it.kind === 'entity') {
         e.preventDefault();
         entityMenu(li!, it.id);
+      } else if ((e.key === 'ContextMenu' || (e.key === 'F10' && e.shiftKey)) && it.kind === 'script') {
+        e.preventDefault();
+        scriptMenu(li!.querySelector<HTMLElement>('.om-more') ?? li!, it.script, it.name);
       }
     };
 
@@ -194,14 +209,21 @@ export function createExplorerPanel(project: Project, selection: Selection, edit
           entityMenu(root.querySelector<HTMLElement>(`li[data-key="${CSS.escape(keyOf(item))}"]`) ?? li, item.id);
         });
       }
-      if (item.kind === 'script') {
-        li.addEventListener('dblclick', () => editor.open({ kind: item.script, name: item.name }));
+      if (item.kind === 'script') li.addEventListener('dblclick', () => editor.open({ kind: item.script, name: item.name }));
+      if (item.kind !== 'device') {
+        // One "..." button per row opens the row's menu; a click on it must not reach the row's own click handler, which re-renders the list and would detach the button.
+        const what = item.kind === 'script' ? item.name : item.id.split('/').pop();
+        const more = button('⋯', () => {
+          if (item.kind === 'script') return scriptMenu(more, item.script, item.name);
+          selection.set(item.id);
+          entityMenu(root.querySelector<HTMLElement>(`li[data-key="${CSS.escape(keyOf(item))}"] .om-more`) ?? more, item.id);
+        }, { variant: 'borderless', ariaLabel: `Actions for ${what}` });
         // tabindex -1: F2 and Delete cover the keyboard, so the row stays one tab stop
-        const rn = button('Rename', () => rename(item.script, item.name), { variant: 'small', ariaLabel: `Rename ${item.name}` });
-        const dl = button('Delete', () => remove(item.script, item.name), { variant: 'small', danger: true, ariaLabel: `Delete ${item.name}` });
-        rn.tabIndex = dl.tabIndex = -1;
-        li.append(rn, dl);
-        li.style.gridTemplateColumns = '18px minmax(0, 1fr) auto auto auto';
+        more.tabIndex = -1;
+        more.classList.add('om-more');
+        more.addEventListener('click', (e) => e.stopPropagation());
+        li.append(more);
+        li.style.gridTemplateColumns = '18px auto minmax(0, 1fr) auto';
       }
       return li;
     }
