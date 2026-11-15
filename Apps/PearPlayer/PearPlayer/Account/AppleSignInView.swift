@@ -10,11 +10,15 @@ struct AppleSignInView: View {
 
     var body: some View {
         VStack(spacing: 20) {
-            Image("PearMark").resizable().scaledToFit().frame(width: 56, height: 56).accessibilityHidden(true)
-            Text("Pear").font(.title.weight(.semibold))
-            Text("Sign in to browse and play games.")
-                .foregroundStyle(PearTheme.textSecondary)
-                .multilineTextAlignment(.center)
+            Image("PearMark").resizable().scaledToFit().frame(width: 88, height: 88).accessibilityHidden(true)
+            VStack(spacing: PearTheme.Space.s2) {
+                Text("Pear").font(PearTheme.display(67)).tracking(-0.6)
+                Text("Everything you carry is a controller.")
+                    .font(PearTheme.sans(21, relativeTo: .title3))
+                    .foregroundStyle(PearTheme.textSecondary)
+                    .multilineTextAlignment(.center)
+            }
+            .padding(.bottom, PearTheme.Space.s4)
 
             // Only the name is requested, and Apple sends it once, at the first authorization.
             SignInWithAppleButton(.signIn, onRequest: { $0.requestedScopes = [.fullName] }, onCompletion: handle)
@@ -29,7 +33,7 @@ struct AppleSignInView: View {
             }
             if let message = model.message {
                 Text(message)
-                    .font(.callout)
+                    .font(PearTheme.sans(16))
                     .foregroundStyle(PearTheme.error)
                     .multilineTextAlignment(.center)
             }
@@ -71,12 +75,19 @@ struct AppleSignInView: View {
             Divider()
             Text("Debug builds only").font(.caption).foregroundStyle(PearTheme.textSecondary)
             TextField("Dev name", text: $devName)
-                .textFieldStyle(.roundedBorder)
+                .textFieldStyle(.plain)
+                .font(PearTheme.sans(16))
                 .autocorrectionDisabled()
-                .frame(maxWidth: 320)
+                .padding(.horizontal, PearTheme.Space.s3)
+                .frame(maxWidth: 320, minHeight: PearTheme.controlHeight)
+                .overlay(RoundedRectangle(cornerRadius: PearTheme.radiusTag).strokeBorder(PearTheme.lineControl))
             Button("Dev sign-in") { Task { await model.signInDev(name: devName) } }
                 .buttonStyle(PearSecondaryButtonStyle())
                 .disabled(model.isWorking)
+        }
+        // Screenshots and demos: `PEAR_DEV_NAME=Maya` signs in on launch without typing.
+        .task {
+            if let name = ProcessInfo.processInfo.environment["PEAR_DEV_NAME"], !name.isEmpty { await model.signInDev(name: name) }
         }
     }
     #endif

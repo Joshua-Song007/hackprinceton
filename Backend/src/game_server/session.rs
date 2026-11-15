@@ -317,6 +317,11 @@ impl Registry {
         session.deliver(game_id, out);
     }
 
+    /// The game this player is connected to right now, if any (live sockets only; nothing is stored).
+    pub fn game_of(&self, player: &str) -> Option<String> {
+        self.lock().iter().find(|(_, s)| s.players.contains_key(player)).map(|(id, _)| id.clone())
+    }
+
     #[cfg(test)]
     fn player_count(&self, game_id: &str) -> usize {
         self.lock().get(game_id).map_or(0, |s| s.players.len())
@@ -326,6 +331,11 @@ impl Registry {
 fn registry() -> &'static Registry {
     static R: OnceLock<Registry> = OnceLock::new();
     R.get_or_init(|| Registry::new(super::script_host::factory()))
+}
+
+/// The game this player is connected to right now, if any.
+pub fn game_of(player: &str) -> Option<String> {
+    registry().game_of(player)
 }
 
 /// Reloads a live session of the game onto a freshly published version (called by games.rs).

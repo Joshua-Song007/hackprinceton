@@ -4,6 +4,8 @@ import SwiftUI
 struct PearPlayerApp: App {
     @State private var model = PlayerModel()
 
+    init() { PearTheme.registerFonts() }
+
     var body: some Scene {
         WindowGroup {
             RootView(model: model)
@@ -23,6 +25,8 @@ private struct RootView: View {
             case .signedIn: LibraryView(model: model)
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .environment(\.avatarSource, model.avatarSource)
         .tint(PearTheme.accent)
         .foregroundStyle(PearTheme.text)
         .background(PearTheme.bgField.ignoresSafeArea())

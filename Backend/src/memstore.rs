@@ -10,7 +10,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::db::{catalog_tier, Account, CatalogRow, Game, GameVersion, InstallRecord, NewGameVersion, PluginSummary, PluginVersion};
+use crate::db::{catalog_tier, friend_code, normalize_code, FriendRef, RequestOutcome, Account, CatalogRow, Game, GameVersion, InstallRecord, NewGameVersion, PluginSummary, PluginVersion};
 
 #[derive(Default)]
 struct Inner {
@@ -23,6 +23,8 @@ struct Inner {
     plugin_versions: Vec<PluginVersion>,
     /// (plugin id, account id, version, installed).
     plugin_installs: Vec<(String, String, String, bool)>,
+    /// (requester id, addressee id, accepted); one entry per unordered pair.
+    friendships: Vec<(String, String, bool)>,
     /// account id -> (provider, sealed key).
     model_keys: std::collections::HashMap<String, (String, String)>,
 }
@@ -105,6 +107,13 @@ impl MemStore {
         a
     }
 
+    pub fn update_display_name(&self, id: &str, display_name: &str) -> Option<Account> {
+        let mut s = self.lock();
+        let a = s.accounts.iter_mut().find(|a| a.id == id)?;
+        a.display_name = display_name.to_string();
+        Some(a.clone())
+    }
+
     pub fn create_game(&self, owner_id: &str, title: &str) -> Game {
         let now = now_rfc3339();
         let g = Game {
@@ -136,6 +145,71 @@ impl MemStore {
     pub fn game_owner(&self, game_id: &str) -> Option<String> {
         let s = self.lock();
         s.games.iter().find(|g| g.id == game_id).map(|g| g.owner_id.clone())
+    }
+
+    fn friend_ref(s: &Inner, id: &str) -> FriendRef {
+        let name = s.accounts.iter().find(|a| a.id == id).map(|a| a.display_name.clone()).unwrap_or_default();
+        FriendRef { id: id.into(), name }
+    }
+
+    pub fn send_friend_request(&self, me: &str, code: &str) -> RequestOutcome {
+        let Some(code) = normalize_code(code) else { return RequestOutcome::NoSuchCode };
+        let mut s = self.lock();
+        let Some(other) = s.accounts.iter().find(|a| friend_code(&a.id) == code).map(|a| a.id.clone()) else {
+            return RequestOutcome::NoSuchCode;
+        };
+        if other == me {
+            return RequestOutcome::OwnCode;
+        }
+        match s.friendships.iter_mut().find(|f| (f.0 == me && f.1 == other) || (f.0 == other && f.1 == me)) {
+            None => {
+                s.friendships.push((me.into(), other, false));
+                RequestOutcome::Pending
+            }
+            Some(f) if f.2 => RequestOutcome::Accepted,
+            Some(f) if f.0 == me => RequestOutcome::Pending,
+            Some(f) => {
+                f.2 = true;
+                RequestOutcome::Accepted
+            }
+        }
+    }
+
+    pub fn accept_friend(&self, me: &str, requester: &str) -> bool {
+        let mut s = self.lock();
+        match s.friendships.iter_mut().find(|f| f.0 == requester && f.1 == me && !f.2) {
+            Some(f) => {
+                f.2 = true;
+                true
+            }
+            None => false,
+        }
+    }
+
+    pub fn remove_friend(&self, me: &str, other: &str) -> bool {
+        let mut s = self.lock();
+        let before = s.friendships.len();
+        s.friendships.retain(|f| !((f.0 == me && f.1 == other) || (f.0 == other && f.1 == me)));
+        s.friendships.len() < before
+    }
+
+    pub fn list_friends(&self, me: &str) -> Vec<FriendRef> {
+        let s = self.lock();
+        let mut out: Vec<FriendRef> = s
+            .friendships
+            .iter()
+            .filter(|f| f.2 && (f.0 == me || f.1 == me))
+            .map(|f| Self::friend_ref(&s, if f.0 == me { &f.1 } else { &f.0 }))
+            .collect();
+        out.sort_by(|a, b| (&a.name, &a.id).cmp(&(&b.name, &b.id)));
+        out
+    }
+
+    pub fn list_friend_requests(&self, me: &str) -> (Vec<FriendRef>, Vec<FriendRef>) {
+        let s = self.lock();
+        let incoming = s.friendships.iter().filter(|f| !f.2 && f.1 == me).map(|f| Self::friend_ref(&s, &f.0)).collect();
+        let outgoing = s.friendships.iter().filter(|f| !f.2 && f.0 == me).map(|f| Self::friend_ref(&s, &f.1)).collect();
+        (incoming, outgoing)
     }
 
     /// Next version (max + 1, starting at 1); None when the game does not exist.

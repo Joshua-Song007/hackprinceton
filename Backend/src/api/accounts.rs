@@ -68,6 +68,15 @@ fn lookup_session(token: &str) -> Option<Account> {
     }
 }
 
+/// Puts a new display name into every live session of the account (the store holds a clone of the Account).
+fn rename_in_sessions(id: &str, display_name: &str) {
+    for s in sessions().lock().unwrap_or_else(|p| p.into_inner()).values_mut() {
+        if s.account.id == id {
+            s.account.display_name = display_name.to_string();
+        }
+    }
+}
+
 fn revoke_session(token: &str) {
     sessions()
         .lock()
@@ -165,10 +174,45 @@ async fn signin(
     Ok(Json(SignInResponse { token, account }))
 }
 
-async fn me(headers: HeaderMap) -> Result<Json<Account>, StatusCode> {
+/// `me` adds the friend code to the account fields so the app can show it.
+#[derive(Debug, Serialize)]
+struct MeResponse {
+    #[serde(flatten)]
+    account: Account,
+    friend_code: String,
+}
+
+async fn me(headers: HeaderMap) -> Result<Json<MeResponse>, StatusCode> {
     authenticate(&headers)
-        .map(Json)
+        .map(|account| Json(MeResponse { friend_code: db::friend_code(&account.id), account }))
         .ok_or(StatusCode::UNAUTHORIZED)
+}
+
+#[derive(Debug, Deserialize)]
+struct RenameRequest {
+    display_name: String,
+}
+
+async fn rename(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(req): Json<RenameRequest>,
+) -> Result<Json<MeResponse>, StatusCode> {
+    let me = authenticate(&headers).ok_or(StatusCode::UNAUTHORIZED)?;
+    let name = req.display_name.trim();
+    if !valid_field(name) {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+    let pool = state.db.as_ref().ok_or(StatusCode::SERVICE_UNAVAILABLE)?;
+    let account = db::update_display_name(pool, &me.id, name)
+        .await
+        .map_err(|e| {
+            eprintln!("rename: db error: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?
+        .ok_or(StatusCode::NOT_FOUND)?;
+    rename_in_sessions(&account.id, &account.display_name);
+    Ok(Json(MeResponse { friend_code: db::friend_code(&account.id), account }))
 }
 
 async fn signout(headers: HeaderMap) -> StatusCode {
@@ -182,7 +226,7 @@ async fn signout(headers: HeaderMap) -> StatusCode {
 pub fn routes() -> Router<AppState> {
     Router::new()
         .route("/api/accounts/signin", post(signin))
-        .route("/api/accounts/me", get(me))
+        .route("/api/accounts/me", get(me).put(rename))
         .route("/api/accounts/signout", post(signout))
 }
 

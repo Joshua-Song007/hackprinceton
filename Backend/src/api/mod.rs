@@ -2,6 +2,8 @@
 pub mod accounts;
 pub mod agent;
 pub mod apple;
+pub mod avatars;
+pub mod friends;
 pub mod games;
 pub mod library;
 pub mod marketplace;

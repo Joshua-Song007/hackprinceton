@@ -59,11 +59,13 @@ pub fn app_with_studio(db: Option<Db>, studio_dir: Option<PathBuf>) -> Router {
     let router = Router::new()
         .route("/health", get(health))
         .merge(api::accounts::routes())
+        .merge(api::friends::routes())
         .merge(api::games::routes())
         .merge(api::library::routes())
         .merge(api::marketplace::routes())
         .merge(api::agent::routes())
         .merge(api::apple::routes())
+        .merge(api::avatars::routes())
         .merge(game_server::session::routes())
         .merge(game_server::debug::routes());
     let router = match studio_dir {
