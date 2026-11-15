@@ -3,7 +3,7 @@
 // Auth is `accounts::authenticate`; queries go through db.rs only. Order per request: auth, db, query.
 //
 // Routes:
-//   GET    /api/friends              -> 200 [{id, name, playing: {gameId, title} | null}] accepted friends only
+//   GET    /api/friends              -> 200 [{id, name, playing: {gameId, title, lobby} | null}] accepted friends only
 //   GET    /api/friends/requests     -> 200 {incoming: [{id, name}], outgoing: [{id, name}]}
 //   POST   /api/friends {code}       -> 200 {status: "pending" | "accepted"} | 404 unknown code | 400 own code
 //   POST   /api/friends/{id}/accept  -> 204 | 404 no pending request from id
@@ -26,6 +26,7 @@ use crate::AppState;
 struct Playing {
     game_id: String,
     title: String,
+    lobby: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -57,7 +58,7 @@ async fn list(State(state): State<AppState>, headers: HeaderMap) -> Result<Json<
     let me = authenticate(&headers).ok_or(StatusCode::UNAUTHORIZED)?;
     let pool = state.db.as_ref().ok_or(StatusCode::SERVICE_UNAVAILABLE)?;
     let friends = db::list_friends(pool, &me.id).await.map_err(db_err("list"))?;
-    let live: Vec<Option<String>> = friends.iter().map(|f| game_of(&f.id)).collect();
+    let live: Vec<Option<(String, String)>> = friends.iter().map(|f| game_of(&f.id)).collect();
     // One catalog read for every title, and only when someone is actually in a game.
     let catalog = if live.iter().any(Option::is_some) {
         db::list_catalog(pool).await.map_err(db_err("catalog"))?
@@ -68,7 +69,8 @@ async fn list(State(state): State<AppState>, headers: HeaderMap) -> Result<Json<
         .into_iter()
         .zip(live)
         .map(|(f, game)| FriendEntry {
-            playing: game.map(|game_id| Playing {
+            playing: game.map(|(game_id, lobby)| Playing {
+                lobby,
                 title: catalog.iter().find(|c| c.id == game_id).map(|c| c.title.clone()).unwrap_or_default(),
                 game_id,
             }),

@@ -6,6 +6,7 @@
 // Routes:
 //   POST /api/games                         {title}            -> 201 Game
 //   GET  /api/games                                            -> 200 [Game] (the caller's games)
+//   GET  /api/games/{id}/lobbies                               -> 200 [{code, players: [{id, name}]}] live lobbies
 //   POST /api/games/{id}/versions           NewGameVersion     -> 201 GameVersion (owner only)
 //   GET  /api/games/{id}/versions/{version} number or "latest" -> 200 GameVersion
 
@@ -13,7 +14,7 @@ use axum::extract::{Path, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::routing::{delete, get, post};
 use axum::{Json, Router};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::api::accounts::authenticate;
 use crate::game_server::session;
@@ -170,10 +171,36 @@ async fn remove_game(
     Ok(StatusCode::NO_CONTENT)
 }
 
+#[derive(Debug, Serialize)]
+struct LobbyPlayer {
+    id: String,
+    name: String,
+}
+
+#[derive(Debug, Serialize)]
+struct LobbyInfo {
+    code: String,
+    players: Vec<LobbyPlayer>,
+}
+
+/// GET /api/games/{id}/lobbies: the game's live lobbies, from the in-memory registry only.
+async fn list_lobbies(headers: HeaderMap, Path(id): Path<String>) -> Result<Json<Vec<LobbyInfo>>, StatusCode> {
+    require_account(&headers)?;
+    let out = session::lobbies(&id)
+        .into_iter()
+        .map(|(code, ps)| LobbyInfo {
+            code,
+            players: ps.into_iter().map(|(id, name)| LobbyPlayer { id, name }).collect(),
+        })
+        .collect();
+    Ok(Json(out))
+}
+
 pub fn routes() -> Router<AppState> {
     Router::new()
         .route("/api/games", post(create_game).get(list_games))
         .route("/api/games/{id}", delete(remove_game))
+        .route("/api/games/{id}/lobbies", get(list_lobbies))
         .route("/api/games/{id}/versions", post(publish_version))
         .route("/api/games/{id}/versions/{version}", get(fetch_version))
 }

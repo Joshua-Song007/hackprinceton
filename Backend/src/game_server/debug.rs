@@ -1,5 +1,5 @@
 // Live debug stream for a game session (Studio "Server" panels): owner-only WebSocket
-// GET /debug/{game_id}. On connect the server sends one snapshot frame
+// GET /debug/{game_id}?lobby=CODE (default OPEN). On connect the server sends one snapshot frame
 // `{"kind":"snapshot","t","players","version","state","logs"}` (logs = last 100 log/error events),
 // then streams `{"kind":"join|leave|in|out|log|error|state|reload","t", ...}` as the session produces them.
 // Auth: `?token=` or bearer (see `accounts::authenticate_request`); 401 no token, 403 not the game's owner.
@@ -27,6 +27,7 @@ use tokio::sync::Notify;
 
 use crate::api::accounts;
 use crate::api::games::valid_uuid;
+use super::session::{normalize_lobby, session_key, OPEN_LOBBY};
 use crate::db;
 use crate::AppState;
 
@@ -208,6 +209,13 @@ async fn debug(
     let Some(pool) = state.db.as_ref() else {
         return StatusCode::SERVICE_UNAVAILABLE.into_response();
     };
+    let lobby = match accounts::query_param(uri.query(), "lobby") {
+        None => OPEN_LOBBY.to_string(),
+        Some(l) => match normalize_lobby(l) {
+            Some(l) => l,
+            None => return StatusCode::BAD_REQUEST.into_response(),
+        },
+    };
     match db::game_owner(pool, &game_id).await {
         Ok(None) => return StatusCode::NOT_FOUND.into_response(),
         Ok(Some(owner)) if owner != account.id => return StatusCode::FORBIDDEN.into_response(),
@@ -220,7 +228,7 @@ async fn debug(
     match ws {
         Ok(ws) => ws
             .max_message_size(MAX_MESSAGE_BYTES)
-            .on_upgrade(move |socket| run_socket(socket, game_id)),
+            .on_upgrade(move |socket| run_socket(socket, session_key(&game_id, &lobby))),
         Err(rej) => rej.into_response(),
     }
 }

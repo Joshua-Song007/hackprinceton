@@ -194,7 +194,7 @@ async fn playing_follows_a_live_socket_and_only_for_accepted_friends() {
     let (st, _) = call(addr, "POST", &format!("/api/friends/{}/accept", b.id), Some(&a.token), None).await;
     assert_eq!(st, 204);
     let playing = friends(addr, &a).await[0]["playing"].clone();
-    assert_eq!(playing, json!({"gameId": gid, "title": "Neon Drift"}));
+    assert_eq!(playing, json!({"gameId": gid, "title": "Neon Drift", "lobby": "OPEN"}));
 
     // removing the friend takes the game away from the ex-friend's view
     call(addr, "DELETE", &format!("/api/friends/{}", b.id), Some(&a.token), None).await;
