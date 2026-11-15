@@ -282,3 +282,19 @@ The active tab, not the whole tab strip, carries the accent underline (a neutral
 - [x] `Web/studio/src/peripheralsPanel.ts`, `Web/studio/src/explorer.ts`
 - [x] `Web/studio/src/inspector.ts`, `Web/studio/src/editor.ts`
 - [x] `Web/studio/src/layout.ts`, `Web/studio/src/theme.css`
+
+### 2026-11-15 — Pear Studio app icon
+Paths: `docs/brand-kit/assets/logo/pear-studio-icon.svg`, `Web/studio/public/pear-studio-icon.svg`, `Web/studio/index.html`, `Apps/PearStudio/PearStudio/Assets.xcassets/AppIcon.appiconset`, `Web/studio/src-tauri/icons`
+
+Studio no longer shares Pear Player's icon (mint pear on emerald). Its icon is a near-black tile (#1D1E21, with a #3A3B40 hairline ring) holding the pear drawn like an object in the Viewport: a mint outline over a faint mint fill, six light square vertex handles, and a solid orange leaf (#E5B181, the selection colour). Sizes up to 64 px use a heavier outline, a stronger fill and no handles so the shape holds up small. The macOS app icon PNGs (16 to 1024) and the Tauri icons (png, icns, ico, Square logos; 32 and 64 use the small version) were re-rendered from the SVG with `sips` and `tauri icon` (only files that already existed were replaced). The Web Studio favicon now points at the icon. The Player and Companion icons, the in-app PearMark imagesets, the lockups and `docs/brand-kit/index.html` are unchanged (the kit page does not document a Studio variant yet). Not checked on a real Dock: macOS caches icons.
+- [x] `docs/brand-kit/assets/logo/pear-studio-icon.svg`, `Web/studio/public/pear-studio-icon.svg`
+- [x] `Web/studio/index.html`
+- [x] `Apps/PearStudio/PearStudio/Assets.xcassets/AppIcon.appiconset`, `Web/studio/src-tauri/icons`
+
+### 2026-11-15 — Projects screen polish
+Paths: `Web/studio/src/projectsScreen.ts`, `Web/studio/src/recent.ts`, `Web/studio/src/theme.css`, `Web/studio/test/screens.test.ts`
+
+"Back to editor" moved from the bottom of the left column to the header beside the title (a normal button, so New project stays the one primary action). The autosaved draft shows its project's name (the scene name) with the existing Draft tag, and falls back to "Autosaved draft" when the name is blank. The statistics are two lines ("N projects", "X in the cloud · Y on this computer") instead of five rows, and "Signed in" is gone. Dates read "Edited today, 5:02 AM" / "yesterday" through an opt-in `now` argument of `formatWhen` (older dates keep the date, calls without `now` are unchanged); the full date is the line's tooltip, and the Opened line is left out when it is within a minute of Edited. The search field has inner padding, the sort control lost its doubled border and has a "Sort" prefix, the draft button reads "Discard draft" (its confirm sheet already existed), the tag badge is filled, and the section counts are heavier. The comment above `formatWhen` still says only the locale and zone are for tests, and does not mention `now`; left for the user. Not checked in a browser.
+- [x] `Web/studio/src/projectsScreen.ts`, `Web/studio/src/recent.ts`
+- [x] `Web/studio/src/theme.css`
+- [x] `Web/studio/test/screens.test.ts`

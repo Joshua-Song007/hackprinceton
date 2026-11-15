@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Pear Studio">
+  <title>Pear Studio</title>
+  <rect width="512" height="512" rx="112" fill="#1D1E21"/>
+  <rect x="5" y="5" width="502" height="502" rx="107" fill="none" stroke="#3A3B40" stroke-width="6"/>
+  <g transform="translate(0 6)"><g transform="translate(256 256) rotate(12) scale(1.12) translate(-256 -252)">
+    <path d="M262 127C290 127 312 148 310 178C308 226 381 250 381 322C381 394 322 445 256 445C190 445 131 394 131 322C131 250 216 226 214 178C212 148 234 127 262 127Z" fill="#C2EFB3" fill-opacity="0.18" stroke="#C2EFB3" stroke-width="20" stroke-linejoin="round"/>
+    <g fill="#E4E5E7" stroke="#1D1E21" stroke-width="5">
+      <rect x="249" y="114" width="26" height="26"/><rect x="297" y="165" width="26" height="26"/><rect x="368" y="309" width="26" height="26"/>
+      <rect x="243" y="432" width="26" height="26"/><rect x="118" y="309" width="26" height="26"/><rect x="201" y="165" width="26" height="26"/>
+    </g>
+    <path d="M270 132C270 94 298 68 346 62C346 106 314 136 270 132Z" fill="#E5B181" stroke="#1D1E21" stroke-width="10" stroke-linejoin="round" paint-order="stroke"/>
+  </g></g>
+</svg>

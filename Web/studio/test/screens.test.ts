@@ -65,6 +65,29 @@ describe('formatWhen', () => {
     expect(formatWhen(undefined, 'Opened')).toBe('Not opened here');
     expect(formatWhen(undefined, 'Edited')).toBe('Not saved yet');
   });
+
+  it('with a current time, today and yesterday read as words, and older dates keep the date', () => {
+    const now = Date.UTC(2026, 10, 15, 9, 30);
+    expect(formatWhen(Date.UTC(2026, 10, 15, 5, 2), 'Edited', 'en-GB', 'UTC', now)).toBe('Edited today, 05:02');
+    expect(formatWhen(Date.UTC(2026, 10, 14, 23, 59), 'Opened', 'en-GB', 'UTC', now)).toBe('Opened yesterday, 23:59');
+    expect(formatWhen(Date.UTC(2026, 10, 13, 14, 5), 'Edited', 'en-GB', 'UTC', now)).toBe('Edited 13 Nov 2026, 14:05');
+    expect(formatWhen(ms, 'Edited', 'en-GB', 'UTC')).toBe('Edited 14 Nov 2026, 14:05'); // no current time: unchanged
+    expect(formatWhen(undefined, 'Edited', 'en-GB', 'UTC', now)).toBe('Not saved yet');
+  });
+
+  it('counts the day in the given zone, not in UTC', () => {
+    const now = Date.UTC(2026, 10, 15, 3, 0); // 14 Nov 22:00 in New York
+    expect(formatWhen(Date.UTC(2026, 10, 14, 20, 0), 'Edited', 'en-US', 'America/New_York', now)).toMatch(/^Edited today, 3:00\sPM$/);
+  });
+});
+
+describe('the draft row title', () => {
+  it('uses the project name, and falls back when there is none', () => {
+    expect(mergeProjects([], [], true, {}, 1, undefined, 'test')[0]!.title).toBe('test');
+    expect(mergeProjects([], [], true, {}, 1, undefined, '  Quick Draw ')[0]!.title).toBe('Quick Draw');
+    expect(mergeProjects([], [], true, {}, 1, undefined, '   ')[0]!.title).toBe('Autosaved draft');
+    expect(mergeProjects([], [], true)[0]!.title).toBe('Autosaved draft');
+  });
 });
 
 describe('thumbnail cache', () => {

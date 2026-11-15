@@ -35,7 +35,7 @@ export function renderProjectsScreen(root: HTMLElement, h: ProjectsHooks): void 
   const sharedList = el('ul', { class: 'scr-grid', role: 'list', 'aria-label': 'Shared projects' });
   const soloCount = el('span', { class: 'om-secondary' });
   const sharedCount = el('span', { class: 'om-secondary' });
-  const stats = el('dl', { class: 'scr-stats' });
+  const stats = el('div', { class: 'scr-stats' });
   let draft: ProjectSnapshot | undefined;
   let draftAt: number | undefined;
   let recents: RecentEntry[] = [];
@@ -106,16 +106,18 @@ export function renderProjectsScreen(root: HTMLElement, h: ProjectsHooks): void 
         return url;
       }, (url) => { if (url) { thumbs[id] = { stamp, url }; show(url); } });
 
-      const when = (ms: number | undefined, label: 'Opened' | 'Edited') => el('span', { class: ms === undefined ? 'scr-meta scr-dim' : 'scr-meta' }, [formatWhen(ms, label)]);
+      const when = (ms: number | undefined, label: 'Opened' | 'Edited') => el('span', { class: ms === undefined ? 'scr-meta scr-dim' : 'scr-meta', title: formatWhen(ms, label) }, [formatWhen(ms, label, undefined, undefined, Date.now())]);
+      // Opened right when it was edited says nothing new, so that line is left out.
+      const openedAdds = p.opened === undefined || p.time === undefined || Math.abs(p.opened - p.time) >= 60_000;
       const info = el('div', { class: 'scr-info' }, [
         el('span', { class: 'scr-name', title: p.title }, [p.title]),
         el('span', { class: 'scr-tag' }, [where]),
-        when(p.opened, 'Opened'),
+        ...(openedAdds ? [when(p.opened, 'Opened')] : []),
         when(p.time, 'Edited'),
         el('div', { class: 'scr-actions' }, [
           button('Open', open, { ariaLabel: `Open ${p.title}` }),
           ...(rowAction(p) === 'delete' ? [button('Delete', () => deleteGame(p), { variant: 'borderless', danger: true, ariaLabel: `Delete ${p.title} from the cloud` })] : []),
-          ...(rowAction(p) === 'discard' ? [button('Discard', discardDraft, { variant: 'borderless', danger: true, ariaLabel: 'Discard the autosaved draft' })] : []),
+          ...(rowAction(p) === 'discard' ? [button('Discard draft', discardDraft, { variant: 'borderless', danger: true, ariaLabel: 'Discard the autosaved draft' })] : []),
           ...(rowAction(p) === 'remove' ? [button('Remove', async () => { await forgetRecent(p.key); await dropThumb(id); await forgetOpened('local', p.key); recents = recents.filter((r) => r.id !== p.key); render(); }, { variant: 'borderless', ariaLabel: `Remove ${p.title} from recent` })] : []),
         ]),
       ]);
@@ -135,14 +137,16 @@ export function renderProjectsScreen(root: HTMLElement, h: ProjectsHooks): void 
       list.replaceChildren(...(rows.length ? rows.map(tile) : [empty(name)]));
     };
 
-    const all = mergeProjects(account.games, recents, !!draft, opened, draftAt, account.account?.id);
+    const all = mergeProjects(account.games, recents, !!draft, opened, draftAt, account.account?.id, typeof draft?.scene.name === 'string' ? draft.scene.name : undefined);
     const shown = sortProjects(filterProjects(all, query), sort);
     shownCount = shown.length;
     fill(soloList, soloCount, shown.filter((r) => r.scope === 'solo'), 'solo');
     fill(sharedList, sharedCount, shown.filter((r) => r.scope === 'shared'), 'shared');
     const s = projectStats(all);
-    stats.replaceChildren(...([['Total projects', s.total], ['Solo', s.solo], ['Shared', s.shared], ['In the cloud', s.cloud], ['On this computer', s.local]] as const)
-      .flatMap(([label, n]) => [el('dt', {}, [label]), el('dd', { class: 'om-num' }, [String(n)])]));
+    stats.replaceChildren(
+      el('span', { class: 'scr-stats-total om-num' }, [`${s.total} ${s.total === 1 ? 'project' : 'projects'}`]),
+      el('span', { class: 'scr-meta scr-dim om-num' }, [`${s.cloud} in the cloud · ${s.local} on this computer`]),
+    );
   };
   render();
   account.refreshGames().then(render, fail);
@@ -197,7 +201,7 @@ export function renderProjectsScreen(root: HTMLElement, h: ProjectsHooks): void 
   const side = el('aside', { class: 'scr-side', 'aria-label': 'Profile and statistics' }, [
     el('div', { class: 'scr-profile' }, [
       avatar,
-      el('div', { class: 'scr-who' }, [el('span', { class: 'scr-name', title: who }, [who]), el('span', { class: 'scr-meta scr-dim' }, ['Signed in'])]),
+      el('div', { class: 'scr-who' }, [el('span', { class: 'scr-name', title: who }, [who])]),
     ]),
     button('Sign out', h.signOut, { variant: 'small' }),
     stats,
@@ -206,15 +210,14 @@ export function renderProjectsScreen(root: HTMLElement, h: ProjectsHooks): void 
         const opened = await openProjectFile();
         if (opened) { void markOpened('local', opened.name); h.open(opened.snapshot, { name: opened.name, handle: opened.handle }); }
       }), { variant: 'small' }),
-      ...(h.back ? [button('Back to editor', h.back, { variant: 'small' })] : []),
     ]),
   ]);
   const section = (title: string, count: HTMLElement, list: HTMLElement) => el('section', { class: 'scr-section' }, [el('h2', {}, [title, count]), list]);
   const all = allGamesSection(account, (snapshot) => h.open(snapshot), run);
   root.replaceChildren(el('div', { class: 'scr-card scr-wide' }, [
     el('div', { class: 'scr-bar' }, [
-      el('h1', {}, ['Projects']),
-      el('div', { class: 'scr-find' }, [el('div', { class: 'om-field scr-search' }, [search]), el('div', { class: 'om-field' }, [order])]),
+      el('div', { class: 'scr-title' }, [el('h1', {}, ['Projects']), ...(h.back ? [button('Back to editor', h.back)] : [])]),
+      el('div', { class: 'scr-find' }, [el('div', { class: 'om-field scr-search' }, [search]), el('div', { class: 'om-field' }, [el('span', { class: 'om-unit scr-sortlabel' }, ['Sort']), order])]),
       create,
     ]),
     error,

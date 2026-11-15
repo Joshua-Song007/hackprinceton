@@ -40,11 +40,11 @@ export interface ProjectRow {
 }
 
 /** One list for the projects screen: newest activity first (the later of the last edit and the last Open pressed here), rows without a time last in their given order. */
-export function mergeProjects(games: readonly { id: string; title: string; updated_at: string; owner_id?: string }[], recents: readonly RecentEntry[], hasDraft: boolean, opened: Readonly<Record<string, number>> = {}, draftAt?: number, accountId?: string): ProjectRow[] {
+export function mergeProjects(games: readonly { id: string; title: string; updated_at: string; owner_id?: string }[], recents: readonly RecentEntry[], hasDraft: boolean, opened: Readonly<Record<string, number>> = {}, draftAt?: number, accountId?: string, draftName?: string): ProjectRow[] {
   const rows: ProjectRow[] = [
     ...games.map((g): ProjectRow => ({ kind: 'cloud', key: g.id, title: g.title, time: Date.parse(g.updated_at) || undefined, opened: opened[`cloud:${g.id}`], stamp: g.updated_at, scope: accountId && g.owner_id && g.owner_id !== accountId ? 'shared' : 'solo' })),
     ...recents.map((r): ProjectRow => ({ kind: 'local', key: r.id, title: r.name, time: r.savedAt, recent: r, opened: opened[`local:${r.id}`], stamp: String(r.savedAt), scope: 'solo' })),
-    ...(hasDraft ? [{ kind: 'draft', key: 'draft', title: 'Autosaved draft', time: draftAt, opened: opened['draft:draft'], stamp: String(draftAt ?? 0), scope: 'solo' } as ProjectRow] : []),
+    ...(hasDraft ? [{ kind: 'draft', key: 'draft', title: draftName?.trim() || 'Autosaved draft', time: draftAt, opened: opened['draft:draft'], stamp: String(draftAt ?? 0), scope: 'solo' } as ProjectRow] : []),
   ];
   // Newest activity first: the later of the last edit and the last Open pressed here.
   const t = (r: ProjectRow) => Math.max(r.time ?? -Infinity, r.opened ?? -Infinity);
@@ -52,8 +52,22 @@ export function mergeProjects(games: readonly { id: string; title: string; updat
 }
 
 /** "Opened 14 Nov 2026, 14:05"; `label` "Opened" reads "Not opened here" and "Edited" reads "Not saved yet" when the time is unknown. Locale and zone are for tests. */
-export function formatWhen(ms: number | undefined, label: 'Opened' | 'Edited', locale?: string, timeZone?: string): string {
+export function formatWhen(ms: number | undefined, label: 'Opened' | 'Edited', locale?: string, timeZone?: string, now?: number): string {
   if (ms === undefined) return label === 'Opened' ? 'Not opened here' : 'Not saved yet';
+  // With `now`, today and yesterday read "Edited today, 5:02 AM" / "Edited yesterday, 5:02 AM"; anything older keeps the date.
+  if (now !== undefined) {
+    const zone = timeZone ? { timeZone } : {};
+    const dayNumber = (t: number): number => {
+      const parts = new Intl.DateTimeFormat('en-US', { year: 'numeric', month: 'numeric', day: 'numeric', ...zone }).formatToParts(t);
+      const n = (type: string): number => Number(parts.find((p) => p.type === type)!.value);
+      return Date.UTC(n('year'), n('month') - 1, n('day')) / 86_400_000;
+    };
+    const daysAgo = dayNumber(now) - dayNumber(ms);
+    if (daysAgo === 0 || daysAgo === 1) {
+      const day = new Intl.RelativeTimeFormat(locale, { numeric: 'auto' }).format(-daysAgo, 'day');
+      return `${label} ${day}, ${new Intl.DateTimeFormat(locale, { timeStyle: 'short', ...zone }).format(ms)}`;
+    }
+  }
   const format = new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeStyle: 'short', ...(timeZone ? { timeZone } : {}) });
   return `${label} ${format.format(ms)}`;
 }
