@@ -279,13 +279,13 @@ async fn publish_version(
     if !valid_uuid(&game_id) || !valid_version(&body) || !valid_listing(&listing) {
         return Err(StatusCode::BAD_REQUEST);
     }
+    let pool = state.db.as_ref().ok_or(StatusCode::SERVICE_UNAVAILABLE)?;
+    require_editor(pool, &account, &game_id).await?;
     let bypass = std::env::var("PEAR_PUBLISH_GATE").is_ok_and(|v| v == "off");
     gate(&body, &listing, bypass).map_err(|e| {
         eprintln!("games: publish gate: {e}");
         StatusCode::UNPROCESSABLE_ENTITY
     })?;
-    let pool = state.db.as_ref().ok_or(StatusCode::SERVICE_UNAVAILABLE)?;
-    require_editor(pool, &account, &game_id).await?;
     crate::api::assets::check_refs(&body.assets).await?;
     let v = db::insert_game_version(pool, &game_id, &body)
         .await
@@ -527,6 +527,10 @@ mod tests {
         let r = request_with(Some(mem.clone()), &post_json(&path, Some(&t), &body.to_string())).await;
         assert!(r.starts_with("HTTP/1.1 422"), "{r}");
         assert!(db::list_catalog(&mem).await.unwrap().is_empty());
+        // A non-owner is refused (403) before the gate looks at the body.
+        let other = crate::api::accounts::test_token("games-test-other");
+        let r = request_with(Some(mem.clone()), &post_json(&path, Some(&other), &body.to_string())).await;
+        assert!(r.starts_with("HTTP/1.1 403"), "{r}");
         body["metadata"]["check"] = json!({ "ok": true });
         let r = request_with(Some(mem.clone()), &post_json(&path, Some(&t), &body.to_string())).await;
         assert!(r.starts_with("HTTP/1.1 201"), "{r}");
