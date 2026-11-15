@@ -60,3 +60,13 @@
 - Only instructions.md and currentDev.md are auto-loaded. Do not read overview.md, architecture.md or plan.md in full; grep the section you need.
 - planHistory/ is read through grep or `audit` only.
 - Skip apple-docs/raw, node_modules and target dirs unless the task names them.
+
+## Speed Rules (manual sessions)
+- Main session = orchestrator: split, delegate, merge, verify, report. It does not write large features itself.
+- Any request with 2+ independent parts: launch one background worker per part in ONE message (Agent tool, `isolation: "worktree"`, model `sonnet` default; `opus` only for hard design/debug). No sequential hand-offs.
+- Worker brief must name: branch `feat/<slug>`, owned files (disjoint across workers), acceptance test/command, "commit in worktree, do not push, report diff summary + test output".
+- Inline (no worker): ops/ssh/deploy, edits under ~3 files, anything blocking the next step.
+- While workers run, orchestrator keeps working inline (ops, small fixes, next briefs); never idles or polls in the foreground. Waits for CI/deploy = background command or Monitor.
+- Merge: one batch merge into `main`, run tests once, push once (auto-deploy ships it). Git per user's in-session approval.
+- After merge: `git worktree remove` merged, clean worktrees.
+- Questions: only when truly blocking; batch into one ask; otherwise pick a default, state it in one line, proceed.

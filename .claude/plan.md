@@ -238,7 +238,7 @@ Not in overview.md; added at user request 2026-11-15. Inspiration: the Quick Dra
 Goal: updating a game from Studio never needs a Vultr refresh; one Publish uploads the version, lists it for players and shows the join link. Decisions: the player's Discover catalog is the games marketplace (the Phase 10 marketplace stays plugins only); only games the owner lists appear in the catalog; Flagship and HotPotato stay in the repo as test fixtures (tests and `Deploy/demo.sh` use them) but never appear in a production catalog.
 
 - [ ] `Backend/src/api/library.rs` — catalog lists only `listed` games, with cover, description, tags and release notes; unlisted fixtures never show.
-- [ ] `Backend/src/db.rs` — `listed` and listing fields on `Game`; migration `Backend/migrations/0005_listing.sql`. (Changed 2026-11-15: renumber to `0006_listing.sql`; `0005` is taken by 13.10 `0005_developer.sql`.)
+- [ ] `Backend/src/db.rs` — `listed` and listing fields on `Game`; migration `Backend/migrations/0005_listing.sql`. (Changed 2026-11-15: renumber to `0006_listing.sql`; `0005` is taken by 13.10 `0005_developer.sql`.) (Changed 2026-11-15: renumber again to `0007_listing.sql`; `0006` is taken by `0006_sessions.sql`, persistent sign-in sessions.)
 - [ ] `Backend/src/memstore.rs` — same fields, so the dev server matches Postgres.
 - [ ] `Backend/src/api/games.rs` — publish accepts listing fields and `listed`; one call creates the version and lists the game.
 - [ ] `Backend/src/game_server/session.rs` — upgrade policy for live lobbies: finish the current match, then move to the new version, instead of restarting mid-match (`session::reload` today).
@@ -305,6 +305,53 @@ Each item is something Quick Draw needed that Phase 13 does not schedule.
 Not planned: multiple developer roles or audit log (one developer role for the hackathon); editing another account's profile picture.
 
 ---
+
+## Phase 14: Agent-built games: PearUI, headless sim, Pear MCP (MAJOR SYSTEMATIC UPDATE, agreed 2026-11-15)
+
+### Agreements (Socratic session, binding)
+- A1 Users: 4-person team, demo speed. No public sign-up, quotas, review.
+- A2 Agent writes the full game (scripts, scene, instructions, ui) in a self-iterating loop: write → headless sim → read report → fix; human verifies in Studio Live Preview, then publishes.
+- A3 MCP both ways: Pear MCP server exposes prepackaged tools + kit reference; agent may also call external MCP servers.
+- A5 Native screens = server-driven UI only (iOS forbids downloaded code). Fixed component kit "PearUI": Swift renderer in PearPlayer, web renderer in Studio, same JSON → 1:1.
+- A6 Agent sim is headless (Node), no browser.
+- A7 Closed source = API boundary: agents/games see only kit + MCP tools, never backend source. Pear Studio is packaged/distributed. Repo stays public.
+- A8 Map: MapLibre + OSM tiles (no key). Later: marketplace map plugin with hand-made iOS look.
+- Deadline 05:00 2026-11-15. Validation target: Quick Draw rebuilt in PearUI matches native screens.
+
+### Contract C1: PearUI v1 (`ui.json`, a game version file next to scene.json/scripts)
+- Root: `{"pearui":1,"route":[{"when":"<expr>","screen":"<id>"}...],"screens":{"<id>":Node}}`; first matching `route` wins, last entry has no `when`.
+- View state (read-only to UI): `ev.<name>` = latest `data` of each script→client event (e.g. `ev.state.phase` from `ctx.remote.fireAll("state",…)`); `me` = `_welcome` data `{id,name,lobby}`; `local.<k>` = values set by `set` actions; `device` = `{kind:"phone"|"ipad"|"watch"}`.
+- Bindings: any string prop may contain `{{expr}}`; expr = dotted path, optional `==`/`!=` literal, `!` prefix, `||` fallback. No arbitrary JS.
+- Common props on every Node: `type`, `if` (expr), `id`, `style` (`tone`: neutral|accent|good|bad|warn; `size`: s|m|l|xl|huge; `align`: start|center|end; `pad`: 0-4; `grow`: bool).
+- Nodes: `column`/`row`/`stack` (`children`), `text` (`value`), `button` (`label`, `action`), `image` (`src` = asset name), `timer` (`until` epoch ms expr, counts down), `list` (`items` expr → array, `item` Node; inside it `item.<k>`), `gauge` (`value` 0..1), `spacer`, `map` (`markers` expr → [{lat,lng,label,tone}], `follow`: "me"), `sensor` (invisible; `kind`: motion|location; `event`; `hz` ≤30; streams `{pitch,roll,yaw}` or `{lat,lng,acc}` as a client→server event), `effect` (invisible; `on` expr change → `haptic`: light|heavy|success|fail, `sound`: asset name).
+- Action: `{"send":"<event>","data":{…bindings}}` → client sends `{name,data}`; or `{"set":"<local key>","value":…}`.
+- Unknown `type` renders nothing (forward compatible). Schema file: `Schema/pearui.schema.json`.
+
+### Contract C2: headless sim `runScenario(scenario, opts) → report`
+- Scenario JSON: `{"game":"<id>","version"?:n,"lobby"?:"CODE","durationMs":n,"devices":[{"name","kind":"phone"|"ipad"|"watch","role"?,"script":[{"at":ms,"send":{name,data}}|{"at":ms,"motion":{pitch,roll,yaw}}|{"at":ms,"gps":{lat,lng}}|{"at":ms,"tap":true}]}],"expect":[{"by":ms,"expr":"<C1 expr on a device's view state>","device":"<name>"}]}`.
+- Report JSON: `{"ok":bool,"expect":[{…,"pass":bool,"actual"}],"frames":[{"t","device","dir":"in"|"out","name","data"}],"logs":[…from /debug],"final":{"<device>":viewState}}`.
+- Auth: dev sign-in per device name (hosted `PEAR_DEV_SIGNIN=1`); server URL from `PEAR_CLOUD_URL` (default hosted).
+
+### Contract C3: Pear MCP tools (stdio; env `PEAR_CLOUD_URL`, `PEAR_TOKEN` developer token)
+- `kit_reference` (C1 + script API + scenario format), `list_games`, `get_game {id}` → files, `create_game {title}`, `save_version {id, files}` → version n, `run_scenario {scenario}` → C2 report, `read_logs {id, lobby?}`, `publish {id, version}`. No source-code or shell tools.
+
+### 14.1 PearUI web renderer + schema
+- [ ] `Web/packages/pear-ui/` — types, expr eval, validate, DOM renderer (`mount(el, ui, viewState, onAction)`); vitest
+- [ ] `Schema/pearui.schema.json`
+### 14.2 PearUI Swift renderer in PearPlayer
+- [ ] `Apps/PearPlayer/PearPlayer/Play/PearUI/` — Codable model, expr eval, SwiftUI renderer, CoreMotion/CoreLocation sensor nodes, haptics; used by play screen when version has `ui.json`
+### 14.3 Headless sim
+- [ ] `Web/packages/pear-sim/src/headless.ts` + `bin/pear-sim-run` — C2 over real `/play` sockets; Quick Draw scenario passes
+### 14.4 Pear MCP server
+- [ ] `Tools/pear-mcp/` — C3 over `@modelcontextprotocol/sdk` stdio
+### 14.5 Deep Agents uses Pear MCP + loop
+- [ ] `Plugins/langchain-deepagents/runtime/` — MCP client (langchain-mcp-adapters), loop prompt: write → run_scenario → fix until expect passes; external MCP servers from config
+### 14.6 Studio Live Preview tab
+- [ ] `Web/studio/src/livePreview/` — device frames rendering PearUI from live session, MapLibre GPS map of devices, terminal of /debug frames + tool calls
+### 14.7 Quick Draw in PearUI (validation)
+- [ ] `Games/QuickDraw/ui.json` — referee (ipad) + gun (phone) screens matching native; `Games/QuickDraw/scenario.json` passes in 14.3
+### 14.8 Later (not scheduled tonight)
+- [ ] thumbnails + gameplay image carousel; developer web About edit; marketplace map plugin with iOS look; iOS Simulator stream check
 
 ## Cross-Cutting: Hardware verification (compressed)
 
