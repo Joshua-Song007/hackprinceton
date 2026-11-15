@@ -10,7 +10,7 @@ import { KIT_REFERENCE } from '../pear-mcp/src/kit.js';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const OUT = join(ROOT, 'Plugins', 'langchain-deepagents', 'skills', 'pear-scripting');
-export const SCAFFOLDS = ['QuickDraw', 'HotPotato', 'Manhunt'];
+export const SCAFFOLDS = ['QuickDraw', 'Manhunt'];
 const SCAFFOLD_FILES = /^(scene\.json|pear-game\.json|ui\.json|scenario\.json|check\.json|scripts\/[^/]+\.js)$/;
 const lf = (s) => s.replace(/\r\n/g, '\n');
 const read = (...p) => lf(readFileSync(join(ROOT, ...p), 'utf8'));
@@ -145,7 +145,7 @@ ${kit}
 
 ${scaffoldLines.join('\n')}
 
-Start from the nearest one: Manhunt for GPS games, Hot Potato for passing/tag, Quick Draw for motion reflex duels.
+Start from the nearest one: Manhunt for GPS and tag games, Quick Draw for motion reflex duels.
 
 ## Workflow
 

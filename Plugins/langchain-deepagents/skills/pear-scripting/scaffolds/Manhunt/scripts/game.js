@@ -1,6 +1,7 @@
 // Manhunt round logic (server script): hunters chase runners on foot. Phones send `location {lat,lng,acc}`; hunters send `tag`.
 // There is no per-player send, so every fact is broadcast as one pre-shaped `view` event; per-player data (role, hint) sits in view.players[]
 // and the UI picks its own entry with `item.id == me.id`.
+// (Lines 2-3 are outdated: per-player data now goes to each player as a private `you` event via ctx.remote.fire; see broadcast.)
 export default (function () {
   const ROUND_MS = 300000; // hunt phase length
   const COUNTDOWN_MS = 5000;
@@ -56,25 +57,32 @@ export default (function () {
     return { hint: "COLD", tone: "good" };
   }
 
+  // Public facts go to everyone as `view`; role, hint and hunter pings go to each player alone as `you` (runners never receive positions).
   function broadcast(ctx) {
     const st = ctx.state, hunting = st.phase === "hunt";
-    const players = st.order.map(function (id) {
-      const p = st.players[id];
-      const h = p.role === "runner" && !p.caught && hunting ? hintFor(ctx, id) : { hint: "", tone: "neutral" };
-      return { id: id, name: p.name, role: p.role || "", caught: !!p.caught, hasFix: !!st.fix[id], hint: h.hint, tone: h.tone };
-    });
+    const huntersText = with_(ctx, "hunter").map(function (id) { return st.players[id].name; }).join(", ");
     ctx.remote.fireAll("view", {
       phase: st.phase,
       endsAt: st.endsAt,
-      players: players,
-      huntersText: with_(ctx, "hunter").map(function (id) { return st.players[id].name; }).join(", "),
+      players: st.order.map(function (id) { return { id: id, name: st.players[id].name, hasFix: !!st.fix[id] }; }),
       runnersLeft: with_(ctx, "runner", false).length,
       caughtCount: with_(ctx, "runner", true).length,
       lastPingAt: st.lastPingAt,
-      pings: st.pings,
-      alarm: hunting && players.some(function (q) { return q.hint === "HOT"; }),
       winner: st.winner,
       joined: st.order.length,
+    });
+    st.order.forEach(function (id) {
+      const p = st.players[id];
+      const h = p.role === "runner" && !p.caught && hunting ? hintFor(ctx, id) : { hint: "", tone: "neutral" };
+      ctx.remote.fire(id, "you", {
+        role: p.role || "",
+        caught: !!p.caught,
+        hint: h.hint,
+        tone: h.tone,
+        alarm: h.hint === "HOT",
+        huntersText: p.role === "runner" ? huntersText : "",
+        pings: p.role === "hunter" ? st.pings : [],
+      });
     });
   }
 

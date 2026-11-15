@@ -3,7 +3,7 @@
 ## Screens
 
 1. **Login**: your name and Sign in. Required; there is no editor until you are signed in. The server address is under **Server: ...** below the form (it opens Settings).
-2. **Projects**: one list of your projects, newest first: cloud games, projects saved or opened on this computer (last 10) and your autosaved draft. **New project** starts one from a template (Blank, Hot potato, Flagship) or creates an empty cloud game. **Open file...** sits under the list. File > Projects... returns here; Back to editor keeps your open project.
+2. **Projects**: one list of your projects, newest first: cloud games, projects saved or opened on this computer (last 10) and your autosaved draft. **New project** starts one from a template (Blank, Tap counter) or creates an empty cloud game. **Open file...** sits under the list. File > Projects... returns here; Back to editor keeps your open project.
 3. **Editor**: everything below. File > Sign out returns to Login.
 
 ## Toolbar

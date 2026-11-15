@@ -1,5 +1,5 @@
 // Live smoke for any game: runs the scenarios of a game's check.json with real sockets against a local or hosted backend.
-//   node Deploy/smoke-game.mjs <gameId> --spec Games/Flagship/check.json [--cloud URL] [--scenario <index|name part>]
+//   node Deploy/smoke-game.mjs <gameId> --spec Games/QuickDraw/check.json [--cloud URL] [--scenario <index|name part>]
 // --cloud defaults to $PEAR_CLOUD_URL, else http://localhost:8080 (cd Backend && PEAR_DEV_SIGNIN=1 cargo run). Needs Node 22+,
 // Web/ installed (it runs the headless runner Web/packages/pear-sim) and PEAR_DEV_SIGNIN=1 on the target (throwaway "sim-*" accounts).
 // Read-only against hosted: it never publishes, lists or edits a game; the game must already be there. Every scenario plays in its

@@ -6,13 +6,13 @@ import { filesFromDir } from '../pear-mcp/src/devtools.js';
 
 const G = (n) => new URL(`../../Games/${n}`, import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1');
 
-for (const n of ['QuickDraw', 'HotPotato', 'Flagship']) {
+for (const n of ['QuickDraw', 'Manhunt']) {
   const r = checkDir(G(n));
   assert.equal(r.ok, true, `${n}: ${JSON.stringify(r.errors)}`);
   assert.ok(r.tested.some((t) => t.startsWith('scenario ')) && r.untested.length > 0, `${n} lists tested and untested`);
 }
 
-const hp = filesFromDir(G('HotPotato'));
+const hp = filesFromDir(G('QuickDraw'));
 const run = (files) => checkFiles(files);
 
 // 1. syntax error: schema error names the file, scenarios are reported as skipped
@@ -22,16 +22,16 @@ assert.ok(r.errors.some((e) => e.startsWith('schema: scripts/server/game.js')), 
 assert.ok(r.untested.some((u) => u.includes('skipped')));
 
 // 2. handler that throws on a junk event: self-check catches it and names the script
-r = run({ ...hp, 'scripts/server/game.js': hp['scripts/server/game.js'].replace('data = data || {};', 'data = data || {}; if (name === "tag" && !data.x) throw new Error("boom");') });
+r = run({ ...hp, 'scripts/server/game.js': hp['scripts/server/game.js'].replace('data = data || {};', 'data = data || {}; if (name === "raised" && !data.round) throw new Error("boom");') });
 assert.equal(r.ok, false);
 assert.ok(r.errors.some((e) => e.includes('scripts/server/game.js') && e.includes('boom')), r.errors.join('\n'));
 
 // 3. failing expectation: error says device, expression and last value
 const spec = JSON.parse(hp['check.json']);
-spec.scenarios = [{ ...spec.scenarios[1], expect: [{ by: 5000, device: 'Ann', expr: 'ev.winner.id' }] }];
+spec.scenarios = [{ ...spec.scenarios[0], expect: [{ by: 5000, device: 'Ada', expr: 'ev.missing.id' }] }];
 r = run({ ...hp, 'check.json': JSON.stringify(spec) });
 assert.equal(r.ok, false);
-assert.ok(r.errors.some((e) => e.includes('Ann expected ev.winner.id by 5000 ms')), r.errors.join('\n'));
+assert.ok(r.errors.some((e) => e.includes('Ada expected ev.missing.id by 5000 ms')), r.errors.join('\n'));
 
 // 4. no check.json: generic self-check only, stated as untested
 r = run(Object.fromEntries(Object.entries(hp).filter(([k]) => k !== 'check.json')));

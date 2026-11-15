@@ -2,6 +2,7 @@ import { INSTRUCTION_LIMITS, parseInstructions, parseScene } from '@pear/runtime
 import { describe, expect, it } from 'vitest';
 import { addPhase, addRole, blankInstructions, editInstructions, instructionsDiff, lintMessages, parseStepsText, playersMismatch, removePhase, removeRole, stepsText } from '../src/instructionsPanel';
 import { Project, limitsText, playersText, templateSnapshot } from '../src/project';
+import { gameSnapshot } from './games';
 
 const draw = () => parseInstructions({ title: 'Quick Draw', players: { min: 3, max: 3 }, roles: [{ id: 'ref', kind: 'ref' }] });
 
@@ -73,7 +74,7 @@ describe('project instructions', () => {
     p.propose({ title: 'First' });
     expect(p.propose(7)).toBe('instructions: expected object');
     expect(p.proposal!.title).toBe('First');
-    p.load(templateSnapshot('flagship'));
+    p.load(gameSnapshot('QuickDraw'));
     expect(p.proposal).toBeNull();
   });
 });
@@ -178,8 +179,8 @@ describe('one player limit', () => {
   };
 
   it('comes from the instructions, else the scene inputs, else the default', () => {
-    const p = new Project(templateSnapshot('hotpotato'));
-    expect(p.playerLimits()).toEqual({ min: 2, max: 32, from: 'scene' });
+    const p = new Project(gameSnapshot('QuickDraw'));
+    expect(p.playerLimits()).toEqual({ min: 2, max: 2, from: 'scene' });
     p.setInstructions(parseInstructions({ title: 'T', players: { min: 3, max: 5 } }));
     expect(p.playerLimits()).toEqual({ min: 3, max: 5, from: 'instructions' });
     const bare = new Project(templateSnapshot('blank'));

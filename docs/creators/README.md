@@ -11,7 +11,6 @@ Read in this order:
 5. [scripting-api.md](scripting-api.md): every handler, `self` and `ctx` member, and the limits. Generated from `Web/studio/src/api.ts`; do not edit by hand.
 6. [testing-and-multiplayer.md](testing-and-multiplayer.md): Play, adding and driving players, test players, reading the debug panels.
 7. [publishing.md](publishing.md): sign in, publish, versions.
-8. [hot-potato.md](hot-potato.md): a full multiplayer example, step by step.
 9. [real-world-input.md](real-world-input.md): simulated vs real devices, positions, GPS, and what leaves your machine.
 
 Run Studio locally with `Deploy/dev.sh`, which prints the URL.

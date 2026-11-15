@@ -658,21 +658,21 @@ mod tests {
     }
 
     #[test]
-    fn flagship_server_script_loads_unmodified_and_round_is_won() {
-        let src = include_str!("../../../Games/Flagship/scripts/game.js");
-        let mut h = QuickJsHost::new("flagship-test", &[src.to_string()]).expect("flagship script loads");
+    fn quickdraw_server_script_loads_unmodified_and_two_phones_ready_up() {
+        let src = include_str!("../../../Games/QuickDraw/scripts/game.js");
+        let mut h = QuickJsHost::new("quickdraw-test", &[src.to_string()]).expect("quick draw script loads");
         h.on_player_join("p1");
-        let mut last = Vec::new();
-        for enemy in ["WraithLeft", "WraithRight", "WraithAhead"] {
-            last = h.on_remote("p1", "banish", &json!({ "enemy": enemy }));
-        }
-        assert!(last.contains(&Outgoing::FireAll {
-            name: "round".into(),
-            data: json!({ "state": "won", "scores": { "p1": 3 } }),
-        }));
+        h.on_player_join("p2");
+        h.on_remote("p1", "role", &json!({ "role": "phone" }));
+        h.on_remote("p2", "role", &json!({ "role": "phone" }));
         let state: Value = serde_json::from_str(&h.state_json()).unwrap();
-        assert_eq!(state["over"], json!(true));
-        assert_eq!(state["score"], json!({ "p1": 3 }));
+        assert_eq!(state["phase"], json!("lobby"));
+        let round = state["round"].clone();
+        h.on_remote("p1", "ready", &json!({ "round": round }));
+        let out = h.on_remote("p2", "ready", &json!({ "round": round }));
+        assert!(out.iter().any(|o| matches!(o, Outgoing::FireAll { name, .. } if name.as_str() == "countdown")));
+        let state: Value = serde_json::from_str(&h.state_json()).unwrap();
+        assert_eq!(state["phase"], json!("countdown"));
         assert!(h.errors().is_empty());
     }
 

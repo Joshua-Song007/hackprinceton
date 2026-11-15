@@ -54,7 +54,7 @@ This builds and starts the backend on `http://localhost:8080` (in-memory store, 
 
 ## 3. Try it
 
-1. Open `http://localhost:5173`. It opens the Flagship template (Hollow Choir). The project menu in the toolbar also has the Blank template.
+1. Open `http://localhost:5173`. It opens the Blank template. The project menu in the toolbar also has the Tap counter template.
 2. **Run local** (F5): scene and client scripts run in the page against simulated devices at 50 Hz.
    - AirPods (head): drag in the viewport, arrow keys, or the yaw and pitch sliders in the Devices panel.
    - Phone (gestures): T, F and P send tap, flick and pinch; more buttons are in Devices.

@@ -1,7 +1,6 @@
 import { Worker } from 'node:worker_threads';
 import { afterEach, describe, expect, it } from 'vitest';
-import enemySource from '../../../../Games/Flagship/scripts/enemy.js?raw';
-import playerSource from '../../../../Games/Flagship/scripts/player.js?raw';
+import { enemySource, playerSource } from './fixtureScripts';
 import prelude from '../../../../Packages/PearScript/Sources/PearScript/Resources/prelude.js?raw';
 import { ScriptRuntime, ScriptSandbox, rewriteExportDefault, type LogEntry, type WorkerLike } from '../src';
 
@@ -15,7 +14,7 @@ describe('rewriteExportDefault', () => {
   });
 });
 
-describe('ScriptRuntime with Flagship scripts', () => {
+describe('ScriptRuntime with fixture scripts', () => {
   it('player.js: enter plays audio and haptic, remote maps to haptic', () => {
     const rt = new ScriptRuntime(prelude);
     rt.load('player', playerSource);
@@ -127,7 +126,7 @@ describe('ScriptSandbox in a worker', () => {
   const logs: LogEntry[] = [];
   const make = () => (sandbox = new ScriptSandbox({ createWorker: () => new NodeWorkerLike(), prelude, onLog: (e) => logs.push(e) }));
 
-  it('loads Flagship scripts and runs handlers', async () => {
+  it('loads fixture scripts and runs handlers', async () => {
     const s = make();
     await s.loadScript('player', playerSource);
     await s.loadScript('enemy', enemySource);

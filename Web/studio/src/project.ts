@@ -1,16 +1,8 @@
 // Project model: scene JSON + client/server script sources + instructions + cloud link, dirty tracking and IndexedDB autosave.
-// The Flagship template is imported from Games/Flagship through Vite (never copied into the Studio).
 import type { GameVersion, NewGameVersion } from '@pear/cloud';
 import { parseGestures, parseInputs, parseInstructions, parseOwnership, parsePeripherals, parseRaise, parseScene, type CustomGesture, type Instructions, type Ownership, type PeripheralKind, type SceneDescription, type SceneInputs } from '@pear/runtime';
-import flagshipScene from '../../../Games/Flagship/scene.json';
-import hotPotatoScene from '../../../Games/HotPotato/scene.json';
 import { blankClientScripts, blankScene, blankServerScripts } from './templates/blank';
 import { tapCounterClientScripts, tapCounterScene, tapCounterServerScripts } from './templates/tapcounter';
-
-const flagshipFiles = import.meta.glob('../../../Games/Flagship/scripts/*.js', { query: '?raw', import: 'default', eager: true }) as Record<string, string>;
-const flagshipScripts = Object.fromEntries(Object.entries(flagshipFiles).map(([path, src]) => [/([^/]+)\.js$/.exec(path)![1]!, src]));
-const hotPotatoFiles = import.meta.glob('../../../Games/HotPotato/scripts/*.js', { query: '?raw', import: 'default', eager: true }) as Record<string, string>;
-const hotPotatoScripts = Object.fromEntries(Object.entries(hotPotatoFiles).map(([path, src]) => [/([^/]+)\.js$/.exec(path)![1]!, src]));
 
 export type ScriptKind = 'client' | 'server';
 export type SceneJson = Record<string, unknown>;
@@ -31,8 +23,6 @@ export type ProjectChange = 'open' | 'scene' | 'script' | 'scripts' | 'saved' | 
 export const TEMPLATES = [
   { id: 'blank', label: 'Blank', blurb: 'A floor and nothing else: write the instructions, then add what the game needs.' },
   { id: 'tapcounter', label: 'Tap counter (example)', blurb: 'A cube that sends a tap to a server script that counts them: the smallest working loop for scripts, remote events and server state.' },
-  { id: 'hotpotato', label: 'Hot potato', blurb: 'Multiplayer tag: the holder is eliminated when a timer runs out. Teaches server timers, positions and remote events.' },
-  { id: 'flagship', label: 'Flagship (Hollow Choir)', blurb: 'Audio and heart-rate horror game using head tracking, gestures and a server-run round.' },
 ] as const;
 /** How many players the game takes and where that number comes from: the instructions when there are any, else the scene's declared inputs, else the default. */
 export interface PlayerLimits {
@@ -50,17 +40,10 @@ export const playersText = (count: number, l: { min: number; max: number }): str
 export type TemplateId = (typeof TEMPLATES)[number]['id'];
 
 export function templateSnapshot(id: TemplateId): ProjectSnapshot {
-  if (id === 'blank') {
-    return structuredClone({ scene: blankScene, clientScripts: blankClientScripts, serverScripts: blankServerScripts, gameId: null, version: null });
-  }
   if (id === 'tapcounter') {
     return structuredClone({ scene: tapCounterScene, clientScripts: tapCounterClientScripts, serverScripts: tapCounterServerScripts, gameId: null, version: null });
   }
-  const potato = id === 'hotpotato';
-  const scene = structuredClone(potato ? hotPotatoScene : flagshipScene) as SceneJson;
-  const scripts = potato ? hotPotatoScripts : flagshipScripts;
-  const pick = (names: unknown) => Object.fromEntries(((names as string[] | undefined) ?? []).map((n) => [n, scripts[n] ?? '']));
-  return { scene, clientScripts: pick(scene.clientScripts), serverScripts: pick(scene.serverScripts), gameId: null, version: null };
+  return structuredClone({ scene: blankScene, clientScripts: blankClientScripts, serverScripts: blankServerScripts, gameId: null, version: null });
 }
 
 export const SCRIPT_NAME = /^[A-Za-z_][A-Za-z0-9_-]*$/;
@@ -124,7 +107,7 @@ export class Project {
   dirty = false;
   private listeners = new Set<(change: ProjectChange) => void>();
 
-  constructor(snapshot: ProjectSnapshot = templateSnapshot('flagship')) {
+  constructor(snapshot: ProjectSnapshot = templateSnapshot('blank')) {
     this.load(snapshot);
   }
 

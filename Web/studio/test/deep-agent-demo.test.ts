@@ -28,7 +28,7 @@ class NodeWorkerLike implements WorkerLike {
 // The scripts a Deep Agent is expected to write for this demo (expected output shape; no agent runs in this test).
 const CUBE_CLIENT_SCRIPT = `export default (function () {
   // Cube pulse (client script): looking at the cube pulses it and tags the look for the server.
-  // [provisional] self.scale, self.name and ctx.haptic follow the Flagship scripts; prelude.js does not define self/ctx shapes.
+  // [provisional] self.scale, self.name and ctx.haptic follow the Quick Draw scripts; prelude.js does not define self/ctx shapes.
   return script({
     onLookAt(self, ctx) {
       self.scale = 1.25;

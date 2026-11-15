@@ -4,7 +4,7 @@ Written on Windows; no Swift was changed or built. Everything here needs `xcodeb
 
 ## Why
 
-Real-world tag (hot potato, `Games/HotPotato`) needs player positions and a tag gesture from real devices. The web Studio simulates both. Rule (decided): positions reach the game server only as derived game events a script sends (`ctx.remote.fire("pos", ...)`), gated per game by `scene.permissions.location`. Raw USIS never leaves the local network.
+Real-world tag (tag, as in `Games/Manhunt`) needs player positions and a tag gesture from real devices. The web Studio simulates both. Rule (decided): positions reach the game server only as derived game events a script sends (`ctx.remote.fire("pos", ...)`), gated per game by `scene.permissions.location`. Raw USIS never leaves the local network.
 
 ## 1. Swift parity for the new script API
 
@@ -29,7 +29,7 @@ GPS is 3 to 10 m, too coarse for tapping someone. Use Nearby Interaction (U1 / U
 
 ## 4. Tag hand
 
-AirPods head motion (nod / lunge) and Watch wrist swing already produce gestures through `AirPodsMotionSource` and `WristGestureDetector`. The Hot potato client treats `tap` or `flick` as a tag; map a lunge to `flick`.
+AirPods head motion (nod / lunge) and Watch wrist swing already produce gestures through `AirPodsMotionSource` and `WristGestureDetector`. A tag game's client can treat `tap` or `flick` as a tag; map a lunge to `flick`.
 
 ## 5. Proposed plan.md entries (the user applies these; `.claude/` is human-only)
 

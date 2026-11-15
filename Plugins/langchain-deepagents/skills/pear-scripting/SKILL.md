@@ -149,12 +149,13 @@ PEARUI v1 (ui.json): server-driven native UI; the same JSON renders on iOS and w
     ui: {"type":"column","children":[
       {"type":"sensor","kind":"location","event":"location","hz":1,"id":"gps"},
       {"type":"map","markers":"ev.view.markers","follow":"me"},
-      {"type":"text","value":"{{ev.view.hint}}"},
-      {"type":"button","label":"Tag","action":{"send":"tag"},"if":"ev.view.role == 'hunter'"},
-      {"type":"effect","id":"near","on":"ev.view.hint","haptic":"heavy"}]}
+      {"type":"text","value":"{{ev.you.hint}}"},
+      {"type":"button","label":"Tag","action":{"send":"tag"},"if":"ev.you.role == 'hunter'"},
+      {"type":"effect","id":"near","on":"ev.you.hint","haptic":"heavy"}]}
     server (JS): const R=6371000,rad=d=>d*Math.PI/180;
       const haversine=(a,b)=>{const h=Math.sin(rad(b.lat-a.lat)/2)**2+Math.cos(rad(a.lat))*Math.cos(rad(b.lat))*Math.sin(rad(b.lng-a.lng)/2)**2;return 2*R*Math.asin(Math.sqrt(h))};
       on "location" {lat,lng,acc}: store per player; hint = d<15?"Tag range":d<50?"Close":"Cold" (d metres to nearest runner); on "tag" accept only if haversine<=15.
+      Per-player secrets (role, hint, other players' positions): ctx.remote.fire(playerId,"you",{role,hint,...}) and read ev.you.* in the UI; fireAll("view",...) is seen by everyone, so keep only public facts there.
     Markers are [{lat,lng,label,tone}] (tone good=green, bad=red, else orange). One location stream per screen.
 
 SCENARIO (run_scenario: headless, real sockets against the hosted server)
@@ -167,16 +168,15 @@ SCENARIO (run_scenario: headless, real sockets against the hosted server)
   Timed motion/gps steps send "aim"/"location" (override with scenario motionEvent / gpsEvent). A device role sends role {role} after _welcome.
   Report: {"ok","expect":[{...,"pass","actual"}],"frames":[{t,device,dir,name,data}],"logs":[],"final":{device:viewState}}.
   The scenario runs against the LATEST saved version unless "version" is set. Logs need an owner/developer token.
-  Loop: save_version -> run_scenario -> read the report -> fix -> repeat until ok is true; then publish (publish = list: sets listed:true; optional description/tags/releaseNotes).
+  Loop: save_version -> run_scenario -> read the report -> fix -> repeat until ok is true; then publish (publish = list: sets listed:true; optional description/tags/releaseNotes; it runs pear-check and attaches the report, a failing check blocks it).
 ```
 
 ## Scaffolds (copy and adapt; generated from Games/)
 
 - `scaffolds/QuickDraw/`: check.json, pear-game.json, scenario.json, scene.json, scripts/game.js, scripts/player.js, ui.json
-- `scaffolds/HotPotato/`: check.json, scene.json, scripts/game.js, scripts/player.js
-- `scaffolds/Manhunt/`: pear-game.json, scenario.json, scene.json, scripts/game.js, scripts/player.js, ui.json
+- `scaffolds/Manhunt/`: check.json, pear-game.json, scenario.json, scene.json, scripts/game.js, scripts/player.js, ui.json
 
-Start from the nearest one: Manhunt for GPS games, Hot Potato for passing/tag, Quick Draw for motion reflex duels.
+Start from the nearest one: Manhunt for GPS and tag games, Quick Draw for motion reflex duels.
 
 ## Workflow
 

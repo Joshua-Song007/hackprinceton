@@ -163,7 +163,7 @@ class Rules(unittest.TestCase):
         self.assertFalse(any(ci.scope(['docs/agents/worker-prompt.md']).values()))
         self.assertEqual(ci.scope(['Backend/src/main.rs']), {'swift': False, 'backend': True, 'nonswift': False})
         self.assertTrue(ci.scope(['Packages/PearCore/Sources/Core.swift'])['swift'])
-        for path in ('Packages/PearScript/Sources/PearScript/Resources/prelude.js', 'Games/Flagship/scripts/game.js'):
+        for path in ('Packages/PearScript/Sources/PearScript/Resources/prelude.js', 'Games/QuickDraw/scripts/game.js'):
             selected = ci.scope([path])
             self.assertTrue(selected['backend'])
             self.assertTrue(selected['nonswift'])

@@ -73,7 +73,7 @@ Packages/   shared Swift packages (PearCore, PearInput, PearRuntime, ...)
 Web/        web Studio and runtime packages
 Backend/    Rust server
 Plugins/    plugins, incl. langchain-deepagents
-Games/      QuickDraw, HotPotato, Flagship
+Games/      QuickDraw, Manhunt
 Schema/     USIS packet schema
 Deploy/     Docker, Caddy, Vultr scripts
 docs/       docs and brand kit

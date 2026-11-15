@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Scripted check of a running Pear stack, local or hosted: health, dev sign-in, create game,
-# publish Games/Flagship, join /play as 2 players and /debug as the owner, banish the three
-# wraiths, print the debug event log and the final ctx.state. Exits non-zero on any mismatch.
+# publish Games/QuickDraw, join /play as 2 phones and /debug as the owner, play one round (both ready,
+# both draw on the cue, player1 faster), print the debug event log and the final ctx.state. Exits non-zero on any mismatch.
 #   Deploy/demo.sh [base-url]      default http://localhost:8080
 # Needs Node 22+ (built-in WebSocket, no npm packages) and curl. The server needs PEAR_DEV_SIGNIN=1.
 # PEAR_INSECURE=1 accepts the self-signed certificate of an IP-only Vultr box.
@@ -9,7 +9,7 @@ set -euo pipefail
 
 BASE="${1:-http://localhost:8080}"
 BASE="${BASE%/}"
-GAME_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../Games/Flagship" && pwd)"
+GAME_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../Games/QuickDraw" && pwd)"
 CURL_OPTS=(-fsS --max-time 10)
 if [ "${PEAR_INSECURE:-}" = 1 ]; then
   CURL_OPTS+=(-k)
@@ -80,7 +80,7 @@ async function main() {
   const p2 = await signin("player2");
   check(owner.token && p1.token && p2.token, "dev sign-in for owner, player1, player2");
 
-  const game = await api("POST", "/api/games", owner.token, { title: "Hollow Choir demo " + run });
+  const game = await api("POST", "/api/games", owner.token, { title: "Quick Draw demo " + run });
   check(game.id, `created game ${game.id}`);
 
   const read = (rel) => fs.readFileSync(path.join(gameDir, rel), "utf8");
@@ -94,46 +94,59 @@ async function main() {
     metadata: {},
     run_mode: scene.runMode,
   });
-  check(version.version === 1, `published Flagship as version ${version.version}`);
+  check(version.version === 1, `published Quick Draw as version ${version.version}`);
 
   const debug = await connect("debug", `${wsBase}/debug/${game.id}?token=${owner.token}`);
   await debug.waitFor((f) => f.kind === "snapshot", "debug snapshot");
   const a = await connect("player1", `${wsBase}/play/${game.id}?token=${p1.token}`);
   const b = await connect("player2", `${wsBase}/play/${game.id}?token=${p2.token}`);
-  await debug.waitFor((f) => f.kind === "state" && Object.keys(f.state.score || {}).length === 2, "both players in ctx.state");
+  await debug.waitFor((f) => f.kind === "state" && Object.keys(f.state.players || {}).length === 2, "both players in ctx.state");
   check(true, "2 players joined /play, owner watching /debug");
 
   const id1 = p1.account.id;
   const id2 = p2.account.id;
-  const moves = [[a, "WraithLeft"], [b, "WraithRight"], [a, "WraithAhead"]];
-  for (const [player, enemy] of moves) {
-    player.send("banish", { enemy });
-    await sleep(100); // keep the event order readable in the log
-  }
+  a.send("role", { role: "phone" });
+  b.send("role", { role: "phone" });
+  const lobby = (f) => f.name === "state" && f.data && f.data.phase === "lobby" && f.data.phones.length === 2;
+  const sa = await a.waitFor(lobby, "both phones in the lobby on player1");
+  await b.waitFor(lobby, "both phones in the lobby on player2");
+  a.send("ready", { round: sa.data.round });
+  b.send("ready", { round: sa.data.round });
 
-  const won = (f) => f.name === "round" && f.data && f.data.state === "won";
-  await a.waitFor(won, "round won on player1");
-  await b.waitFor(won, "round won on player2");
-  const final = await debug.waitFor((f) => f.kind === "state" && f.state.over === true, "final ctx.state on /debug");
+  // The countdown (3 s) and the random arming delay (2 to 6 s) run on the server; the cue is the "fire" event.
+  const fire = (f) => f.name === "fire";
+  const fa = await a.waitFor(fire, "fire cue on player1", 15000);
+  await b.waitFor(fire, "fire cue on player2", 15000);
+  a.send("raised", { round: fa.data.round, sinceFireMs: 120 });
+  b.send("raised", { round: fa.data.round, sinceFireMs: 250 });
+
+  const result = (f) => f.name === "roundResult";
+  const ra = await a.waitFor(result, "round result on player1");
+  await b.waitFor(result, "round result on player2");
+  await debug.waitFor((f) => f.kind === "state" && f.state.phase === "roundOver", "roundOver ctx.state on /debug");
   await sleep(200); // let trailing debug frames arrive before printing the log
 
-  console.log("\ndebug event log");
+  console.log("
+debug event log");
   for (const f of debug.frames) {
     const { kind, t, ...rest } = f;
     if (kind === "snapshot") console.log(`  snapshot  version ${f.version} players ${JSON.stringify(f.players)}`);
     else console.log(`  ${String(kind).padEnd(8)}  ${JSON.stringify(rest)}`);
   }
   const state = debug.frames.filter((f) => f.kind === "state").pop().state;
-  console.log("\nfinal ctx.state\n" + JSON.stringify(state, null, 2) + "\n");
+  console.log("
+final ctx.state
+" + JSON.stringify(state, null, 2) + "
+");
 
   const errors = debug.frames.filter((f) => f.kind === "error");
   check(errors.length === 0, `no script errors on /debug (${errors.length})`);
-  check(debug.frames.filter((f) => f.kind === "in" && f.name === "banish").length === 3, "debug saw 3 banish events in");
-  check(["WraithLeft", "WraithRight", "WraithAhead"].every((w) => state.banished[w]), "ctx.state.banished lists all 3 wraiths");
-  check(state.over === true, "ctx.state.over is true (round state won)");
-  check(state.score[id1] === 2 && state.score[id2] === 1, "scores: player1 2, player2 1");
-  const roundOut = debug.frames.find((f) => f.kind === "out" && f.name === "round");
-  check(roundOut && roundOut.data.state === "won", "server broadcast round state won");
+  check(debug.frames.filter((f) => f.kind === "in" && f.name === "raised").length === 2, "debug saw 2 raised events in");
+  check(ra.data.winnerId === id1 && ra.data.reason === "fast", "player1 (120 ms) won the round on reaction time");
+  check(state.phase === "roundOver", "ctx.state.phase is roundOver");
+  check(state.scores[id1] === 1 && !state.scores[id2], "scores: player1 1, player2 0");
+  const roundOut = debug.frames.find((f) => f.kind === "out" && f.name === "roundResult");
+  check(roundOut && roundOut.data.winnerId === id1, "server broadcast the round result");
 
   a.close(); b.close(); debug.close();
   console.log("\nPASS");

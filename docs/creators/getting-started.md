@@ -21,4 +21,4 @@ A game with no server script runs entirely on the player's machine.
 5. Edit the client script. The editor autocompletes handler names and `ctx` members; hover for docs. Changes reload on the next Play.
 6. **Shift+F5** stops. **Ctrl+S** saves a `*.pear.json` file you can reopen with File > Open file.
 
-Next: [studio-guide.md](studio-guide.md), then [hot-potato.md](hot-potato.md) for a multiplayer game.
+Next: [studio-guide.md](studio-guide.md), then [testing-and-multiplayer.md](testing-and-multiplayer.md) for a multiplayer game.

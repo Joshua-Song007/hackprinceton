@@ -5,7 +5,7 @@ import { clampPhones, phoneScenario, projectFiles, runCheck } from '../src/check
 import { ScriptAudio } from '../src/scriptAudio';
 
 const prelude = readFileSync(new URL('../../../Packages/PearScript/Sources/PearScript/Resources/prelude.js', import.meta.url), 'utf8');
-const hot = (p: string) => readFileSync(new URL(`../../../Games/HotPotato/${p}`, import.meta.url), 'utf8');
+const game = (p: string) => readFileSync(new URL(`../../../Games/Manhunt/${p}`, import.meta.url), 'utf8');
 
 describe('check panel', () => {
   it('clamps the phone count', () => {
@@ -13,9 +13,9 @@ describe('check panel', () => {
     expect(phoneScenario(4).devices[0]).toMatchObject({ count: 4 });
   });
   it('a real game passes with N phones', () => {
-    const scene = JSON.parse(hot('scene.json'));
+    const scene = JSON.parse(game('scene.json'));
     const files: Record<string, string> = { 'scene.json': JSON.stringify(scene) };
-    for (const n of scene.serverScripts) files[`scripts/server/${n}.js`] = hot(`scripts/${n}.js`);
+    for (const n of scene.serverScripts) files[`scripts/server/${n}.js`] = game(`scripts/${n}.js`);
     const r = runCheck(files, 3, { prelude });
     expect(r.lines.join('\n')).toContain('3 phones');
     expect(r.ok).toBe(true);
