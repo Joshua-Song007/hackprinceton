@@ -1,5 +1,51 @@
-This document outlines the system architecture, package boundaries, and operational concepts for a native, omni-modal AR game platform (working title Omni). It is a macOS creator app where every Apple device a player carries is a spatial sensor node, all streaming one standardized JSON input format into a shared 3D coordinate system. A built-in 3D Device Simulator lets creators build and test without owning the hardware. Games built on the platform are hosted in the cloud, like Roblox: once a creator publishes a game, it lives in a cloud database and is no longer tied to the creator's Mac. Only game content goes to the cloud; live sensor data stays on the local network.
-The PRD defines what we ship and why; this blueprint defines how it is built. If code drifts from the boundaries here, flag the mismatch rather than assuming the code has quietly redefined the design.
+# Pear
+
+A platform for building and playing movement-based AR games with the Apple devices you already own. "Pair your peripherals to Play with peers on Pear." HackPrinceton, Entertainment track.
+
+Naming: the product is Pear. Code identifiers keep the internal `Omni` prefix (packages `OmniCore`..., env `OMNI_*`, bundle ids); renaming code is out of scope. Where this document says Omni Studio, read Pear Studio.
+
+## Problem
+AR needs specific hardware that is expensive for creators to build for and players to buy, so few games get made and few people play. Affordable motion games (Wii) tie you to a console and a screen.
+
+## Solution
+Pear uses common Apple peripherals (iPhone, Apple Watch, AirPods) as spatial sensors so games know where you are and how you move. Two components:
+- Pear Studio, a desktop and web app with a 3D Device Simulator, so creators build and test for devices they do not own.
+- Players play those games with hardware they already have.
+
+## Why
+The answer to a more technological world is to integrate technology thoughtfully. Pear brings entertainment off the screen and back into the real world.
+
+## Hackathon scope (demo)
+Studio with the simulator, accounts, publishing to the server, and a demo game. Studio screens: (1) log in, (2) projects, (3) project editor with:
+- tileable, draggable panels
+- 3D view: XYZ orientation cube top right; middle mouse = pan; right mouse = rotate; Alt + right mouse = rotate constrained around the Z axis
+- buttons to add peripherals
+- panels to program game logic
+- ways to test locally
+- save, open and other local file / project actions
+
+## After the hackathon
+Player apps on iOS and visionOS, automatic state syncing, more devices (iPad and Apple Pencil, Vision Pro, third-party Bluetooth), Lua scripting, moderation and version history, a plugin system (Phase 10 marketplace is the first step).
+
+## Not decided yet
+Sign-in method (Apple preferred; built in Phase 9), the server's JS engine (rquickjs in use, deno_core not picked), where game files are stored, how players connect to the game server at the demo.
+
+## Additional surfaces (acknowledged, were flagged mismatches)
+- Web Studio: a TypeScript browser + Tauri desktop Studio (`Web/`) sits beside the native macOS Studio, same contracts, simulated input only.
+- Player app: `Apps/OmniPlayer` (iOS + macOS) signs in with Apple and browses the cloud library; it is a second composition root talking to the backend through OmniCloud. Running games on it is next.
+- Plugin marketplace: signed plugin bundles in object storage, per-account installs and model keys.
+
+## Colors and branding
+| Hex | Name | Role |
+|---|---|---|
+| #285943 | Emerald Depths | Primary background / dark canvas; dark ink on light buttons |
+| #C2EFB3 | Tea Green | Primary brand accent, primary CTAs, display highlights |
+| #764134 | Clay Soil | Secondary elevated surface, cards, containers |
+| #E5B181 | Sandy Clay | Secondary warm accent, badges, callouts, borders |
+| #A7BED3 | Powder Blue | Tertiary cool accent, links, tags, dividers |
+
+The rest of this document is the architecture blueprint. Platform shape: a native macOS creator app where every Apple device a player carries is a spatial sensor node streaming one JSON format (USIS) into a shared 3D coordinate system. Published games are cloud-hosted like Roblox; only game content goes to the cloud, live sensor data stays on the local network. The PRD says what we ship; this says how. If code drifts from these boundaries, flag the mismatch.
+
 Technical Stack Overview
 Subsystem
 Technology Selection
