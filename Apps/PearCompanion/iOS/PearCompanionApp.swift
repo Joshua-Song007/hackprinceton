@@ -73,6 +73,7 @@ struct PearCompanionApp: App {
     var body: some Scene {
         WindowGroup {
             VStack(spacing: 8) {
+                Image("PearMark").resizable().scaledToFit().frame(width: 40, height: 40).accessibilityHidden(true)
                 Text("Pear Companion").font(.headline)
                 Text(model.status).font(.subheadline)
                 if !model.motionNote.isEmpty {

@@ -75,6 +75,7 @@ struct SignInView: View {
                 Text("Signed in as \(account.displayName)")
                 Button("Sign Out") { Task { await model.signOut() } }
             } else {
+                Image("PearMark").resizable().scaledToFit().frame(width: 40, height: 40).accessibilityHidden(true)
                 Text("Sign in to publish games")
                 SecureField("Account token", text: $token)
                     .textFieldStyle(.roundedBorder)

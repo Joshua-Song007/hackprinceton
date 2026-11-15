@@ -27,7 +27,9 @@ export function renderLoginScreen(root: HTMLElement, account: AccountController,
   };
   name.addEventListener('keydown', (e) => e.key === 'Enter' && void go());
   root.replaceChildren(el('div', { class: 'scr-card scr-login' }, [
-    el('h1', {}, ['Pear Studio']),
+    el('img', { src: '/pear-lockup.svg', alt: 'Pear', width: '160', class: 'scr-logo scr-logo-dark' }),
+    el('img', { src: '/pear-lockup-emerald.svg', alt: 'Pear', width: '160', class: 'scr-logo scr-logo-light' }),
+    el('h1', { class: 'sr-only' }, ['Pear Studio']),
     el('div', { class: 'om-prop' }, [el('label', {}, ['Name']), el('div', { class: 'om-field' }, [name])]),
     error,
     el('div', { class: 'sheet-actions' }, [button('Sign in', () => void go(), { variant: 'default' })]),

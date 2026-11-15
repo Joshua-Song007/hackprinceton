@@ -191,3 +191,7 @@ dialog.sheet .sheet-error { color: var(--error); font-size: 12px; margin: var(--
 .scr-meta { font-size: 11px; line-height: 13px; color: var(--text-secondary); }
 .scr-actions { display: flex; gap: 8px; margin-top: auto; padding-top: 8px; }
 @media (max-width: 640px) { .scr-grid { grid-template-columns: minmax(0, 1fr); } }
+.scr-logo { display: block; margin: 0 auto 16px; height: auto; }
+.scr-logo-light { display: none; }
+[data-theme="light"] .scr-logo-dark { display: none; }
+[data-theme="light"] .scr-logo-light { display: block; }

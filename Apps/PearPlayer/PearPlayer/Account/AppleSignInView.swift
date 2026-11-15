@@ -10,7 +10,7 @@ struct AppleSignInView: View {
 
     var body: some View {
         VStack(spacing: 20) {
-            PearGizmoMark(size: 56)
+            Image("PearMark").resizable().scaledToFit().frame(width: 56, height: 56).accessibilityHidden(true)
             Text("Pear").font(.title.weight(.semibold))
             Text("Sign in to browse and play games.")
                 .foregroundStyle(PearTheme.textSecondary)
