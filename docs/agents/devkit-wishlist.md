@@ -1,37 +1,29 @@
-# Pear devkit wishlist (local, amend freely)
+# Pear Studio plugin and developer-environment wishlist
 
-Gaps found while building Quick Draw. Each is a candidate for a backend hotfix into the Pear devkit.
-Status: all open. Evidence is from the code and docs unless marked "run".
+Reusable library configuration, additions and hotfixes for the LangChain deep-agents plugin and Pear Studio developer environment. The goal is seamless development of future real-life games, haptic experiences and device utilities. Individual games supply evidence, not the scope of this backlog. Game-specific behavior and acceptance criteria belong in their issues.
 
-## LangChain / LLM inside scripts
-- **Gap:** scripts cannot call an LLM or LangChain. The sandbox has no `fetch`, DOM, timers or files; the network is reachable only through remote events (`docs/creators/scripting-api.md:252-256`). The Deep Agents plugin is LangChain, but it only *authors* scripts and `scene.json`; it is not available to a running game.
-- **Ask:** a server-side `ctx.agent.run(prompt, {tools})` (or a plugin-defined remote event) so a server script can call the hosted runtime (`PEAR_AGENT_RUNTIME_URL`, port 9410) with a time cap and rate limit.
-- **Notes:** keep it server-only (never client), per-game budget, no raw sensor data in the prompt, and the runtime secret stays on the box.
+These are proposals based on code inspection, not verified live-plugin capabilities. Priorities distinguish foundational authoring/testing improvements (P1) from follow-on capabilities (P2); none is marked implemented here.
 
-## Input and sensing
-- **Orientation/pitch for scripts:** no `ctx.orientation` or angle gesture; `gestures.swing` is an accel-axis threshold only. Quick Draw computes pitch in a web page instead.
-- **Timestamped gesture events** so the server can judge fairness without trusting a phone's own clock.
-- **Companion location source with accuracy** (`docs/agents/gps-proximity-spec.md`).
+## P1 — Author, validate and publish reliably
+- **Agent-callable validation:** expose scene/script validation and bounded headless contract tests as plugin tools, with file-specific errors and explicit tested/untested status. Evidence: `Plugins/langchain-deepagents/runtime/server.py` configures no explicit game validation tool. Acceptance: an agent can validate a generated game, receive actionable failures and rerun successfully without unrestricted shell access.
+- **Revision-safe parallel edits:** attach expected file revisions/hashes to applied changes and reject stale writes. Evidence: plugin client/server authoring agents share a backend, while `runtime/translate.py` emits file changes without base revisions. Acceptance: two edits against the same revision cannot silently overwrite one another; independent files can still be applied.
+- **Companion UI packaging:** support versioned device UI assets through authoring, validation, preview and publication. Evidence: `runtime/translate.py` emits applied artifacts only for `/scripts/**` and `/scene.json`; game-specific HTML/JS is currently hand-placed under `Web/studio/public`. The backend's ability to write a file is not proof Studio applies it. Acceptance: a generated game's phone UI is included in its published version and can be previewed without manually modifying Studio.
+- **Agent-visible publication receipts:** provide a bounded publish action with explicit approval and a verified result containing game/version, validation status and join targets, never credentials. Evidence: plugin stream completion is not a deployment receipt. Acceptance: an agent can distinguish generation, validation, publication and verified availability, including a failed verification.
+- **Enforced tool/filesystem permissions:** align declared plugin scopes with runtime backend access. Evidence: `pear-plugin.json` declares narrow scopes while `runtime/server.py` grants project-wide `/**` access. Acceptance: out-of-scope writes are denied by enforcement, with an actionable error; no unrestricted shell backend as a shortcut.
 
-## Roles and clients
-- **Referee/spectator role:** `/play/{game_id}` treats every socket as a player. Quick Draw uses a `role` remote event.
-- **Player-run client:** a way to ship a custom phone/iPad page (like `qd-phone.html`, `qd-ref.html`) with a game instead of hand-placing it in `Web/studio/public`.
-- **Relay on the LAN:** `Web/studio/scripts/relay.mjs` binds 127.0.0.1 only.
+## P1 — Develop against real devices
+- **Capability and readiness diagnostics:** expose a read-only, privacy-conscious view of device connections, supported input/output capabilities, permissions, calibration and session membership to Studio and agents. Acceptance: disconnected, unsupported, denied and unknown states are distinguishable without assuming a browser user-agent proves physical hardware.
+- **Physical-device preview and feedback:** offer a reusable device-session workflow for previewing generated UI and inspecting sensor, audio and haptic results. Evidence: browser permission/audio-unlock behavior currently needs manual device-page testing. Acceptance: developers can join real phones to a preview, observe permission failures and output acknowledgements, and clearly distinguish simulated checks from hardware checks.
+- **Discoverable sensor/output contracts:** document and expose supported orientation, gesture, calibration, audio and haptic operations with platform capability/fallback information. Evidence: scripts have a raise gesture but no generic `ctx.orientation` read, and server audio must be routed to clients. Acceptance: agents can discover supported operations and generate a capability-aware example without inventing APIs.
+- **Timing diagnostics and trustworthy event ordering:** expose cue receipt, sensor sample, server receipt and timing uncertainty without conflating device clocks; document trust limits and stale/duplicate handling. Evidence: client gesture timestamps alone do not establish trustworthy cross-device timing. Acceptance: tests cover offset clocks, delayed delivery and duplicate reports, and diagnostics report uncertainty rather than claiming unmeasured fairness.
 
-## Audio
-- `self.audio.play` is documented but not implemented. Quick Draw plays the cue on the iPad page with Web Audio and `speechSynthesis`.
+## P2 — Broader runtime and environment coverage
+- **Session-role APIs:** expose reusable player/spectator roles and session membership through supported contracts rather than requiring every game to reinvent role accounting. Evidence: roles have historically been represented in game scripts while play sockets are treated as players. Acceptance: a non-player connection cannot consume an active-player slot or submit player-only input through the supported API. Recheck against evolving backend implementation before building.
+- **Simulation parity:** document and test unsupported runtime operations, including local `ctx.spawn`, and provide structured unsupported-operation feedback to agents. Acceptance: each exposed operation either behaves consistently in preview/runtime or produces a specific capability warning.
+- **Location tooling:** provide a documented location source with accuracy, permission states and inspectable position events. Acceptance: developers can simulate and inspect unavailable, stale and inaccurate location without using real location data in automated tests.
+- **Reproducible deployment configuration:** unify or explicitly validate service/database naming and environment requirements. Evidence: existing deployment uses `/opt/omni` and an `omni` database while newer compose configuration uses `pear`. Acceptance: preflight identifies mismatches without exposing secrets or depending on undocumented overrides.
 
-## Studio testing
-- Play/Add player cannot simulate "phone raised". Need a debug input that injects a custom remote event, or a simulated-orientation slider.
-
-## What Studio cannot do for Quick Draw today (all need to be built)
-- **Shot trigger:** scripts cannot read phone orientation and `player.js` sends no `raised`; a simulated player cannot raise a phone. Need script-visible orientation/angle gesture (see Input) plus a Studio control that emits it.
-- **Audio cue:** Studio does not implement script audio, so the "Fire!" cue cannot be heard in Play.
-- **Phone and iPad pages:** the pitch maths, Wake Lock, geolocation and iPad audio unlock exist only in the static pages and need real Safari. Need Studio to host and preview a game's companion pages, or move that logic into the runtime.
-- **Referee in Play:** no spectator/referee player to press Start in Add player.
-- **Position stream:** the simulated phone sends position, but Studio has no view of the `pos` events the page sends.
-
-## Plugin and deploy
-- `skills/pear-scripting/SKILL.md` is stale (missing `onTick`, `onTimer`, `ctx.after`, `ctx.now`, `ctx.player`, `ctx.position`, scene `permissions`/`gestures`/`inputs`, targeted `ctx.remote.fire(id, ...)`).
-- Plugin seed needs a version bump to publish: a changed plugin at the same version fails the seed ("must be higher"). Deep Agents permissions change is committed but not live until the version goes above 0.7.39.
-- The box lives in `/opt/omni` with Postgres user/db `omni`, while new compose says `pear`; it works only because `DATABASE_URL` is kept in `.env`.
+## Validation notes
+- Re-audit source references as the plugin/runtime evolves; absence from one configuration is not a universal LangChain limitation.
+- The previously referenced `docs/agents/gps-proximity-spec.md` was not found; it is not an implementation dependency.
+- Keep application-specific requirements, obsolete source comments and individual game fixes in their issues, not this wishlist.

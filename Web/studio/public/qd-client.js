@@ -1,9 +1,10 @@
-// Shared helper for qd-phone.html / qd-ref.html: dev sign-in, /play/{game} socket, role event,
-// auto-reconnect. Page URL: ?game=<gameId>&name=<display name>.
+// Shared helper for qd-phone.html: dev sign-in, /play/{game} socket, role event,
+// auto-reconnect. Page URL: ?game=<gameId>&name=<display name>[&version=<n>] (no version: the latest published one).
 (function () {
   const params = new URLSearchParams(location.search);
   const game = params.get("game") || "";
   const name = (params.get("name") || "Player").slice(0, 40);
+  const version = /^\d+$/.test(params.get("version") || "") ? params.get("version") : "";
 
   // sessionStorage: survives a reload (same account id), but two tabs stay distinct players.
   function subject() {
@@ -46,7 +47,7 @@
         return retry(e.message);
       }
       const scheme = location.protocol === "https:" ? "wss" : "ws";
-      ws = new WebSocket(`${scheme}://${location.host}/play/${encodeURIComponent(game)}?token=${encodeURIComponent(token)}`);
+      ws = new WebSocket(`${scheme}://${location.host}/play/${encodeURIComponent(game)}?token=${encodeURIComponent(token)}${version ? "&version=" + version : ""}`);
       const mine = ws;
       mine.onmessage = (ev) => {
         let frame;

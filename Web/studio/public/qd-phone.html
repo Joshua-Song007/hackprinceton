@@ -11,19 +11,20 @@
   #conn { font-size: 14px; color: #f66; } #conn.ok { color: #6c6; }
   #phase { font-size: 40px; font-weight: 700; text-transform: uppercase; }
   #pitch { font-size: 96px; font-weight: 800; font-variant-numeric: tabular-nums; }
-  #needs, #scores, #result, #loc { font-size: 24px; }
-  #loc { font-size: 14px; color: #9cf; }
+  #count { font-size: 96px; font-weight: 800; min-height: 1em; }
+  #needs, #slot, #scores, #result { font-size: 24px; }
   #go { flex: 1; min-height: 140px; font-size: 44px; font-weight: 800; border: 0; border-radius: 24px; background: #2a7; color: #fff; }
 </style>
 </head>
 <body>
 <div id="conn">starting…</div>
 <div id="phase">lobby</div>
+<div id="count"></div>
 <div id="pitch">--°</div>
+<div id="slot"></div>
 <div id="needs"></div>
 <div id="scores"></div>
 <div id="result"></div>
-<div id="loc"></div>
 <button id="go">Calibrate / Ready</button>
 <script src="qd-client.js"></script>
 <script>
@@ -31,8 +32,9 @@ const RAISE_DEG = 80; // degrees of rise from the calibrated rest pose that coun
 const LOWER_DEG = RAISE_DEG - 10; // hysteresis
 
 const $ = (id) => document.getElementById(id);
-let myId = null, players = [], phase = "lobby", fireAt = null, raised = false;
-let gravity = null, rest = null, usingMotion = false, lastPos = null;
+// round is the server's stale-input token: ready and raised carry the round last seen, anything older is dropped.
+let myId = null, players = [], queue = [], phase = "lobby", round = 0, fireAt = null, raised = false;
+let gravity = null, rest = null, usingMotion = false, audio = null, countdownTimer = null;
 
 // Pitch = angle between the current and the rest gravity vector. A vector angle has no
 // gimbal-lock singularity near 90 degrees, unlike beta/gamma Euler angles.
@@ -62,7 +64,7 @@ function onPitch() {
   $("pitch").textContent = Math.round(deg) + "°";
   if (!raised && deg >= RAISE_DEG) {
     raised = true;
-    qd.send("raised", { sinceFireMs: fireAt === null ? null : Math.round(performance.now() - fireAt) });
+    qd.send("raised", { round, sinceFireMs: fireAt === null ? null : Math.round(performance.now() - fireAt) });
   } else if (raised && deg <= LOWER_DEG) {
     raised = false;
     qd.send("lowered", {});
@@ -70,21 +72,57 @@ function onPitch() {
 }
 
 const nameOf = (id) => (players.find((p) => p.id === id) || {}).name || "?";
+const canReady = () => ["lobby", "roundOver", "matchOver"].includes(phase) && (players.find((p) => p.id === myId) || {}).role === "phone";
+
+// Both phones play their own cue: a tone (Web Audio, unlocked by the Ready tap) and a vibration.
+function unlockAudio() {
+  const Ctx = window.AudioContext || window.webkitAudioContext;
+  if (Ctx) { audio = audio || new Ctx(); audio.resume(); }
+}
+function beep() {
+  if (!audio) return;
+  const t0 = audio.currentTime, osc = audio.createOscillator(), gain = audio.createGain();
+  osc.type = "square";
+  osc.frequency.setValueAtTime(1000, t0);
+  gain.gain.setValueAtTime(1, t0);
+  gain.gain.linearRampToValueAtTime(0, t0 + 0.8);
+  osc.connect(gain).connect(audio.destination);
+  osc.start(t0);
+  osc.stop(t0 + 0.8);
+}
+
+function stopCountdown() {
+  clearInterval(countdownTimer);
+  countdownTimer = null;
+  $("count").textContent = "";
+}
+function startCountdown(ms) {
+  stopCountdown();
+  const end = performance.now() + ms;
+  const tick = () => { $("count").textContent = Math.max(1, Math.ceil((end - performance.now()) / 1000)); };
+  tick();
+  countdownTimer = setInterval(tick, 100);
+}
 
 function render(s) {
   const prev = phase;
   phase = s.phase;
+  round = s.round;
   players = s.players || players;
+  queue = s.queue || [];
+  const me = players.find((p) => p.id === myId);
   $("phase").textContent = phase;
   $("needs").textContent = s.needs || "";
   $("scores").textContent = players.filter((p) => p.role === "phone").map((p) => `${p.id === myId ? "YOU" : p.name} ${s.scores && s.scores[p.id] || 0}`).join("  -  ");
-  if (phase === "lobby" || phase === "ready" || phase === "arming" || phase === "roundOver") {
-    document.body.classList.remove("fire");
-  }
-  if (phase === "lobby" || phase === "ready" || phase === "arming") fireAt = null;
-  if (phase === "arming" && prev !== "arming") $("result").textContent = "";
+  $("slot").textContent = !me ? "" : me.role === "phone" ? (me.ready ? "You are ready" : "") : me.role === "queued" ? `Two players are in a match: you are number ${queue.indexOf(myId) + 1} in line` : "No slot";
+  $("go").disabled = !canReady() || !!me.ready;
+  $("go").textContent = phase === "matchOver" ? "Play again: Ready" : me && me.ready ? "Waiting for the other phone" : rest ? "Recalibrate / Ready" : "Calibrate / Ready";
+  if (phase !== "fire") document.body.classList.remove("fire");
+  if (phase !== "countdown") stopCountdown();
+  if (phase !== "fire") fireAt = null;
+  if (phase === "countdown" && prev !== "countdown") $("result").textContent = "";
   // Already raised when arming starts: the server only sees transitions, so report it as a foul.
-  if (phase === "arming" && raised) qd.send("raised", { sinceFireMs: null });
+  if (phase === "arming" && raised) qd.send("raised", { round, sinceFireMs: null });
 }
 
 const qd = QD.connect({
@@ -92,14 +130,20 @@ const qd = QD.connect({
   onStatus: (t, ok) => { $("conn").textContent = t; $("conn").className = ok ? "ok" : ""; },
   onEvent(name, data) {
     if (name === "_welcome") myId = data.id;
+    else if (name === "_reload") { qd.send("role", { role: "phone" }); raised = false; } // the republished host replays joins without a role
     else if (name === "state") render(data);
+    else if (name === "countdown") startCountdown(data.ms);
     else if (name === "fire") {
+      // The reaction clock starts when this phone receives the cue, so the other phone's clock never enters.
+      round = data.round;
       fireAt = performance.now();
       document.body.classList.add("fire");
+      beep();
       if (navigator.vibrate) navigator.vibrate(200);
     } else if (name === "roundResult") {
       const times = Object.entries(data.reactionMs || {}).map(([id, ms]) => `${id === myId ? "you" : nameOf(id)} ${ms === null ? "-" : ms + "ms"}`).join(", ");
-      $("result").textContent = `Round ${data.round}: ${data.winnerId === myId ? "YOU WIN" : nameOf(data.winnerId) + " wins"}${data.reason === "foul" ? " (foul)" : ""}. ${times}`;
+      const outcome = data.winnerId === null ? "Tie, nobody scores" : data.winnerId === myId ? "YOU WIN" : nameOf(data.winnerId) + " wins";
+      $("result").textContent = `Round ${data.matchRound}: ${outcome}${data.reason === "foul" ? (data.winnerId === myId ? " (the other phone fouled)" : " (you fouled)") : ""}. ${times}`;
     } else if (name === "matchOver") {
       $("result").textContent = data.winnerId === myId ? "MATCH WON!" : nameOf(data.winnerId) + " won the match";
     }
@@ -112,24 +156,15 @@ async function keepAwake() {
 }
 document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && wakeLock) keepAwake(); });
 
-function startLocation() {
-  if (!navigator.geolocation || startLocation.on) return;
-  startLocation.on = true;
-  navigator.geolocation.watchPosition(
-    (p) => { lastPos = p.coords; $("loc").textContent = "sharing location"; },
-    (e) => { $("loc").textContent = "location unavailable: " + e.message; },
-    { enableHighAccuracy: true },
-  );
-  setInterval(() => { if (lastPos) qd.send("pos", { lat: lastPos.latitude, lon: lastPos.longitude, acc: lastPos.accuracy }); }, 1000);
-}
-
 $("go").addEventListener("click", async () => {
+  if (!canReady()) return;
+  if (raised) { $("needs").textContent = "lower your phone, then tap again"; return; } // the rest pose must be the lowered one
   // Both permission prompts are started synchronously inside the tap (iOS requires the gesture).
+  unlockAudio();
   const asks = [DeviceOrientationEvent, DeviceMotionEvent]
     .filter((E) => typeof E.requestPermission === "function")
     .map((E) => E.requestPermission());
   keepAwake();
-  startLocation();
   try {
     const answers = await Promise.all(asks);
     if (answers.includes("denied")) { $("needs").textContent = "motion permission denied: allow it in Safari settings"; return; }
@@ -139,8 +174,7 @@ $("go").addEventListener("click", async () => {
   if (!gravity) { $("needs").textContent = "no motion data from this device"; return; }
   rest = gravity;
   raised = false;
-  $("go").textContent = "Recalibrate";
-  qd.send("ready", {});
+  if (canReady()) qd.send("ready", { round }); // the phase may have moved on during the calibration wait
 });
 </script>
 </body>

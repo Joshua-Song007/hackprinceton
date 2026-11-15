@@ -19,6 +19,7 @@ import type { EditorBus } from './editor';
 import type { PanelView } from './layout';
 import { rigFor } from './needs';
 import { createPauseClock } from './pauseClock';
+import { isPhoneOnly, phoneLinks, type PhoneLink } from './phonePlay';
 import { ScriptAudio } from './scriptAudio';
 import { RelayClient } from './relay';
 import type { Project } from './project';
@@ -666,6 +667,8 @@ export interface RunDeps {
   reveal?(panelId: string): void;
   /** The Deep Agent runtime's WebSocket URL for agent players, or null when the plugin is not installed. */
   agentUrl?(): string | null;
+  /** Play on a phone-only game (Quick Draw) ends here: the links of the two real phones, no simulated players, no viewport. */
+  onPhones?(links: PhoneLink[]): void;
 }
 
 const RIG_KEY = 'pear.studio.rig';
@@ -1038,11 +1041,41 @@ export class RunController {
   }
 
   async runLocal(): Promise<void> {
+    if (this.phoneOnly()) return this.runPhones();
     await this.begin('local');
+  }
+
+  /** True when the project's scene has nothing visible (Quick Draw): Play is two real phones. An invalid scene falls through to `begin`, which reports it. */
+  private phoneOnly(): boolean {
+    try {
+      return isPhoneOnly(this.deps.project.description());
+    } catch {
+      return false;
+    }
+  }
+
+  /** Publishes the draft if it changed, then hands out the phone links of that exact version. Needs a signed-in account with a game picked. */
+  private async runPhones(): Promise<void> {
+    const { account, project } = this.deps;
+    if (!account.account || !account.gameId) throw new Error('This game plays on two real phones, so it must be published first. Sign in, pick or create a game in Account, then press Play again.');
+    this.stop();
+    try {
+      const { version, published } = await account.publishIfChanged(project);
+      this.out('log', published ? `Published version ${version} of ${account.game?.title ?? 'the game'}.` : `No changes since version ${version}.`);
+      this.showPhones(account.gameId, version);
+    } catch (e) {
+      throw new Error(describeError(e, account.serverUrl));
+    }
+  }
+
+  private showPhones(gameId: string, version: number): void {
+    this.out('log', `Open the two phone links to play ${gameId} version ${version}.`);
+    this.deps.onPhones?.(phoneLinks(this.deps.account.serverUrl, gameId, version));
   }
 
   /** Publishes the draft as a new version, then joins /play as player 1 with the debug stream open. */
   async runServer(): Promise<void> {
+    if (this.phoneOnly()) return this.runPhones();
     const { account, project } = this.deps;
     if (!account.account || !account.gameId) throw new Error('Sign in and pick a game in Account before running on the server.');
     this.stop();
@@ -1059,6 +1092,7 @@ export class RunController {
 
   /** A test-player tab: join the latest or a pinned version without publishing or reading the debug stream. */
   async join(gameId: string, version: number): Promise<void> {
+    if (this.phoneOnly()) return this.showPhones(gameId, version);
     await this.begin('join', gameId, version);
   }
 

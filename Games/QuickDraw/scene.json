@@ -2,17 +2,16 @@
   "name": "Quick Draw",
   "requiredTier": 1,
   "playerOrigin": [0, 1.6, 0],
-  "runMode": "screen",
-  "inputs": { "gestures": ["tap"], "players": [3, 3] },
+  "runMode": "device",
+  "inputs": { "gestures": ["tap"], "players": [2, 2] },
   "gestures": { "raise": { "angleDeg": 80, "hysteresisDeg": 10 } },
   "clientScripts": ["player"],
   "serverScripts": ["game"],
   "entities": [
     {
-      "name": "Arena",
+      "name": "PlayerScriptHost",
       "position": [0, 0, 0],
-      "scale": [10, 0.1, 10],
-      "color": "#8a8d94",
+      "scale": [0, 0, 0],
       "components": [
         { "type": "script", "name": "player" }
       ]
