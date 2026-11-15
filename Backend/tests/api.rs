@@ -1,5 +1,5 @@
 // Integration tests for the HTTP API: publish -> fetch round-trip, non-owner publish rejected.
-// Tests that need TigerData read DATABASE_URL and return early when it is unset.
+// Tests that need the database read DATABASE_URL and return early when it is unset.
 use omni_backend::{app, db};
 use serde_json::{json, Value};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};

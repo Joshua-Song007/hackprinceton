@@ -1,6 +1,6 @@
 -- Omni backend schema v1 (overview.md Module 11): accounts, games, published game versions.
 -- Game content only; sensor data (USIS) and output commands never reach the cloud.
--- Game files are stored in Postgres (TigerData) for now; object storage is not decided.
+-- Game files are stored in Postgres (Vultr) for now; object storage is not decided.
 
 CREATE TABLE accounts (
     id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),

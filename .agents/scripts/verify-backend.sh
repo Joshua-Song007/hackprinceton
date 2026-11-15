@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Rust backend check (overview.md Module 11): cargo build + cargo test in Backend/. Runs on macOS and Windows; also run in CI.
 # usage: .agents/scripts/verify-backend.sh      (passes while Backend/Cargo.toml does not exist yet)
-# Tests that need TigerData read DATABASE_URL and skip themselves when it is unset; agents never get the credentials.
+# Tests that need the database read DATABASE_URL and skip themselves when it is unset; agents never get the credentials.
 set -uo pipefail
 cd "$(dirname "$0")/../.."
 [ -f Backend/Cargo.toml ] || { echo "verify-backend: no Backend/Cargo.toml yet, nothing to check"; exit 0; }
