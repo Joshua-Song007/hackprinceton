@@ -107,3 +107,40 @@ describe('SimDevices rig', () => {
     expect(sim.list()).toEqual(['airpods', 'phone']);
   });
 });
+
+describe('SimDevices idPrefix and redirect', () => {
+  it('names its devices with the prefix', () => {
+    const out: UsisPacket[] = [];
+    const sim = new SimDevices((p) => out.push(p), { idPrefix: 'room', kinds: ['phone', 'watch'], now: () => 0 });
+    sim.gesture('tap');
+    sim.start();
+    sim.stop();
+    expect(new Set(out.map((p) => p.deviceId))).toEqual(new Set(['room-phone', 'room-watch']));
+  });
+
+  it('sends gestures, accel and heart rate to the target while allowed, and drops them otherwise', () => {
+    const shared: UsisPacket[] = [];
+    const own: UsisPacket[] = [];
+    const room = new SimDevices((p) => shared.push(p), { idPrefix: 'room', kinds: ['phone', 'watch'], now: () => 0 });
+    const player = new SimDevices((p) => own.push(p), { kinds: ['airpods'], now: () => 0 });
+    let holds = true;
+    player.redirect('phone', room, () => holds);
+    player.redirect('watch', room, () => holds);
+    player.gesture('tap');
+    expect(shared.at(-1)).toMatchObject({ deviceId: 'room-phone', ch: { gesture: { type: 'tap' } } });
+    player.setHeartRate(130);
+    expect(room.heartRateBpm).toBe(130);
+    expect(player.heartRateBpm).toBe(130); // stored here too, so a passed device can copy its holder's value
+    holds = false;
+    const n = shared.length;
+    player.gesture('flick', [1, 0, 0]);
+    player.setHeartRate(90);
+    expect(shared).toHaveLength(n);
+    expect(room.heartRateBpm).toBe(130);
+    expect(own).toHaveLength(0); // never emitted by the player's own devices
+    holds = true;
+    player.redirect('phone', null);
+    player.gesture('tap'); // no redirect and no own phone: nothing
+    expect(shared).toHaveLength(n);
+  });
+});

@@ -1,7 +1,7 @@
 // Peripherals panel: the devices a game uses (iPhone, Apple Watch, AirPods), what each one gives the scripts, and one-click handlers.
 // Every edit goes through `project.applyPeripheralChange`, so the scene JSON stays the single source of truth.
 import { SLOTS } from '@pear/core';
-import { PERIPHERAL_KINDS, type CustomGesture, type PeripheralKind } from '@pear/runtime';
+import { PERIPHERAL_KINDS, type CustomGesture, type OwnershipMode, type PeripheralKind } from '@pear/runtime';
 import type { EditorBus } from './editor';
 import type { Selection } from './explorer';
 import { prop, section } from './inspector';
@@ -9,17 +9,19 @@ import type { PanelView } from './layout';
 import { inferInputs, slotDevice } from './needs';
 import {
   COMING_SOON, PERIPHERALS, addPeripheral, deviceOfSignal, devicesOf, handlerStub, missingSignals, removePeripheral, scriptNameFor,
-  readPeripheralState, seedInputs, signalDef, signalOn, toggleSignal, type PeripheralState, type SignalDef,
+  readPeripheralState, seedInputs, setOwnership, signalDef, signalOn, toggleSignal, type PeripheralState, type SignalDef,
 } from './peripherals';
 import type { Project } from './project';
 import { announce, button, el, icon, openSheet } from './ui';
+
+const HELD_BY: Record<OwnershipMode, string> = { player: 'Each player has their own', free: 'One in the room', passed: 'One, passed between players' };
 
 const AXES: Record<string, CustomGesture['axis']> = { x: [1, 0, 0], y: [0, 1, 0], z: [0, 0, 1], '-z': [0, 0, -1] };
 const axisName = (a: CustomGesture['axis']) => Object.entries(AXES).find(([, v]) => v.every((n, i) => n === a[i]))?.[0] ?? 'x';
 
 /** Writes the state as one undo step; turning Position on also grants the location permission scripts need. */
 function commit(project: Project, next: PeripheralState): boolean {
-  const error = project.applyPeripheralChange({ peripherals: next.peripherals, inputs: next.inputs, gestures: next.gestures, ...(next.inputs?.position ? { location: true } : {}) });
+  const error = project.applyPeripheralChange({ peripherals: next.peripherals, ownership: next.ownership, inputs: next.inputs, gestures: next.gestures, ...(next.inputs?.position ? { location: true } : {}) });
   if (error) announce(error);
   return !error;
 }
@@ -123,6 +125,21 @@ export function createPeripheralsPanel(project: Project, selection: Selection, e
     return [...rows, addBtn];
   };
 
+  /** Who holds the device: each player, the room (free-floating, placed in the Viewport) or one player at a time. */
+  const heldBy = (kind: PeripheralKind, state: PeripheralState): HTMLElement => {
+    const mode = state.ownership[kind]?.mode ?? 'player';
+    const select = el('select', { 'aria-label': `${PERIPHERALS[kind].label} is held by`, class: 'om-select', 'data-focus': `o:${kind}` });
+    for (const m of PERIPHERALS[kind].ownership) select.append(el('option', { value: m, selected: m === mode }, [HELD_BY[m]]));
+    select.addEventListener('change', () => change(`o:${kind}`, (s) => setOwnership(s, kind, select.value as OwnershipMode)));
+    const at = state.ownership[kind]?.at;
+    const hint = mode === 'free'
+      ? `Placed at x ${at?.[0].toFixed(1)} z ${at?.[2].toFixed(1)}. Drag it in the Viewport.${kind === 'phone' ? ' Players carry no phone, so every player\'s position is this one.' : ''}`
+      : mode === 'passed'
+        ? 'One player holds it at a time. In a test, give it to another player from the Viewport or the Test panel.'
+        : 'Every player brings one.';
+    return el('div', { class: 'pp-row' }, [el('label', { class: 'pp-label' }, [el('span', {}, ['Held by']), select]), el('span', { class: 'om-sub pp-hint' }, [hint])]);
+  };
+
   const deviceCard = (kind: PeripheralKind, state: PeripheralState, used: ReturnType<typeof inferInputs>): HTMLElement => {
     const def = PERIPHERALS[kind];
     const remove = button('Remove', () => {
@@ -131,6 +148,7 @@ export function createPeripheralsPanel(project: Project, selection: Selection, e
     }, { variant: 'small', danger: true, ariaLabel: `Remove ${def.label}` });
     return el('section', { class: 'pp-card', role: 'group', 'aria-label': def.label }, [
       el('div', { class: 'pp-card-head' }, [icon(def.icon), el('span', { class: 'om-name' }, [def.label, el('span', { class: 'om-sub' }, [def.blurb])]), remove]),
+      heldBy(kind, state),
       ...def.signals.map((sig) => signalRow(kind, sig, state, signalOn(used, sig.id))),
       ...motionRows(kind, state),
       ...(def.outputs.length ? [el('div', { class: 'pp-out' }, [el('span', {}, ['Can do']), el('span', { class: 'om-sub' }, [def.outputs.map((o) => `${o.label}: ${o.hint}`).join('; ')])])] : []),

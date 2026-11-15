@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { quat, type Quat, type Vec3 } from '@pear/core';
 import flagship from '../../../../Games/Flagship/scene.json';
-import { InputBus, SceneEvents, flattenScene, parseScene, parseInputs, parsePeripherals, SceneError, STALE_AFTER_MS } from '../src';
+import { InputBus, SceneEvents, flattenScene, parseScene, parseInputs, parseOwnership, ownershipOf, parsePeripherals, SceneError, STALE_AFTER_MS } from '../src';
 
 const scene = parseScene(flagship);
 
@@ -181,5 +181,30 @@ describe('parsePeripherals', () => {
     expect(() => parsePeripherals(['tablet'])).toThrow("peripherals[0]: unknown peripheral 'tablet'");
     expect(() => parsePeripherals('phone')).toThrow('peripherals: expected array');
     expect(() => parseScene({ peripherals: [1] })).toThrow(SceneError);
+  });
+});
+
+describe('parseOwnership', () => {
+  it('defaults to every device held by each player', () => {
+    expect(parseOwnership(undefined)).toEqual({});
+    expect(parseOwnership(null)).toEqual({});
+    expect(parseScene({}).ownership).toEqual({});
+    expect(ownershipOf({}, 'phone')).toEqual({ mode: 'player' });
+  });
+  it('keeps free (with a position) and passed, and drops player', () => {
+    const o = parseOwnership({ phone: { mode: 'free' }, watch: { mode: 'passed' }, airpods: { mode: 'player' } });
+    expect(o).toEqual({ phone: { mode: 'free', at: [0, 1, -2] }, watch: { mode: 'passed' } });
+    expect(parseOwnership({ watch: { mode: 'free', at: [1, 2, 3] } }).watch).toEqual({ mode: 'free', at: [1, 2, 3] });
+    expect(ownershipOf(o, 'watch')).toEqual({ mode: 'passed' });
+  });
+  it('rejects bad input with a path', () => {
+    expect(() => parseOwnership([])).toThrow('ownership: expected object');
+    expect(() => parseOwnership({ tablet: { mode: 'free' } })).toThrow("ownership.tablet: unknown peripheral 'tablet'");
+    expect(() => parseOwnership({ phone: { mode: 'shared' } })).toThrow('ownership.phone.mode: expected player, free or passed');
+    expect(() => parseOwnership({ phone: 'free' })).toThrow('ownership.phone: expected object');
+    expect(() => parseOwnership({ phone: { mode: 'passed', at: [0, 0, 0] } })).toThrow('ownership.phone.at: only a free device has a position');
+    expect(() => parseOwnership({ airpods: { mode: 'free' } })).toThrow('ownership.airpods: AirPods cannot be free-floating');
+    expect(() => parseOwnership({ phone: { mode: 'free', at: [0, 0] } })).toThrow('ownership.phone.at: expected 3 numbers');
+    expect(() => parseScene({ ownership: { phone: { mode: 'x' } } })).toThrow(SceneError);
   });
 });

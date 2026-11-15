@@ -4,8 +4,8 @@
 import { CloudClient, type DebugEvent, type PlayFrame, type ReconnectingSocket } from '@pear/cloud';
 import { quat, type UsisPacket } from '@pear/core';
 import {
-  InputBus, SceneEvents, Viewport, readViewportColors, scriptName,
-  type SceneDescription, type WorldEntity,
+  InputBus, SceneEvents, Viewport, ownershipOf, readViewportColors, scriptName,
+  type Ownership, type OwnershipMode, type PeripheralKind, type RigDevice, type RigHit, type RigView, type SceneDescription, type WorldEntity,
 } from '@pear/runtime';
 import { LocalServer, ScriptSandbox, type ScriptOutput } from '@pear/script';
 import prelude from '../../../Packages/PearScript/Sources/PearScript/Resources/prelude.js?raw';
@@ -19,7 +19,7 @@ import { rigFor } from './needs';
 import { ScriptAudio } from './scriptAudio';
 import { RelayClient } from './relay';
 import type { Project } from './project';
-import { el, icon } from './ui';
+import { button, el, icon } from './ui';
 
 /** `onTick` rate: 5 Hz, enough to report a position without flooding the worker. */
 const TICK_MS = 200;
@@ -166,12 +166,13 @@ export class LocalRun {
     this.ingest(p);
   }
 
-  ingest(packet: UsisPacket): void {
+  /** `report` false keeps a packet that several players ingest (a free device) from showing in the debug panel once per player. */
+  ingest(packet: UsisPacket, report = true): void {
     const at = this.now();
     this.pendingSince ??= at;
     if (packet.slot === 'head') this.headStamps.push(at);
     this.bus.ingest(packet, at);
-    this.options.onPacket?.(packet);
+    if (report) this.options.onPacket?.(packet);
   }
 
   /** Head packets in the last second. */
@@ -255,6 +256,29 @@ export function stepPosition(
   return [pos[0] + (-s * f + c * r) * k, pos[1], pos[2] + (-c * f - s * r) * k];
 }
 
+/** Which players receive a packet from a device of this ownership: `free` reaches everyone, `passed` only its holder. */
+export function routeTargets(mode: OwnershipMode, playerIds: readonly string[], holder: string | null): string[] {
+  if (mode === 'free') return [...playerIds];
+  if (mode === 'passed') return holder !== null && playerIds.includes(holder) ? [holder] : [];
+  return [];
+}
+
+/** Device kinds that live in the room (one shared device) instead of with each player; a free AirPods has no meaning, so it stays per player. */
+export function roomKinds(rig: readonly SimDeviceKind[], ownership: Partial<Record<PeripheralKind, Ownership>>): SimDeviceKind[] {
+  return rig.filter((k) => {
+    const mode = ownershipOf(ownership, k).mode;
+    return mode === 'passed' || (mode === 'free' && k !== 'airpods');
+  });
+}
+
+/** One step toward `goal` on the ground (x, z), at most `speed` * `dtSeconds` long; `done` once it is within 5 cm. */
+export function stepToward(pos: readonly [number, number], goal: readonly [number, number], speed: number, dtSeconds: number): { pos: [number, number]; done: boolean } {
+  const dx = goal[0] - pos[0], dz = goal[1] - pos[1], len = Math.hypot(dx, dz);
+  if (len <= 0.05) return { pos: [goal[0], goal[1]], done: true };
+  const step = Math.min(len, speed * dtSeconds);
+  return { pos: [pos[0] + (dx / len) * step, pos[1] + (dz / len) * step], done: step >= len };
+}
+
 type PlayClient = Pick<LocalRun, 'deliverRemote'>;
 
 /** In-memory channel for Play: the server's fire(null) reaches every client, fire(id) one client. */
@@ -291,13 +315,32 @@ export class ViewportHost {
   private entities: WorldEntity[] = [];
   private selected: string | null = null;
   private running: { devices: SimDevices } | null = null;
+  /** `overview`: the editor camera stays on while running and the players are drawn; `player`: first person from the driven head. */
+  cameraMode: 'overview' | 'player' = 'overview';
+  private frameOnNextFrame = false;
+  private devicePreview: { kind: RigDevice; at: readonly [number, number, number] } | null = null;
   private detachInput: (() => void)[] = [];
   private flyKeys = new Set<string>();
   private flyFast = false;
-  /** Markers for the players the creator is not driving, while running. */
-  others: () => { id: string; position: readonly [number, number, number] }[] = () => [];
   /** R while running (outside text fields): raise or lower the driven player's simulated phone. Set by RunController. */
   onRaise?: () => void;
+  /** What to draw of the players and devices: the run's players while running, the scene's rig preview while stopped. */
+  rig: () => RigView | null = () => null;
+  /** The scene's rig while nothing runs: one player at the origin with the devices the game lists. Set by the composition root. */
+  preview: () => RigView | null = () => null;
+  /** The player the keyboard and the Test panel drive. */
+  drivenId: () => string | null = () => null;
+  /** Running: a click on a player's body drives it; a click on a device marker opens its menu at the pointer. */
+  onDrive?: (id: string) => void;
+  onDeviceMenu?: (hit: Extract<RigHit, { type: 'device' }>, clientX: number, clientY: number) => void;
+  /** Running: the driven player was dragged to (x, z), or sent walking there by a double click. */
+  onPlace?: (x: number, z: number) => void;
+  onWalkTo?: (x: number, z: number) => void;
+  /** Running: a free device is dragged (runtime only). Stopped: it is dropped, so the scene saves its place once. */
+  onPlaceDevice?: (kind: RigDevice, x: number, z: number) => void;
+  onMoveDevice?: (kind: RigDevice, x: number, z: number) => void;
+  /** WASD moved the driven player, so a walk in progress ends. */
+  onKeyMove?: () => void;
   /** Click on the canvas while stopped: the entity under the pointer, or null for empty space. */
   onPick?: (id: string | null) => void;
   /** Set by the composition root: the selected entity (left-drag on it slides it on the ground) and where it was dropped. */
@@ -334,11 +377,21 @@ export class ViewportHost {
         const { devices } = this.running;
         const { yaw, pitch } = devices.headLook;
         // keys are only tracked while the canvas has focus (onkeyup/onblur clear them)
-        const p = stepPosition(devices.position, yaw, this.flyKeys, dt);
-        devices.setPosition(p[0], p[1], p[2]);
-        this.viewport.setHeadPose({ position: devices.position, orientation: quat.fromYawPitch(yaw, pitch) });
-        this.viewport.setPlayers([{ id: 'you', position: devices.position, self: true }, ...this.others()]);
+        if (this.flyKeys.size) {
+          const p = stepPosition(devices.position, yaw, this.flyKeys, dt);
+          devices.setPosition(p[0], p[1], p[2]);
+          this.onKeyMove?.();
+        }
+        if (this.cameraMode === 'player') this.viewport.setHeadPose({ position: devices.position, orientation: quat.fromYawPitch(yaw, pitch) });
+        else this.viewport.setHeadPose(null);
       }
+      const view = this.rig();
+      if (this.frameOnNextFrame && view && this.cameraMode === 'overview') {
+        this.frameOnNextFrame = false;
+        this.viewport.frameAll(view.avatars.map((a) => a.position));
+      }
+      const preview = this.devicePreview;
+      this.viewport.setRig(view && preview ? { ...view, free: view.free.map((f) => (f.kind === preview.kind ? { ...f, at: preview.at } : f)) } : view);
       this.viewport.render();
       this.raf = requestAnimationFrame(frame);
     };
@@ -352,17 +405,27 @@ export class ViewportHost {
    * While running, a click is mouse-look and the camera follows the head, so all of it is off.
    */
   private bindCamera(canvas: HTMLCanvasElement): void {
-    let drag: { mode: 'pan' | 'rotate' | 'none'; moved: number; button: number; move?: { id: string; y: number } } | null = null;
+    let drag: { mode: 'pan' | 'rotate' | 'none'; moved: number; button: number; move?: { id: string; y: number }; place?: true; device?: { kind: RigDevice; y: number } } | null = null;
+    const firstPerson = () => this.running !== null && this.cameraMode === 'player';
     const ndc = (e: PointerEvent): [number, number] => { const r = canvas.getBoundingClientRect(); return [((e.clientX - r.left) / r.width) * 2 - 1, 1 - ((e.clientY - r.top) / r.height) * 2]; };
     const CLICK_SLOP_PX = 4;
     canvas.onpointerdown = (e) => {
-      if (this.running || !this.viewport) return;
+      if (!this.viewport || firstPerson()) return;
       const mode = e.button === 1 || (e.button === 0 && e.shiftKey) ? 'pan' : e.button === 2 ? 'rotate' : 'none';
       drag = { mode, moved: 0, button: e.button };
-      const sel = this.selectedId();
-      if (mode === 'none' && e.button === 0 && sel && this.viewport.pick(...ndc(e)) === sel) {
-        const y = this.entityY?.(sel);
-        if (y !== undefined) drag.move = { id: sel, y };
+      if (mode === 'none' && e.button === 0) {
+        const hit = this.viewport.pickRig(...ndc(e));
+        const free = hit?.type === 'device' && hit.owner === null ? this.rig()?.free.find((f) => f.kind === hit.kind) : undefined;
+        if (free) drag.device = { kind: free.kind, y: free.at[1] };
+        else if (this.running) {
+          if (hit?.type === 'avatar' && hit.id === this.drivenId()) drag.place = true; // a player dragged on the ground is placed there
+        } else {
+          const sel = this.selectedId();
+          if (sel && this.viewport.pick(...ndc(e)) === sel) {
+            const y = this.entityY?.(sel);
+            if (y !== undefined) drag.move = { id: sel, y };
+          }
+        }
       }
       canvas.setPointerCapture(e.pointerId);
       if (e.button === 1) e.preventDefault(); // no middle-click autoscroll
@@ -370,6 +433,17 @@ export class ViewportHost {
     canvas.onpointermove = (e) => {
       if (!drag || !this.viewport) return;
       drag.moved += Math.abs(e.movementX) + Math.abs(e.movementY);
+      if (drag.place || drag.device) {
+        if (drag.moved < CLICK_SLOP_PX) return;
+        const p = this.viewport.groundPoint(...ndc(e), drag.device ? drag.device.y : 0);
+        if (!p) return;
+        const [x, z] = [Math.round(p[0] * 20) / 20, Math.round(p[2] * 20) / 20];
+        if (drag.device) {
+          this.devicePreview = { kind: drag.device.kind, at: [x, drag.device.y, z] };
+          if (this.running) this.onPlaceDevice?.(drag.device.kind, x, z);
+        } else this.onPlace?.(x, z);
+        return;
+      }
       if (drag.move) {
         if (drag.moved < CLICK_SLOP_PX) return;
         const p = this.viewport.groundPoint(...ndc(e), drag.move.y);
@@ -383,14 +457,28 @@ export class ViewportHost {
       const d = drag;
       drag = null;
       if (canvas.hasPointerCapture(e.pointerId)) canvas.releasePointerCapture(e.pointerId);
+      const dropped = this.devicePreview;
+      this.devicePreview = null;
+      if (d?.device && dropped && d.moved >= CLICK_SLOP_PX && !this.running) this.onMoveDevice?.(dropped.kind, dropped.at[0], dropped.at[2]); // one write, not one per pointer move
       if (!d || !this.viewport || d.button !== 0 || d.mode !== 'none' || d.moved >= CLICK_SLOP_PX) return; // a drag that moved an entity ends here too
+      if (this.running) {
+        const hit = this.viewport.pickRig(...ndc(e));
+        if (hit?.type === 'avatar') this.onDrive?.(hit.id);
+        else if (hit?.type === 'device') this.onDeviceMenu?.(hit, e.clientX, e.clientY);
+        return;
+      }
       const r = canvas.getBoundingClientRect();
       this.onPick?.(this.viewport.pick(((e.clientX - r.left) / r.width) * 2 - 1, 1 - ((e.clientY - r.top) / r.height) * 2));
     };
-    canvas.onpointercancel = () => (drag = null);
+    canvas.onpointercancel = () => ((drag = null), (this.devicePreview = null));
     canvas.oncontextmenu = (e) => e.preventDefault();
+    canvas.ondblclick = (e) => {
+      if (!this.running || firstPerson() || !this.viewport) return;
+      const p = this.viewport.groundPoint(...ndc(e as unknown as PointerEvent), 0);
+      if (p) this.onWalkTo?.(p[0], p[2]);
+    };
     canvas.onwheel = (e) => {
-      if (this.running || !this.viewport) return;
+      if (!this.viewport || firstPerson()) return;
       e.preventDefault();
       this.viewport.zoomBy(e.deltaMode === 1 ? e.deltaY * 33 : e.deltaY); // deltaMode 1 = lines
     };
@@ -464,9 +552,20 @@ export class ViewportHost {
   /** While running, the camera follows the driven player's virtual AirPods and the canvas takes mouse-look and key input. `origin` places that player; omitted, it stays where it is (switching drivers). */
   setRunning(devices: SimDevices | null, origin?: readonly [number, number, number]): void {
     this.running = devices ? { devices } : null;
-    if (devices && origin) devices.setPosition(origin[0], origin[1], origin[2]);
-    else (this.viewport?.setHeadPose(null), this.viewport?.setPlayers([]));
+    if (devices && origin) {
+      devices.setPosition(origin[0], origin[1], origin[2]);
+      this.cameraMode = 'overview'; // a new run starts looking at the room, with everyone in frame
+      this.frameOnNextFrame = true;
+    } else if (!devices) this.viewport?.setHeadPose(null);
     this.flyKeys.clear();
+    this.bindInput();
+  }
+
+  /** Overview (the room, every player) or Player view (first person from the driven head). */
+  setCameraMode(mode: 'overview' | 'player'): void {
+    if (this.cameraMode === mode) return;
+    this.cameraMode = mode;
+    if (mode === 'overview') this.frameOnNextFrame = true;
     this.bindInput();
   }
 
@@ -499,7 +598,7 @@ export class ViewportHost {
     };
     window.addEventListener('keydown', onRaiseKey);
     this.detachInput = [
-      attachMouseLook(canvas, run.devices), attachGestureKeys(window, run.devices), () => canvas.removeEventListener('keydown', onKey),
+      ...(this.cameraMode === 'player' ? [attachMouseLook(canvas, run.devices)] : []), attachGestureKeys(window, run.devices), () => canvas.removeEventListener('keydown', onKey),
       () => window.removeEventListener('keydown', onRaiseKey),
     ];
   }
@@ -536,12 +635,14 @@ export interface TestPlayer {
   liveDevices: Set<string>;
   lastEvent: string | null;
   hapticAt: number;
+  /** Where a double click in the viewport sent this player walking (x, z); null when not walking. */
+  goal: [number, number] | null;
   socket?: ReconnectingSocket<PlayFrame>;
 }
 
 export const SIM_DEVICE_NAMES: Record<SimDeviceKind, string> = { airpods: 'AirPods', phone: 'phone', watch: 'watch' };
 
-const playerDefaults = () => ({ source: 'manual' as PlayerSource, botMode: 'chase' as BotMode, botEvery: 2, botLeft: 2, liveDevices: new Set<string>() });
+const playerDefaults = () => ({ goal: null as [number, number] | null, source: 'manual' as PlayerSource, botMode: 'chase' as BotMode, botEvery: 2, botLeft: 2, liveDevices: new Set<string>() });
 
 const IDLE: RunStatus ={ kind: null, text: 'Stopped', rateHz: 0, latencyMs: null, serverLatencyMs: null, players: 0 };
 
@@ -581,9 +682,21 @@ export class RunController {
   setRig(rig: SimDeviceKind[]): void {
     this.rig = rig;
     try { localStorage.setItem(RIG_KEY, JSON.stringify(rig)); } catch { /* not persisted */ }
-    for (const { run: { devices: d } } of this.players) for (const k of SIM_DEVICE_KINDS) rig.includes(k) ? d.addDevice(k) : d.removeDevice(k);
+    for (const { run: { devices: d } } of this.players) for (const k of SIM_DEVICE_KINDS) if (!this.rooms.has(k)) rig.includes(k) ? d.addDevice(k) : d.removeDevice(k); // a room device follows the scene, not the rig
     for (const l of this.listeners) l();
   }
+  /**
+   * Local Play: one shared SimDevices per device kind that is `free` or `passed` (not each player's own), with the scene's
+   * ownership and, for passed kinds, which player holds it.
+   */
+  readonly rooms = new Map<SimDeviceKind, SimDevices>();
+  private ownership: Partial<Record<PeripheralKind, Ownership>> = {};
+  /** The open run's ownership, for the Test panel. */
+  get ownershipNow(): Partial<Record<PeripheralKind, Ownership>> {
+    return this.ownership;
+  }
+  private holders = new Map<SimDeviceKind, string>();
+  private roomTimer: ReturnType<typeof setInterval> | null = null;
   /** Everyone in the running test: the creator's own player first, then added players. Empty while stopped. */
   players: TestPlayer[] = [];
   /** The player whose devices the keyboard, mouse and Test panel controls drive. */
@@ -607,6 +720,7 @@ export class RunController {
   private clients = new Map<string, PlayClient>();
   private playerCount = 0;
   private wanderTimer: ReturnType<typeof setInterval> | null = null;
+  private walkTimer: ReturnType<typeof setInterval> | null = null;
   private session: { scene: SceneDescription; gameId?: string; version?: number } | null = null;
 
   constructor(private deps: RunDeps) {
@@ -615,7 +729,14 @@ export class RunController {
       for (const p of this.players) if (p.source === 'live' && p.liveDevices.has(device)) p.run.ingest({ ...packet, source: 'live' });
     };
     deps.viewport.onRaise = () => void this.raisePhone();
-    deps.viewport.others = () => this.players.filter((p) => p.id !== this.driven).map((p) => ({ id: p.id, position: p.run.devices.position }));
+    const host = deps.viewport;
+    host.rig = () => this.rigView() ?? host.preview();
+    host.drivenId = () => this.driven;
+    host.onDrive = (id) => this.drive(id);
+    host.onPlace = (x, z) => this.driven && this.movePlayer(this.driven, x, z);
+    host.onWalkTo = (x, z) => this.driven && this.walkTo(this.driven, x, z);
+    host.onKeyMove = () => { const p = this.drivenPlayer; if (p) p.goal = null; };
+    host.onPlaceDevice = (kind, x, z) => this.placeRoomDevice(kind, x, z);
   }
 
   /** Sends keyboard, mouse and Test panel input to this player; the camera follows its head. */
@@ -644,8 +765,49 @@ export class RunController {
 
   /** Places a player on the ground (Test panel map drag). */
   movePlayer(id: string, x: number, z: number): void {
-    const d = this.players.find((p) => p.id === id)?.run.devices;
-    if (d && Number.isFinite(x) && Number.isFinite(z)) d.setPosition(x, d.position[1], z); // a zero-size map yields NaN / Infinity
+    const p = this.players.find((q) => q.id === id);
+    const d = p?.run.devices;
+    if (p && d && Number.isFinite(x) && Number.isFinite(z)) {
+      p.goal = null;
+      d.setPosition(x, d.position[1], z); // a zero-size map yields NaN / Infinity
+    }
+  }
+
+  /** Sends a player walking to (x, z) at 1.5 m/s; WASD, a drag or a new goal ends it. */
+  walkTo(id: string, x: number, z: number): void {
+    const p = this.players.find((q) => q.id === id);
+    if (p && Number.isFinite(x) && Number.isFinite(z)) p.goal = [x, z];
+  }
+
+  private walk(): void {
+    const scale = this.server ? this.timeScale : 1;
+    for (const p of this.players) {
+      if (!p.goal) continue;
+      const d = p.run.devices;
+      const next = stepToward([d.position[0], d.position[2]], p.goal, 1.5 * scale, 0.05);
+      d.setPosition(next.pos[0], d.position[1], next.pos[1]);
+      if (next.done) p.goal = null;
+    }
+  }
+
+  /** Moves a free room device on the ground while running (this run only; the scene keeps its own place). */
+  placeRoomDevice(kind: SimDeviceKind, x: number, z: number): void {
+    const room = this.rooms.get(kind);
+    if (room && ownershipOf(this.ownership, kind).mode === 'free' && Number.isFinite(x) && Number.isFinite(z)) room.setPosition(x, room.position[1], z);
+  }
+
+  /** What the viewport draws of the run: every player's body, head look, devices and last haptic, and the free devices. Null while stopped. */
+  rigView(): RigView | null {
+    if (!this.players.length) return null;
+    return {
+      avatars: this.players.map((p) => {
+        const d = p.run.devices;
+        const { yaw, pitch } = d.headLook;
+        const held = [...this.holders].filter(([, id]) => id === p.id).map(([kind]) => ({ kind, shared: true }));
+        return { id: p.id, position: d.position, yaw, pitch, driven: p.id === this.driven, devices: [...d.list().map((kind) => ({ kind, shared: false })), ...held], hapticAt: p.hapticAt };
+      }),
+      free: [...this.rooms].filter(([kind]) => ownershipOf(this.ownership, kind).mode === 'free').map(([kind, room]) => ({ kind, at: room.position })),
+    };
   }
 
   /** A wandering player random-walks and gestures on its own while the creator drives someone else. */
@@ -713,6 +875,7 @@ export class RunController {
     const [p] = this.players.splice(i, 1);
     p!.socket?.close();
     p!.run.stop();
+    for (const [kind, holder] of this.holders) if (holder === id) this.holders.set(kind, this.players[0]!.id);
     if (this.clients.delete(id)) (this.server?.leave(id), this.deps.debug.handleDebugEvent({ kind: 'leave', t: Date.now(), player: id }));
     if (this.driven === id) this.drive(this.players[0]!.id);
     this.out('log', `Removed ${id}.`);
@@ -742,7 +905,7 @@ export class RunController {
     for (const l of this.listeners) l();
   }
 
-  private out(level: 'log' | 'warn' | 'error', text: string): void {
+  out(level: 'log' | 'warn' | 'error', text: string): void {
     this.deps.debug.addOutput(level, text);
   }
 
@@ -794,6 +957,9 @@ export class RunController {
     }
     // A game that declares its inputs or lists peripherals gets exactly the devices that provide them (not saved: the browser's own choice stays for games that do not).
     if (scene.inputs || Object.keys(scene.gestures).length || scene.peripherals.length || scene.raise) this.rig = rigFor(scene.inputs, scene.gestures, scene.peripherals, !!scene.raise);
+    // Free and passed devices are shared by the room, which only the in-page Play can route; elsewhere every player keeps their own.
+    const shared = kind === 'local' ? roomKinds(this.rig, scene.ownership) : [];
+    if (kind !== 'local' && Object.keys(scene.ownership).length) this.out('warn', 'Free and passed devices are simulated in local Play only; here every player has their own devices.');
     const sandbox = new ScriptSandbox({
       onLog: (entry) => {
         debug.addOutput(entry.level, entry.text, entry.script);
@@ -809,7 +975,7 @@ export class RunController {
       },
       onOutput: (o, script) => this.handleOutput(o, script),
       audio: new ScriptAudio(),
-      devices: { kinds: this.rig },
+      devices: { kinds: this.rig.filter((k) => !shared.includes(k)) },
     });
     this.local = run;
     run.devices.setHeartRate(this.heartRate);
@@ -818,11 +984,13 @@ export class RunController {
     this.playerCount = 1;
     this.players = [{ id: 'player-1', name: account.account?.display_name || 'player-1', run, wander: false, ...playerDefaults(), lastEvent: null, hapticAt: 0 }];
     this.driven = 'player-1';
+    this.buildRooms(shared, scene.ownership);
     viewport.setRunning(run.devices, scene.playerOrigin);
     this.deps.reveal?.('viewport');
     this.deps.reveal?.('test');
     run.start();
     this.wanderTimer = setInterval(() => this.wander(), 200);
+    this.walkTimer = setInterval(() => this.walk(), 50);
     this.session = { scene, ...(gameId ? { gameId } : {}), ...(version !== undefined ? { version } : {}) };
     if (kind === 'local') this.startPlayServer(run);
     const rig = this.rig.length ? this.rig.map((k) => SIM_DEVICE_NAMES[k]).join(', ') : 'no devices';
@@ -912,7 +1080,7 @@ export class RunController {
     const p: TestPlayer = { id, name, run: undefined as unknown as LocalRun, wander: false, ...playerDefaults(), lastEvent: null, hapticAt: 0 };
     p.run = new LocalRun({
       scene: sess.scene, sandbox, clientScripts: project.clientScripts,
-      devices: { kinds: this.rig },
+      devices: { kinds: this.rig.filter((k) => !this.rooms.has(k)) },
       onLoadError: (script, message) => this.out('error', `[${id}] ${script}: ${message}`),
       onOutput: (o) => {
         if (o.kind === 'haptic') (p.hapticAt = Date.now(), this.out('log', `[${id}] haptic ${o.pattern} ${o.intensity}`), this.sendHaptic(p, o.pattern, o.intensity));
@@ -928,6 +1096,7 @@ export class RunController {
     const [ox, oy, oz] = sess.scene.playerOrigin;
     const a = ((n - 2) * Math.PI) / 3; // 6 spots per ring
     run.devices.setPosition(ox + 3 * Math.sin(a), oy, oz - 3 * Math.cos(a));
+    this.attachRooms(p);
     run.devices.setHeartRate(this.heartRate);
     run.start();
     this.players.push(p);
@@ -941,11 +1110,68 @@ export class RunController {
     this.refresh();
   }
 
+  /** Starts one shared device per room kind, gives each player the redirect to it, and mirrors a passed device's holder every sim tick. */
+  private buildRooms(kinds: readonly SimDeviceKind[], ownership: Partial<Record<PeripheralKind, Ownership>>): void {
+    this.ownership = ownership;
+    for (const kind of kinds) {
+      const room = new SimDevices((packet) => this.route(packet), { kinds: [kind], idPrefix: 'room' });
+      const own = ownershipOf(ownership, kind);
+      if (own.mode === 'free' && own.at) room.setPosition(...own.at);
+      if (own.mode === 'passed') this.holders.set(kind, this.players[0]!.id);
+      this.rooms.set(kind, room);
+    }
+    for (const p of this.players) this.attachRooms(p);
+    if (!this.rooms.size) return;
+    this.roomTimer = setInterval(() => this.mirrorHolders(), 20);
+    for (const room of this.rooms.values()) room.start();
+  }
+
+  /** The player's own devices send gestures, accel and heart rate for a room kind to the shared device (a passed one only while this player holds it). */
+  private attachRooms(p: TestPlayer): void {
+    for (const [kind, room] of this.rooms) {
+      const passed = ownershipOf(this.ownership, kind).mode === 'passed';
+      p.run.devices.redirect(kind, room, passed ? () => this.holders.get(kind) === p.id : () => true);
+    }
+  }
+
+  /** A passed device is worn or carried by its holder, so it takes the holder's pose, position and heart rate. */
+  private mirrorHolders(): void {
+    for (const [kind, id] of this.holders) {
+      const from = this.players.find((p) => p.id === id)?.run.devices;
+      const room = this.rooms.get(kind);
+      if (!from || !room) continue;
+      room.setHeadLook(from.headLook.yaw, from.headLook.pitch);
+      room.setPosition(...from.position);
+      room.setGpsAccuracy(from.gpsAccuracyMeters);
+      room.setHeartRate(from.heartRateBpm);
+    }
+  }
+
+  /** A packet from a shared device goes to everyone (free) or to its holder (passed); players fed by a clip or live devices keep to those. */
+  private route(packet: UsisPacket): void {
+    const kind = packet.kind as SimDeviceKind;
+    const eligible = this.players.filter((p) => p.source !== 'live' && !p.run.replaying).map((p) => p.id);
+    const targets = routeTargets(ownershipOf(this.ownership, kind as PeripheralKind).mode, eligible, this.holders.get(kind) ?? null);
+    targets.forEach((id, i) => this.players.find((p) => p.id === id)?.run.ingest(packet, i === 0));
+  }
+
+  /** Who holds a passed device, or null for a device that is not passed. */
+  holderOf(kind: SimDeviceKind): string | null {
+    return this.holders.get(kind) ?? null;
+  }
+
+  /** Hands a passed device to another player. The previous holder's copy goes stale after 500 ms. */
+  holdDevice(kind: SimDeviceKind, playerId: string): void {
+    if (!this.holders.has(kind) || !this.players.some((p) => p.id === playerId)) return;
+    this.holders.set(kind, playerId);
+    for (const l of this.listeners) l();
+  }
+
   /** One wander or bot step for every wandering or bot player the creator is not driving. */
   private wander(): void {
     const scale = this.server ? this.timeScale : 1;
     for (const p of this.players) {
-      if (p.id === this.driven) continue;
+      if (p.id === this.driven || p.goal) continue;
       if (p.source === 'bot') { this.bot(p, 0.2 * scale); continue; }
       if (!p.wander) continue;
       const d = p.run.devices;
@@ -1047,6 +1273,14 @@ export class RunController {
     this.debugSocket = null;
     if (this.wanderTimer) clearInterval(this.wanderTimer);
     this.wanderTimer = null;
+    if (this.walkTimer) clearInterval(this.walkTimer);
+    this.walkTimer = null;
+    if (this.roomTimer) clearInterval(this.roomTimer);
+    this.roomTimer = null;
+    for (const room of this.rooms.values()) room.stop();
+    this.rooms.clear();
+    this.holders.clear();
+    this.ownership = {};
     for (const p of this.players.slice(1)) (p.socket?.close(), p.run.stop());
     this.players = [];
     this.driven = null;
@@ -1071,15 +1305,22 @@ export function createViewportPanel(host: ViewportHost, run: RunController): Pan
   const root = el('div', { class: 'vp-host', role: 'region', 'aria-label': 'Viewport', tabindex: -1 });
   const canvas = el('canvas', {
     tabindex: 0,
-    'aria-label': 'Viewport. While running: drag to look, arrow keys turn the head, and T, G, F, P and H send tap, double tap, flick, pinch and squeeze, and R raises or lowers the phone, from anywhere outside text fields.',
+    'aria-label': 'Viewport. While running: W A S D walk the player you drive, arrow keys turn the head (in Player view, drag to look), and T, G, F, P and H send tap, double tap, flick, pinch and squeeze, and R raises or lowers the phone, from anywhere outside text fields.',
   });
   const overlay = el('div', { class: 'vp-overlay', 'aria-hidden': 'true' });
-  root.append(canvas, overlay);
+  // The two things only a running test needs on screen: the view, and a new player (everything else is a click on the scene).
+  const viewBtn = button('View: Overview', () => (host.setCameraMode(host.cameraMode === 'overview' ? 'player' : 'overview'), show()), { variant: 'small' });
+  const addBtn = button('Add player', () => void run.addPlayer().catch((e) => run.out('error', e instanceof Error ? e.message : String(e))), { variant: 'small' });
+  const bar = el('div', { class: 'vp-bar' }, [viewBtn, addBtn]);
+  root.append(canvas, overlay, bar);
   const problem = host.attach(canvas);
   if (problem) root.prepend(el('div', { class: 'om-issue', role: 'alert' }, [icon('warn'), el('p', {}, [problem])]));
   const show = () => {
     const p = run.drivenPlayer;
     const look = p?.run.devices.headLook;
+    bar.hidden = !run.running;
+    viewBtn.textContent = host.cameraMode === 'overview' ? 'View: Overview' : 'View: Player';
+    viewBtn.setAttribute('aria-pressed', String(host.cameraMode === 'player'));
     overlay.textContent = look
       ? `Driving ${p!.name}. Head yaw ${Math.round((look.yaw * 180) / Math.PI)} deg, pitch ${Math.round((look.pitch * 180) / Math.PI)} deg`
       : 'Editor camera';

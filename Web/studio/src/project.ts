@@ -1,7 +1,7 @@
 // Project model: scene JSON + client/server script sources + cloud link, dirty tracking and IndexedDB autosave.
 // The Flagship template is imported from Games/Flagship through Vite (never copied into the Studio).
 import type { GameVersion, NewGameVersion } from '@pear/cloud';
-import { parseGestures, parseInputs, parsePeripherals, parseRaise, parseScene, type CustomGesture, type PeripheralKind, type SceneDescription, type SceneInputs } from '@pear/runtime';
+import { parseGestures, parseInputs, parseOwnership, parsePeripherals, parseRaise, parseScene, type CustomGesture, type Ownership, type PeripheralKind, type SceneDescription, type SceneInputs } from '@pear/runtime';
 import flagshipScene from '../../../Games/Flagship/scene.json';
 import hotPotatoScene from '../../../Games/HotPotato/scene.json';
 import { blankClientScripts, blankScene, blankServerScripts } from './templates/blank';
@@ -414,6 +414,16 @@ export class Project {
         else delete this.scene.peripherals;
         this.touch('scene');
         return undefined;
+      case 'ownership':
+        try {
+          parseOwnership(value);
+        } catch (e) {
+          return e instanceof Error ? e.message : String(e);
+        }
+        if (value && Object.keys(value as object).length) this.scene.ownership = structuredClone(value);
+        else delete this.scene.ownership;
+        this.touch('scene');
+        return undefined;
       case 'gestures':
         try {
           parseGestures(value);
@@ -438,9 +448,10 @@ export class Project {
    * (null removes them), the custom `gestures`, and `location` (only ever turns the permission on).
    * Returns an error sentence and changes nothing when any field is invalid.
    */
-  applyPeripheralChange(change: { peripherals?: PeripheralKind[]; inputs?: SceneInputs | null; gestures?: Record<string, CustomGesture>; location?: boolean }): string | undefined {
+  applyPeripheralChange(change: { peripherals?: PeripheralKind[]; ownership?: Partial<Record<PeripheralKind, Ownership>>; inputs?: SceneInputs | null; gestures?: Record<string, CustomGesture>; location?: boolean }): string | undefined {
     try {
       if (change.peripherals !== undefined) parsePeripherals(change.peripherals);
+      if (change.ownership !== undefined) parseOwnership(change.ownership);
       if (change.inputs) parseInputs(change.inputs);
       if (change.gestures !== undefined) parseGestures(change.gestures);
     } catch (e) {
@@ -449,6 +460,10 @@ export class Project {
     if (change.peripherals !== undefined) {
       if (change.peripherals.length) this.scene.peripherals = structuredClone(change.peripherals);
       else delete this.scene.peripherals;
+    }
+    if (change.ownership !== undefined) {
+      if (Object.keys(change.ownership).length) this.scene.ownership = structuredClone(change.ownership);
+      else delete this.scene.ownership;
     }
     if (change.inputs !== undefined) {
       if (change.inputs === null) delete this.scene.inputs;

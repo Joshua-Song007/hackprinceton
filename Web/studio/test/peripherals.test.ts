@@ -6,7 +6,7 @@ import { ScriptSandbox, type WorkerLike } from '@pear/script';
 import { inferInputs, rigFor } from '../src/needs';
 import {
   COMING_SOON, PERIPHERALS, addPeripheral, deviceOfSignal, devicesOf, handlerStub, missingSignals, removePeripheral, scriptNameFor,
-  readPeripheralState, seedInputs, setSignal, signalOn, toggleSignal, type PeripheralState, type SignalId,
+  placeDevice, readPeripheralState, seedInputs, setOwnership, setSignal, signalOn, toggleSignal, type PeripheralState, type SignalId,
 } from '../src/peripherals';
 
 // A real worker thread running the sandbox evaluator (same adapter shape as e2e.test.ts).
@@ -27,7 +27,7 @@ class NodeWorkerLike implements WorkerLike {
 }
 
 const none: SceneInputs = { head: false, position: false, heartRate: false, gestures: [], players: [1, 32] };
-const empty: PeripheralState = { peripherals: [], inputs: null, gestures: {} };
+const empty: PeripheralState = { peripherals: [], ownership: {}, inputs: null, gestures: {} };
 const swing: CustomGesture = { slot: 'rightWrist', axis: [0, 0, -1], threshold: 20, cooldownMs: 400 };
 const ALL: SignalId[] = ['head', 'position', 'heartRate', ...GESTURE_TYPES];
 
@@ -72,8 +72,8 @@ describe('signals', () => {
 describe('devices', () => {
   it('are the listed ones plus those the signals and motion gestures imply, in catalog order', () => {
     expect(devicesOf(empty)).toEqual([]);
-    expect(devicesOf({ peripherals: ['airpods'], inputs: setSignal(null, 'heartRate', true), gestures: {} })).toEqual(['watch', 'airpods']);
-    expect(devicesOf({ peripherals: [], inputs: null, gestures: { swing } })).toEqual(['watch']);
+    expect(devicesOf({ peripherals: ['airpods'], ownership: {}, inputs: setSignal(null, 'heartRate', true), gestures: {} })).toEqual(['watch', 'airpods']);
+    expect(devicesOf({ peripherals: [], ownership: {}, inputs: null, gestures: { swing } })).toEqual(['watch']);
   });
   it('add with the default signal on, once', () => {
     const phone = addPeripheral(empty, 'phone');
@@ -84,7 +84,7 @@ describe('devices', () => {
     expect(addPeripheral(empty, 'airpods').inputs).toMatchObject({ head: true });
   });
   it('are not added again when a signal already implies them', () => {
-    const implied: PeripheralState = { peripherals: [], inputs: setSignal(null, 'flick', true), gestures: {} };
+    const implied: PeripheralState = { peripherals: [], ownership: {}, inputs: setSignal(null, 'flick', true), gestures: {} };
     expect(addPeripheral(implied, 'phone')).toBe(implied);
   });
   it('remove their signals and their motion gestures, and leave the others', () => {
@@ -97,8 +97,12 @@ describe('devices', () => {
     expect(devicesOf(gone)).toEqual(['phone', 'airpods']);
   });
   it('remove from a game that lists them without declared inputs', () => {
-    const gone = removePeripheral({ peripherals: ['phone'], inputs: null, gestures: {} }, 'phone');
-    expect(gone).toEqual({ peripherals: [], inputs: null, gestures: {} });
+    const gone = removePeripheral({ peripherals: ['phone'], ownership: {}, inputs: null, gestures: {} }, 'phone');
+    expect(gone).toEqual({ peripherals: [], ownership: {}, inputs: null, gestures: {} });
+  });
+  it('remove their own ownership entry and keep the other devices\'', () => {
+    const held: PeripheralState = { ...empty, peripherals: ['phone', 'watch'], ownership: { phone: { mode: 'free', at: [0, 1, -2] }, watch: { mode: 'passed' } } };
+    expect(removePeripheral(held, 'phone').ownership).toEqual({ watch: { mode: 'passed' } });
   });
   it('seed the first declaration from what the scripts already use', () => {
     const used = seedInputs(empty, { a: 'export default script({ onHeartRate(self, ctx, bpm) {} });' });
@@ -147,7 +151,31 @@ describe('readPeripheralState', () => {
     expect(Object.keys(s.gestures)).toEqual(['swing']);
   });
   it('counts a missing or invalid field as empty', () => {
-    expect(readPeripheralState({})).toEqual({ peripherals: [], inputs: null, gestures: {} });
-    expect(readPeripheralState({ peripherals: ['tablet'], inputs: { gestures: ['wave'] }, gestures: { 'bad name': {} } })).toEqual({ peripherals: [], inputs: null, gestures: {} });
+    expect(readPeripheralState({})).toEqual({ peripherals: [], ownership: {}, inputs: null, gestures: {} });
+    expect(readPeripheralState({ peripherals: ['tablet'], ownership: { phone: { mode: 'sideways' } }, inputs: { gestures: ['wave'] }, gestures: { 'bad name': {} } })).toEqual({ peripherals: [], ownership: {}, inputs: null, gestures: {} });
+  });
+  it('reads ownership', () => {
+    expect(readPeripheralState({ ownership: { phone: { mode: 'free' }, watch: { mode: 'passed' } } }).ownership).toEqual({ phone: { mode: 'free', at: [0, 1, -2] }, watch: { mode: 'passed' } });
+  });
+});
+
+describe('ownership', () => {
+  it('free puts the device at the default spot, passed has no position, player clears the entry', () => {
+    const free = setOwnership(empty, 'phone', 'free');
+    expect(free.ownership.phone).toEqual({ mode: 'free', at: [0, 1, -2] });
+    expect(setOwnership(free, 'phone', 'passed').ownership.phone).toEqual({ mode: 'passed' });
+    expect(setOwnership(free, 'phone', 'player').ownership).toEqual({});
+  });
+  it('keeps where a free device was put when it is set to free again', () => {
+    const moved = placeDevice(setOwnership(empty, 'watch', 'free'), 'watch', [3, 1, 4]);
+    expect(setOwnership(moved, 'watch', 'free').ownership.watch).toEqual({ mode: 'free', at: [3, 1, 4] });
+  });
+  it('refuses a mode the device cannot have, and placing a device that is not free', () => {
+    expect(setOwnership(empty, 'airpods', 'free')).toBe(empty);
+    expect(setOwnership(empty, 'airpods', 'passed').ownership.airpods).toEqual({ mode: 'passed' });
+    expect(placeDevice(empty, 'phone', [1, 1, 1])).toBe(empty);
+  });
+  it('the catalog allows free for the phone and the watch only', () => {
+    expect(PERIPHERAL_KINDS.filter((k) => PERIPHERALS[k].ownership.includes('free'))).toEqual(['phone', 'watch']);
   });
 });

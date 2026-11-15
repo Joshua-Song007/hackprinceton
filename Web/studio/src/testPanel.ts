@@ -1,5 +1,5 @@
 // Test panel: every player in a running multiplayer test, a top-down map, and controls for the driven player.
-import { parseGestures } from '@pear/runtime';
+import { ownershipOf, parseGestures, type OwnershipMode } from '@pear/runtime';
 import { SIM_DEVICE_KINDS, accelPulse, parseUsisJsonl, type SimDeviceKind } from '@pear/sim';
 import { slotDevice } from './needs';
 import { button, el, icon, openMenu } from './ui';
@@ -31,6 +31,11 @@ export function mapToWorld(px: number, py: number, half: number, size = MAP_SIZE
   return [(px - size / 2) * s, (py - size / 2) * s];
 }
 
+/** Who has a device in a test: every player, the room, or the player holding a passed one. */
+export function holdingText(mode: OwnershipMode, holderName: string | null): string {
+  return mode === 'free' ? 'In the room' : mode === 'passed' ? (holderName ? `Held by ${holderName}` : 'Held by nobody') : 'Each player has their own';
+}
+
 export const hapticRecent = (hapticAt: number, now: number): boolean => now - hapticAt < HAPTIC_MS;
 
 const GESTURES = [['Tap (T)', 'tap'], ['Double tap (G)', 'doubleTap'], ['Flick (F)', 'flick'], ['Pinch (P)', 'pinch'], ['Squeeze (H)', 'squeeze']] as const;
@@ -55,7 +60,7 @@ export function createTestPanel(project: Project, run: RunController): PanelView
   let moved = 0;
   let start: [number, number] = [0, 0];
   const msg = el('p', { class: 'pn-empty', role: 'status' });
-  const structureKey = () => [run.running, run.driven, run.players.map((p) => `${p.id}:${p.wander}:${p.run.recording}:${p.run.replaying}:${p.run.clip?.length ?? 0}:${p.source}:${p.botMode}:${p.run.role}:${p.run.phoneUp}:${[...p.liveDevices]}`).join(), run.rig.join(), run.relay.status, run.relay.devices.map((d) => d.id).join(), run.timeScale, run.status.kind].join('|');
+  const structureKey = () => [run.running, run.driven, run.players.map((p) => `${p.id}:${p.wander}:${p.run.recording}:${p.run.replaying}:${p.run.clip?.length ?? 0}:${p.source}:${p.botMode}:${p.run.role}:${p.run.phoneUp}:${[...p.liveDevices]}`).join(), run.rig.join(), [...run.rooms.keys()].map((k) => `${k}=${run.holderOf(k)}`).join(), run.relay.status, run.relay.devices.map((d) => d.id).join(), run.timeScale, run.status.kind].join('|');
 
   const slider = (label: string, input: HTMLElement, out: HTMLElement) =>
     el('div', { style: 'display:grid;grid-template-columns:72px minmax(0,1fr) 52px;align-items:center;gap:8px;font-size:11px;color:var(--text-secondary);min-height:var(--row-height)' }, [label, input, out]);
@@ -321,7 +326,7 @@ export function createTestPanel(project: Project, run: RunController): PanelView
       ...(keys.length ? [el('ul', { class: 'pn-list' }, keys.map((c) => el('li', {}, [`${c.label}: `, el('code', { title: c.where }, [c.line])])))] : []),
       slider('Yaw', y, yawOut), slider('Pitch', p, pitchOut), slider('Position', el('span'), posOut), slider('Heart rate', bpm, bpmOut),
       ...(run.rig.includes('phone') ? [slider('GPS accuracy', gps, gpsOut)] : []),
-      el('p', { class: 'pn-empty' }, ['WASD walks the driven player (click the viewport first). Drag in the viewport to look.']),
+      el('p', { class: 'pn-empty' }, ['WASD walks the driven player (click the viewport first). In Player view, drag to look. Click a player or a device in the Viewport to drive it or use it.']),
     ];
   };
 
@@ -333,12 +338,28 @@ export function createTestPanel(project: Project, run: RunController): PanelView
     addBtn.disabled = addable.length === 0;
     const warning = rigWarning(run.sceneTier(), rig);
     return [
-      group('Devices each player has'),
-      el('ul', { class: 'om-list', 'aria-label': 'Virtual devices' }, rig.length ? rig.map((k) => el('li', { style: 'grid-template-columns:18px minmax(0,1fr) auto auto' }, [
-        icon(DEVICE_INFO[k][0]), el('span', { class: 'om-name' }, [DEVICE_LABEL[k], el('span', { class: 'om-sub' }, [DEVICE_INFO[k][1]])]),
-        el('span', { class: on ? 'om-state' : 'om-state om-state--stale' }, [on ? '50 Hz' : 'Stopped']),
-        button('Remove', () => run.setRig(rig.filter((x) => x !== k)), { variant: 'small', ariaLabel: `Remove ${SIM_DEVICE_NAMES[k]}` }),
-      ])) : [el('li', { class: 'om-sub' }, ['No devices: the game receives no input.'])]),
+      group('Devices'),
+      el('ul', { class: 'om-list', 'aria-label': 'Virtual devices' }, rig.length ? rig.map((k) => {
+        // A free or passed device belongs to the room, so it follows the scene: no Remove, and a passed one can be given away.
+        const shared = run.rooms.has(k);
+        const holder = run.holderOf(k);
+        const holderName = run.players.find((p) => p.id === holder)?.name ?? null;
+        const mode = shared ? ownershipOf(run.ownershipNow, k).mode : 'player';
+        const act = shared
+          ? holder !== null
+            ? (() => {
+                const give = button('Give to...', () => openMenu(give, run.players.filter((p) => p.id !== holder).map((p) => ({ label: p.name, run: () => run.holdDevice(k, p.id) }))), { variant: 'small', ariaLabel: `Give ${SIM_DEVICE_NAMES[k]} to another player` });
+                give.disabled = run.players.length < 2;
+                return give;
+              })()
+            : el('span')
+          : button('Remove', () => run.setRig(rig.filter((x) => x !== k)), { variant: 'small', ariaLabel: `Remove ${SIM_DEVICE_NAMES[k]}` });
+        return el('li', { style: 'grid-template-columns:18px minmax(0,1fr) auto auto' }, [
+          icon(DEVICE_INFO[k][0]), el('span', { class: 'om-name' }, [DEVICE_LABEL[k], el('span', { class: 'om-sub' }, [`${DEVICE_INFO[k][1]}. ${holdingText(mode, holderName)}`])]),
+          el('span', { class: on ? 'om-state' : 'om-state om-state--stale' }, [on ? '50 Hz' : 'Stopped']),
+          act,
+        ]);
+      }) : [el('li', { class: 'om-sub' }, ['No devices: the game receives no input.'])]),
       el('div', { style: 'padding:4px 12px' }, [addBtn]),
       el('p', { class: 'om-sub', style: 'padding:0 12px' }, ['A game that lists peripherals gets exactly those; otherwise this list is remembered in this browser.']),
       ...(warning ? [el('p', { class: 'pn-empty', role: 'status' }, [warning])] : []),

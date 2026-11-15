@@ -3,6 +3,7 @@
 import * as THREE from 'three';
 import type { Pose } from '@pear/core';
 import type { WorldEntity } from './scene';
+import { GAZE_LENGTH, LOOK_LOCK_DEG, PULSE_MS, rigKey, rigLayout, type RigDevice, type RigHit, type RigVec, type RigView } from './rig';
 import { DEFAULT_ORBIT, contentBounds, frameBox, moveBy, orbitBy, orbitPosition, panBy, rayPlaneY, zoomBy, type OrbitState } from './orbit';
 
 export interface ViewportColors {
@@ -60,14 +61,16 @@ export class Viewport {
   private selected: string | null = null;
   private orbit: OrbitState = DEFAULT_ORBIT;
   private headDriven = false;
-  private players: { id: string; position: readonly [number, number, number]; self?: boolean }[] = [];
+  private rigGroup = new THREE.Group(); // simulated players and room devices, rebuilt on its own so a turning head does not rebuild the scene
+  private rigView: RigView | null = null;
+  private rigKeyNow = '';
   private gizmoScene = new THREE.Scene();
   private gizmoCamera = new THREE.PerspectiveCamera(30, 1, 0.1, 20);
   private gizmo = new THREE.Group();
 
   constructor(canvas: HTMLCanvasElement, private colors: ViewportColors = readViewportColors()) {
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-    this.scene.add(this.content);
+    this.scene.add(this.content, this.rigGroup);
     this.gizmoScene.add(this.gizmo);
     this.rebuild();
     this.setHeadPose(null);
@@ -83,13 +86,39 @@ export class Viewport {
     this.rebuild();
   }
 
-  /** Small markers for the players in a run (this one highlighted); empty clears them. */
-  setPlayers(markers: { id: string; position: readonly [number, number, number]; self?: boolean }[]): void {
-    const same = markers.length === this.players.length
-      && markers.every((m, i) => { const o = this.players[i]!; return m.id === o.id && !m.self === !o.self && Math.abs(m.position[0] - o.position[0]) < 0.01 && Math.abs(m.position[2] - o.position[2]) < 0.01; });
-    if (same) return; // called every frame; rebuild only when a marker moved
-    this.players = markers;
-    this.rebuild();
+  /**
+   * The simulated players (body, head, gaze ray, look-at cone, their devices, a ring after a haptic) and free-floating
+   * devices; null clears them. Called every frame: it rebuilds only when `rigKey` says the picture changed.
+   */
+  setRig(view: RigView | null): void {
+    const key = rigKey(view, Date.now());
+    if (key === this.rigKeyNow) return;
+    this.rigKeyNow = key;
+    this.rigView = view;
+    this.buildRig();
+  }
+
+  /** The device marker or player body under a canvas point (NDC); a device wins over the body it sits on. */
+  pickRig(ndcX: number, ndcY: number): RigHit | null {
+    this.camera.updateMatrixWorld();
+    this.rigGroup.updateMatrixWorld(true);
+    const ray = new THREE.Raycaster();
+    ray.setFromCamera(new THREE.Vector2(ndcX, ndcY), this.camera);
+    let avatar: RigHit | null = null;
+    for (const hit of ray.intersectObjects(this.rigGroup.children, true)) {
+      if (!(hit.object instanceof THREE.Mesh)) continue;
+      const d = hit.object.userData.device as { kind: RigDevice; owner: string | null } | undefined;
+      if (d) return { type: 'device', kind: d.kind, owner: d.owner };
+      const id = hit.object.userData.avatarId;
+      if (!avatar && typeof id === 'string') avatar = { type: 'avatar', id };
+    }
+    return avatar;
+  }
+
+  /** Points the editor camera at everything: the entities and `extra` points (players). Falls back to the default view. */
+  frameAll(extra: readonly RigVec[] = []): void {
+    const box = contentBounds([...this.entities, ...extra.map((position) => ({ position, scale: [1, 1, 1] as const }))]);
+    this.setOrbit(box ? frameBox(this.orbit, box.center, box.size) : DEFAULT_ORBIT);
   }
 
   select(id: string | null): void {
@@ -196,11 +225,13 @@ export class Viewport {
     const box = contentBounds(this.entities);
     this.setOrbit(box ? frameBox({ ...DEFAULT_ORBIT, yaw: 0.6 }, box.center, box.size, 1.8) : { ...DEFAULT_ORBIT, yaw: 0.6 });
     this.guides.visible = false;
+    this.rigGroup.visible = false;
     try {
       this.renderer.render(this.scene, this.camera);
       return this.renderer.domElement.toDataURL('image/jpeg', 0.8);
     } finally {
       this.guides.visible = true;
+      this.rigGroup.visible = true;
     }
   }
 
@@ -255,8 +286,75 @@ export class Viewport {
   }
 
   dispose(): void {
+    this.clearRig();
     this.clear();
     this.renderer.dispose();
+  }
+
+  private clearRig(): void {
+    this.rigGroup.traverse((o) => {
+      if (o instanceof THREE.Mesh || o instanceof THREE.LineSegments || o instanceof THREE.Line) {
+        o.geometry.dispose();
+        (o.material as THREE.Material).dispose();
+      }
+    });
+    this.rigGroup.clear();
+  }
+
+  private buildRig(): void {
+    this.clearRig();
+    const view = this.rigView;
+    if (!view) return;
+    const c = this.colors;
+    const now = Date.now();
+    const solid = (geo: THREE.BufferGeometry, color: string, at: RigVec, data: Record<string, unknown>): THREE.Mesh => {
+      const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color }));
+      m.position.set(...at);
+      Object.assign(m.userData, data);
+      return m;
+    };
+    const ring = (at: RigVec, radius: number, color: string, opacity: number): THREE.Mesh => {
+      const m = new THREE.Mesh(new THREE.TorusGeometry(radius, 0.008, 6, 28), new THREE.MeshBasicMaterial({ color, transparent: true, opacity }));
+      m.rotation.x = Math.PI / 2;
+      m.position.set(...at);
+      return m;
+    };
+    const marker = (kind: RigDevice, at: RigVec, scale: number, owner: string | null, shared: boolean): THREE.Object3D[] => {
+      const geo = kind === 'phone' ? new THREE.BoxGeometry(0.07 * scale, 0.14 * scale, 0.02 * scale) : kind === 'watch' ? new THREE.BoxGeometry(0.07 * scale, 0.025 * scale, 0.07 * scale) : new THREE.SphereGeometry(0.035 * scale, 10, 8);
+      const m = solid(geo, shared ? c.selection : c.text, at, { device: { kind, owner } });
+      return shared ? [m, ring(at, 0.1 * scale, c.selection, 0.9)] : [m];
+    };
+
+    for (const a of view.avatars) {
+      const l = rigLayout(a);
+      const color = a.driven ? c.accent : c.axisX;
+      const bodyH = Math.max(0.2, l.head[1] - 0.14);
+      const body = new THREE.CylinderGeometry(0.2, 0.2, bodyH, 14);
+      const bodyMesh = new THREE.Mesh(body, new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.1 }));
+      bodyMesh.position.set(l.head[0], bodyH / 2, l.head[2]);
+      bodyMesh.userData.avatarId = a.id;
+      const bodyEdges = new THREE.LineSegments(new THREE.EdgesGeometry(body, 40), new THREE.LineBasicMaterial({ color }));
+      bodyEdges.position.copy(bodyMesh.position);
+      const head = solid(new THREE.SphereGeometry(0.12, 14, 10), color, l.head, { avatarId: a.id });
+      const gaze = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(...l.head), new THREE.Vector3(...l.gazeTip)]), new THREE.LineBasicMaterial({ color }));
+      // The look-at cone: the runtime fires onLookAt for an entity inside this angle (held 0.5 s).
+      const cone = new THREE.ConeGeometry(Math.tan((LOOK_LOCK_DEG * Math.PI) / 180) * GAZE_LENGTH, GAZE_LENGTH, 16, 1, true);
+      const coneLines = new THREE.LineSegments(new THREE.WireframeGeometry(cone), new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.3 }));
+      cone.dispose();
+      coneLines.position.set(...l.head).addScaledVector(new THREE.Vector3(...l.forward), GAZE_LENGTH / 2);
+      coneLines.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), new THREE.Vector3(...l.forward).negate());
+      this.rigGroup.add(bodyMesh, bodyEdges, head, gaze, coneLines);
+      for (const d of a.devices) {
+        if (d.kind === 'airpods') this.rigGroup.add(...marker('airpods', l.leftEar, 1, a.id, d.shared), ...marker('airpods', l.rightEar, 1, a.id, d.shared));
+        else this.rigGroup.add(...marker(d.kind, d.kind === 'phone' ? l.hand : l.leftWrist, 1, a.id, d.shared));
+      }
+      const age = now - a.hapticAt;
+      if (a.hapticAt && age >= 0 && age < PULSE_MS) this.rigGroup.add(ring(l.hand, 0.12 + (0.35 * age) / PULSE_MS, c.accent, 1 - age / PULSE_MS));
+    }
+    for (const f of view.free) {
+      const pole = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(f.at[0], 0, f.at[2]), new THREE.Vector3(...f.at)]), new THREE.LineBasicMaterial({ color: c.selection, transparent: true, opacity: 0.6 }));
+      this.rigGroup.add(pole, ...marker(f.kind, f.at, 1.8, null, true));
+    }
   }
 
   private clear(): void {
@@ -301,14 +399,18 @@ export class Viewport {
         new THREE.LineSegments(edges.clone(), new THREE.LineBasicMaterial({ color })),
       );
       this.content.add(group);
+      // The volume the runtime tests probes against (events.ts toLocal divides by entity scale, so the entity's own transform draws it right).
+      const trigger = e.components.find((t) => t.type === 'trigger');
+      if (trigger?.type === 'trigger') {
+        const volume = trigger.shape === 'sphere' ? new THREE.SphereGeometry(trigger.radius, 20, 14) : new THREE.BoxGeometry(...trigger.size);
+        const lines = new THREE.LineSegments(new THREE.EdgesGeometry(volume, 40), new THREE.LineBasicMaterial({ color: c.accent, transparent: true, opacity: 0.55 }));
+        volume.dispose();
+        lines.position.copy(group.position);
+        lines.quaternion.copy(group.quaternion);
+        lines.scale.copy(group.scale);
+        this.guides.add(lines);
+      }
     }
-    const pin = new THREE.ConeGeometry(0.15, 0.4, 12);
-    for (const p of this.players) {
-      const m = new THREE.Mesh(pin.clone(), new THREE.MeshBasicMaterial({ color: p.self ? c.accent : c.axisX }));
-      m.position.set(p.position[0], 0.2, p.position[2]);
-      this.content.add(m);
-    }
-    pin.dispose();
     cube.dispose();
     ball.dispose();
     edgesOf.box.dispose();

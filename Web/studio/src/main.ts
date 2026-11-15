@@ -1,5 +1,5 @@
 // Composition root: wires the SDK packages (core, runtime, script, sim, cloud) to the panels.
-import { flattenScene } from '@pear/runtime';
+import { flattenScene, type RigView } from '@pear/runtime';
 import './theme.css';
 import { AccountController, describeError, openAccountSheet } from './account';
 import { createInspectorPanel } from './inspector';
@@ -14,6 +14,8 @@ import { RegistryClient } from './marketplace/registry';
 import { deepAgentPanel } from './panels/deep-agent';
 import { PreferenceStore, bindPreferences, inDesktopApp, openSettingsSheet } from './preferences';
 import { createPeripheralsPanel, openPeripheralPicker } from './peripheralsPanel';
+import { deviceMenuItems } from './deviceMenu';
+import { placeDevice, previewRig, readPeripheralState } from './peripherals';
 import { createTestPanel } from './testPanel';
 import { openNewGameSheet } from './newGame';
 import { walkEntities, Project, TEMPLATES, attachAutosave, templateSnapshot, type ProjectSnapshot } from './project';
@@ -87,9 +89,13 @@ layout = new LayoutManager(document.getElementById('dock')!, panels, inDesktopAp
 } : {});
 
 // Viewport follows the scene and the selection; a scene that does not parse leaves the last good drawing.
+let previewView: RigView | null = null;
+viewport.preview = () => previewView;
 const refreshScene = () => {
   try {
-    viewport.setScene(flattenScene(project.description()));
+    const description = project.description();
+    viewport.setScene(flattenScene(description));
+    previewView = previewRig(readPeripheralState(project.scene), description.playerOrigin);
   } catch (e) {
     debug.addOutput('error', `Scene is invalid: ${e instanceof Error ? e.message : String(e)}`);
   }
@@ -104,6 +110,28 @@ viewport.selectedId = () => selection.entityId;
 viewport.entityY = (id) => { let y: number | undefined; walkEntities(project.scene, (e, eid) => { if (eid === id && Array.isArray(e.position)) y = Number(e.position[1]); }); return y; };
 viewport.onMove = (id, x, z) => project.updateEntity(id, (e) => { const p = (e.position as number[] | undefined) ?? [0, 0, 0]; e.position = [x, p[1] ?? 0, z]; });
 prefs.onChange(() => viewport.refreshColors());
+viewport.onMoveDevice = (kind, x, z) => {
+  const state = readPeripheralState(project.scene);
+  const at = state.ownership[kind]?.at;
+  const error = project.applyPeripheralChange({ ownership: placeDevice(state, kind, [x, at?.[1] ?? 1, z]).ownership });
+  if (error) announce(error);
+};
+// Clicking a device in a running test: its gestures or heart-rate presets, and Give to for a passed device.
+viewport.onDeviceMenu = (hit, x, y) => {
+  const devices = hit.owner ? run.players.find((p) => p.id === hit.owner)?.run.devices : run.rooms.get(hit.kind);
+  if (!devices) return;
+  document.querySelectorAll('.vp-anchor').forEach((a) => a.remove());
+  const anchor = el('span', { class: 'vp-anchor', 'aria-label': 'Device menu', style: `position:fixed;left:${x}px;top:${y}px;width:1px;height:1px` });
+  document.body.append(anchor);
+  const drop = () => anchor.remove();
+  document.addEventListener('pointerdown', drop, { once: true, capture: true });
+  const state = readPeripheralState(project.scene);
+  openMenu(anchor, deviceMenuItems(hit.kind, state.inputs, run.players.map((p) => ({ id: p.id, name: p.name })), run.holderOf(hit.kind), {
+    gesture: (type) => devices.gesture(type, type === 'flick' ? [1, 0, 0] : undefined),
+    heartRate: (bpm) => { run.heartRate = bpm; devices.setHeartRate(bpm); },
+    give: (id) => run.holdDevice(hit.kind, id),
+  }));
+};
 
 // Actions
 const activity = el('div', { class: 'om-activity' });
@@ -389,6 +417,10 @@ mountMenuBar(document.getElementById('menubar')!, [
           'Q / E: fly down / up',
           'Left click: select',
           'F: frame the selected entity',
+          'While running (Overview): the camera keeps these controls; W A S D walk the player you drive',
+          'Click a player to drive it; drag it to place it; double click the ground to walk there',
+          'Click a device on a player (or in the room) to send a gesture or set a heart rate; a passed device can be given to another player',
+          'While running (Player view): drag to look, arrow keys turn the head',
         ].map((t) => el('li', {}, [t]))),
         el('div', { class: 'sheet-actions' }, [button('Close', close, { variant: 'default' })]),
       )),

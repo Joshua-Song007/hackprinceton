@@ -1,7 +1,7 @@
 // Peripherals catalog: the devices a game can list, the signals each one gives, and the pure edits the Peripherals panel makes.
 // Signals stay in the scene's `inputs` and `gestures`; `peripherals` only lists devices, so there is one source of truth.
 import { GESTURE_TYPES, type GestureType, type Slot } from '@pear/core';
-import { PERIPHERAL_KINDS, parseGestures, parseInputs, parsePeripherals, type CustomGesture, type PeripheralKind, type SceneInputs } from '@pear/runtime';
+import { DEFAULT_FREE_AT, PERIPHERAL_KINDS, parseGestures, parseInputs, parseOwnership, ownershipOf, parsePeripherals, type CustomGesture, type Ownership, type OwnershipMode, type PeripheralKind, type RigVec, type RigView, type SceneInputs } from '@pear/runtime';
 import { inferInputs, rigFor, slotDevice } from './needs';
 import type { SceneJson } from './project';
 
@@ -27,11 +27,15 @@ export interface PeripheralDef {
   defaultSlot: Slot;
   signals: SignalDef[];
   outputs: { label: string; hint: string }[];
+  /** Who can hold this device: an AirPods has no pose of its own, so it is never free-floating. */
+  ownership: OwnershipMode[];
 }
 
-/** What the panel edits: the three scene fields that describe devices. */
+/** What the panel edits: the scene fields that describe devices. */
 export interface PeripheralState {
   peripherals: PeripheralKind[];
+  /** Kinds that are not `player`; a kind not listed is held by each player. */
+  ownership: Partial<Record<PeripheralKind, Ownership>>;
   inputs: SceneInputs | null;
   gestures: Record<string, CustomGesture>;
 }
@@ -53,6 +57,7 @@ export const PERIPHERALS: Record<PeripheralKind, PeripheralDef> = {
       gesture('pinch', 'Pinch', 'A pinch.'),
     ],
     outputs: [{ label: 'Haptic', hint: 'ctx.haptic(pattern, intensity)' }],
+    ownership: ['player', 'free', 'passed'],
   },
   watch: {
     label: 'Apple Watch',
@@ -61,6 +66,7 @@ export const PERIPHERALS: Record<PeripheralKind, PeripheralDef> = {
     defaultSlot: 'leftWrist',
     signals: [{ id: 'heartRate', label: 'Heart rate', hint: 'onHeartRate gets the bpm; ctx.intensity is 0 to 1.', handler: 'onHeartRate', scriptName: 'heartRate', needsEntity: false }],
     outputs: [],
+    ownership: ['player', 'free', 'passed'],
   },
   airpods: {
     label: 'AirPods',
@@ -69,6 +75,7 @@ export const PERIPHERALS: Record<PeripheralKind, PeripheralDef> = {
     defaultSlot: 'head',
     signals: [{ id: 'head', label: 'Head direction', hint: 'Look-at and head-probe triggers.', handler: 'onLookAt', scriptName: 'lookAt', needsEntity: true }],
     outputs: [],
+    ownership: ['player', 'passed'],
   },
 };
 
@@ -112,6 +119,7 @@ export function readPeripheralState(scene: SceneJson): PeripheralState {
   };
   return {
     peripherals: safe(() => parsePeripherals(scene.peripherals), []),
+    ownership: safe(() => parseOwnership(scene.ownership), {}),
     inputs: safe(() => (scene.inputs ? parseInputs(scene.inputs) : null), null),
     gestures: safe(() => parseGestures(scene.gestures), {}),
   };
@@ -144,12 +152,41 @@ export function toggleSignal(state: PeripheralState, id: SignalId, on: boolean):
   };
 }
 
-/** Drops the device, its signals and the motion gestures that run on it. */
+/** Who holds a device. A mode the device cannot have leaves the state as it is; `player` clears the entry, `free` starts at the default spot. */
+export function setOwnership(state: PeripheralState, kind: PeripheralKind, mode: OwnershipMode): PeripheralState {
+  if (!PERIPHERALS[kind].ownership.includes(mode)) return state;
+  const { [kind]: _old, ...rest } = state.ownership;
+  const entry: Ownership | null = mode === 'player' ? null : mode === 'free' ? { mode, at: state.ownership[kind]?.at ?? [...DEFAULT_FREE_AT] as unknown as Ownership['at'] } : { mode };
+  return { ...state, ownership: entry ? { ...rest, [kind]: entry } : rest };
+}
+
+/** Moves a free device. Anything else leaves the state as it is. */
+export function placeDevice(state: PeripheralState, kind: PeripheralKind, at: readonly [number, number, number]): PeripheralState {
+  if (state.ownership[kind]?.mode !== 'free') return state;
+  return { ...state, ownership: { ...state.ownership, [kind]: { mode: 'free', at: [...at] as unknown as Ownership['at'] } } };
+}
+
+/** The rig the viewport shows while nothing runs: one player at `origin` with the devices the game has, and the free devices where they sit. */
+export function previewRig(state: PeripheralState, origin: RigVec): RigView {
+  const devices = devicesOf(state);
+  const mode = (kind: PeripheralKind) => ownershipOf(state.ownership, kind).mode;
+  return {
+    avatars: [{
+      id: 'preview', position: origin, yaw: 0, pitch: 0, driven: true, hapticAt: 0,
+      devices: devices.filter((kind) => mode(kind) !== 'free').map((kind) => ({ kind, shared: mode(kind) === 'passed' })),
+    }],
+    free: devices.filter((kind) => mode(kind) === 'free').map((kind) => ({ kind, at: state.ownership[kind]?.at ?? DEFAULT_FREE_AT })),
+  };
+}
+
+/** Drops the device, its signals, its ownership and the motion gestures that run on it. */
 export function removePeripheral(state: PeripheralState, kind: PeripheralKind): PeripheralState {
   let inputs = state.inputs;
   if (inputs) for (const s of PERIPHERALS[kind].signals) inputs = setSignal(inputs, s.id, false);
+  const { [kind]: _gone, ...ownership } = state.ownership;
   return {
     peripherals: state.peripherals.filter((k) => k !== kind),
+    ownership,
     inputs,
     gestures: Object.fromEntries(Object.entries(state.gestures).filter(([, g]) => slotDevice(g.slot) !== kind)),
   };

@@ -41,6 +41,8 @@ export interface SceneDescription {
   inputs: SceneInputs | null;
   /** Devices the game uses, as the creator listed them; devices that `inputs` and `gestures` imply are not repeated here. */
   peripherals: PeripheralKind[];
+  /** Who holds each device kind; a kind not listed here is `player` (each player has their own). */
+  ownership: Partial<Record<PeripheralKind, Ownership>>;
   /** Creator-defined motion gestures, recognized by the runtime from `accel` and delivered as `onGesture({ type: name })`. */
   gestures: Record<string, CustomGesture>;
   /** `gestures.raise`: when present, `onGesture` gets `raise`/`lower` as the device tilts away from its rest pose. */
@@ -53,6 +55,18 @@ export interface SceneDescription {
 /** Devices a game can list. The iPad joins when the simulator and runtime can handle touch and pencil input. */
 export const PERIPHERAL_KINDS = ['phone', 'watch', 'airpods'] as const;
 export type PeripheralKind = (typeof PERIPHERAL_KINDS)[number];
+
+/** `player`: every player has their own device. `free`: one device in the room, held by nobody, at `at`. `passed`: one device, held by one player at a time. */
+export const OWNERSHIP_MODES = ['player', 'free', 'passed'] as const;
+export type OwnershipMode = (typeof OWNERSHIP_MODES)[number];
+export interface Ownership {
+  mode: OwnershipMode;
+  /** World position of a free device. */
+  at?: Vec3;
+}
+
+/** Where a free device sits until the creator moves it. */
+export const DEFAULT_FREE_AT: Vec3 = [0, 1, -2];
 
 /** A game's input needs: Studio builds every simulated player's devices from it and starts Play with `players[0]` players. */
 export interface SceneInputs {
@@ -202,6 +216,29 @@ export function parsePeripherals(raw: unknown): PeripheralKind[] {
   return [...new Set(kinds)];
 }
 
+/** Validates a scene's `ownership` block. Missing means every kind is `player`; `player` entries are dropped. A free device gets `at` (default above). */
+export function parseOwnership(raw: unknown): Partial<Record<PeripheralKind, Ownership>> {
+  const out: Partial<Record<PeripheralKind, Ownership>> = {};
+  if (raw === undefined || raw === null) return out;
+  for (const [kind, def] of Object.entries(obj(raw, 'ownership'))) {
+    const path = `ownership.${kind}`;
+    if (!(PERIPHERAL_KINDS as readonly string[]).includes(kind)) throw new SceneError(`${path}: unknown peripheral '${kind}'`);
+    const o = obj(def, path);
+    const mode = o.mode;
+    if (!(OWNERSHIP_MODES as readonly unknown[]).includes(mode)) throw new SceneError(`${path}.mode: expected player, free or passed`);
+    if (mode !== 'free' && o.at !== undefined) throw new SceneError(`${path}.at: only a free device has a position`);
+    if (mode === 'free' && kind === 'airpods') throw new SceneError(`${path}: AirPods cannot be free-floating`);
+    if (mode === 'free') out[kind as PeripheralKind] = { mode, at: [...vec(o.at, `${path}.at`, DEFAULT_FREE_AT)] as unknown as Vec3 };
+    else if (mode === 'passed') out[kind as PeripheralKind] = { mode };
+  }
+  return out;
+}
+
+/** The ownership of one device kind, `player` when the scene does not say. */
+export function ownershipOf(ownership: Partial<Record<PeripheralKind, Ownership>>, kind: PeripheralKind): Ownership {
+  return ownership[kind] ?? { mode: 'player' };
+}
+
 /** Validates a scene's `gestures` block (custom motion gestures). Names must not shadow a built-in gesture. */
 export function parseGestures(raw: unknown): Record<string, CustomGesture> {
   const out: Record<string, CustomGesture> = {};
@@ -254,6 +291,7 @@ export function parseScene(input: unknown): SceneDescription {
     permissions: { location: bool(obj(s.permissions ?? {}, 'permissions').location, 'permissions.location', false) },
     inputs: s.inputs === undefined || s.inputs === null ? null : parseInputs(s.inputs),
     peripherals: parsePeripherals(s.peripherals),
+    ownership: parseOwnership(s.ownership),
     gestures: parseGestures(s.gestures),
     ...(raise ? { raise } : {}),
     clientScripts: names(s.clientScripts, 'clientScripts'),

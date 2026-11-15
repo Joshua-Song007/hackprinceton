@@ -117,6 +117,20 @@ describe('peripheral authoring', () => {
     expect(p.scene).toEqual(before);
   });
 
+  it('changes ownership with the other fields, validates it, and removes the key when empty', () => {
+    const p = fresh();
+    expect(p.applyPeripheralChange({ peripherals: ['phone'], ownership: { phone: { mode: 'free', at: [1, 1, 1] } } })).toBeUndefined();
+    expect(p.scene.ownership).toEqual({ phone: { mode: 'free', at: [1, 1, 1] } });
+    parses(p);
+    expect(p.applyPeripheralChange({ ownership: { airpods: { mode: 'free' } } })).toMatch(/AirPods cannot be free-floating/);
+    expect(p.scene.ownership).toEqual({ phone: { mode: 'free', at: [1, 1, 1] } });
+    expect(p.applyPeripheralChange({ ownership: {} })).toBeUndefined();
+    expect(p.scene).not.toHaveProperty('ownership');
+    expect(p.setSceneSetting('ownership', { watch: { mode: 'passed' } })).toBeUndefined();
+    expect(p.scene.ownership).toEqual({ watch: { mode: 'passed' } });
+    expect(p.setSceneSetting('ownership', { watch: { mode: 'nope' } })).toMatch(/expected player, free or passed/);
+  });
+
   it('removes keys when the lists are empty, and inputs when null', () => {
     const p = fresh();
     p.applyPeripheralChange({ peripherals: ['phone'], inputs: { ...inputs, gestures: ['tap'], players: [1, 32] } });

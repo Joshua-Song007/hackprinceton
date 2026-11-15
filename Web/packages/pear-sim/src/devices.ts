@@ -22,6 +22,8 @@ export interface SimDevicesOptions {
   rateHz?: number;
   /** Host clock in ms. Defaults to performance.now. */
   now?: () => number;
+  /** Prefix of the device ids (`sim-phone`); a shared room device uses another so it never collides with a player's own. */
+  idPrefix?: string;
 }
 
 export class SimDevices {
@@ -30,9 +32,9 @@ export class SimDevices {
   private now: () => number;
   private timer: ReturnType<typeof setInterval> | null = null;
   private startedAt = 0;
-  private airpods: Device = { deviceId: 'sim-airpods', kind: 'airpods', slot: 'head', seq: 0 };
-  private phone: Device = { deviceId: 'sim-phone', kind: 'phone', slot: 'hand', seq: 0 };
-  private watch: Device = { deviceId: 'sim-watch', kind: 'watch', slot: 'leftWrist', seq: 0 };
+  private airpods: Device;
+  private phone: Device;
+  private watch: Device;
   private present: Set<SimDeviceKind>;
   private yaw = 0;
   private pitch = 0;
@@ -47,6 +49,10 @@ export class SimDevices {
   constructor(emit: (packet: UsisPacket) => void, options: SimDevicesOptions = {}) {
     this.emit = emit;
     this.present = new Set(options.kinds ?? SIM_DEVICE_KINDS);
+    const id = options.idPrefix ?? 'sim';
+    this.airpods = { deviceId: `${id}-airpods`, kind: 'airpods', slot: 'head', seq: 0 };
+    this.phone = { deviceId: `${id}-phone`, kind: 'phone', slot: 'hand', seq: 0 };
+    this.watch = { deviceId: `${id}-watch`, kind: 'watch', slot: 'leftWrist', seq: 0 };
     this.rateHz = options.rateHz ?? SIM_RATE_HZ;
     this.now = options.now ?? (() => performance.now());
   }
@@ -65,6 +71,23 @@ export class SimDevices {
 
   removeDevice(kind: SimDeviceKind): void {
     this.present.delete(kind);
+  }
+
+  private redirects = new Map<SimDeviceKind, { target: SimDevices; allow: () => boolean }>();
+
+  /**
+   * Sends this instance's phone gestures, accel clips and heart rate for `kind` to `target` (a device shared by the room or
+   * passed between players) while `allow()` holds; otherwise they are dropped, since this player has no such device.
+   * Pass null to stop redirecting.
+   */
+  redirect(kind: SimDeviceKind, target: SimDevices | null, allow: () => boolean = () => true): void {
+    if (target) this.redirects.set(kind, { target, allow });
+    else this.redirects.delete(kind);
+  }
+
+  private redirected(kind: SimDeviceKind): SimDevices | null | undefined {
+    const r = this.redirects.get(kind);
+    return r ? (r.allow() ? r.target : null) : undefined;
   }
 
   /** Starts the 50 Hz stream; the device clock restarts at 0. */
@@ -110,15 +133,25 @@ export class SimDevices {
 
   /** Plays an accel clip (m/s², device frame, one sample per tick) on a device, e.g. `accelPulse` for a swing or punch. */
   playAccel(kind: SimDeviceKind, samples: readonly Vec3[]): void {
+    const to = this.redirected(kind);
+    if (to !== undefined) return to?.playAccel(kind, samples);
     if (this.present.has(kind)) this.accelQueue.set(kind, [...samples, [0, 0, 0]]);
   }
 
+  /** Stored here as well as forwarded: a passed watch copies its holder's own value. */
   setHeartRate(bpm: number): void {
     this.heartRate = Math.max(0, bpm);
+    this.redirected('watch')?.setHeartRate(bpm);
+  }
+
+  get heartRateBpm(): number {
+    return this.heartRate;
   }
 
   /** A phone gesture, emitted immediately as one packet. */
   gesture(type: GestureType, dir?: Vec3): void {
+    const to = this.redirected('phone');
+    if (to !== undefined) return to?.gesture(type, dir);
     if (!this.present.has('phone')) return;
     this.send(this.phone, { gesture: dir ? { type, dir } : { type } });
   }

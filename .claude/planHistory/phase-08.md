@@ -197,3 +197,28 @@ Stale comments flagged, not edited: the first line of `Web/studio/src/explorer.t
 - [x] `Web/studio/test/studio.test.ts` — `AccountController.deleteGame`.
 - [x] `Web/studio/test/peripherals.test.ts` — `readPeripheralState`.
 - [x] `Web/packages/pear-cloud/test/client.test.ts` — `deleteGame`.
+
+### 2026-11-14 — Simulator viewport and device ownership
+Paths: `Web/packages/pear-runtime/src/scene.ts`, `Web/packages/pear-runtime/src/rig.ts`, `Web/packages/pear-runtime/src/viewport.ts`, `Web/packages/pear-runtime/src/index.ts`, `Web/packages/pear-sim/src/devices.ts`, `Web/studio/src/run.ts`, `Web/studio/src/peripherals.ts`, `Web/studio/src/peripheralsPanel.ts`, `Web/studio/src/project.ts`, `Web/studio/src/deviceMenu.ts`, `Web/studio/src/testPanel.ts`, `Web/studio/src/main.ts`, `Web/studio/src/theme.css`
+
+The viewport is the Device Simulator of overview.md Module 4, not only a scene editor. It draws every simulated player (body, head, gaze ray, 15 degree look-at cone, the devices they carry, a ring after a haptic) and the trigger volumes (in the guides group, so gallery previews do not change). While stopped it shows one player at `playerOrigin` with the devices the game lists. While running the editor camera stays on (Overview, framed on everyone) with "Player view" as the first-person alternative. Clicking a player drives it, dragging it places it, a double click walks it there at 1.5 m/s, clicking a device opens its gestures or heart-rate presets, and "Add player" sits in the viewport.
+
+Scene field `ownership` (`{ [kind]: { mode, at? } }`) says who holds each device kind: `player` (each player has their own, the default and not stored), `free` (one device in the room at `at`, default [0, 1, -2]; phone and watch only) or `passed` (one device, one holder at a time). In local Play a free or passed kind is one shared `SimDevices` (`RunController.rooms`, one per kind because position is per instance) and each player's own devices `redirect` to it: a free device's packets reach every player, a passed device's only its holder, and a passed device copies its holder's head look, position and heart rate every 20 ms. `holdDevice` hands it over; the old holder's copy goes stale through InputBus. Server and join runs ignore ownership (Output says so). The Peripherals card has a "Held by" selector; dragging a free device in the viewport saves its place once, on drop.
+
+Known, not changed: a free device's events reach every client, so a script that fires a remote on it fires once per player (real routing would deliver it to the server once). A free phone puts a `hand` probe at its position for every player. A passed AirPods leaves other players with no head. Entity drag still pushes one undo step per pointer move. No script API hands a device over; `RunController.holdDevice` is the single entry a later one calls. Real routing for the Player app, the relay and the server is not built.
+
+Not verified in a browser: avatar and device drawing, the device menu, camera modes, drag to place, double click to walk, dragging a free device.
+
+Stale comments flagged, not edited: `Web/packages/pear-runtime/src/viewport.ts` line 1, `Web/packages/pear-runtime/src/scene.ts` line 2, the "Keys:" doc of `Project.setSceneSetting` in `Web/studio/src/project.ts`, and in `Web/studio/src/run.ts` the docs on `bindCamera` (a click is mouse-look and the camera follows the head), `rig`, `setRunning` and `applyPeripheralChange`'s device-field list in `Web/studio/src/project.ts`.
+- [x] `Web/packages/pear-runtime/src/scene.ts` — `ownership`, `parseOwnership`, `ownershipOf`.
+- [x] `Web/packages/pear-runtime/src/rig.ts` — `rigLayout`, `rigKey`, rig view types.
+- [x] `Web/packages/pear-runtime/src/viewport.ts` — `setRig`, `pickRig`, `frameAll`, trigger volumes.
+- [x] `Web/packages/pear-sim/src/devices.ts` — `idPrefix`, `redirect`, `heartRateBpm`.
+- [x] `Web/studio/src/run.ts` — rooms, routing, `holdDevice`, overview camera, walk-to, `stepToward`, rig view.
+- [x] `Web/studio/src/peripherals.ts` — `setOwnership`, `placeDevice`, `previewRig`.
+- [x] `Web/studio/src/peripheralsPanel.ts` — "Held by".
+- [x] `Web/studio/src/project.ts` — `ownership` in `applyPeripheralChange` and `setSceneSetting`.
+- [x] `Web/studio/src/deviceMenu.ts` — `deviceMenuItems`.
+- [x] `Web/studio/src/testPanel.ts` — Devices rows, `holdingText`.
+- [x] `Web/studio/src/main.ts` — preview rig, device menu, drop of a free device.
+- [x] `Web/packages/pear-runtime/test/rig.test.ts`, `Web/packages/pear-runtime/test/runtime.test.ts`, `Web/packages/pear-sim/test/sim.test.ts`, `Web/studio/test/peripherals.test.ts`, `Web/studio/test/authoring.test.ts`, `Web/studio/test/play.test.ts`, `Web/studio/test/testPanel.test.ts`.
