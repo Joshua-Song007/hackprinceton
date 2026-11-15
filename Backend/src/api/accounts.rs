@@ -3,12 +3,17 @@
 // Default here: dev sign-in by (provider, subject), enabled only when PEAR_DEV_SIGNIN=1, issuing an
 // opaque random bearer token kept in server memory (lost on restart, single instance). Replace the
 // `signin` handler with a real provider check (Apple identity token) later; `authenticate` stays.
+// The passwordless path accepts only provider "dev". Provider "developer" is the team's password login
+// (argon2id hash in accounts.password_hash, role "developer"); those accounts exist only through the
+// `pear-backend create-developer` CLI and sign-in never creates one.
 // Runtime sqlx via db.rs only. No new crates: token randomness comes from std's OS-seeded RandomState.
 
 use std::collections::HashMap;
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
+use argon2::password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString};
+use argon2::Argon2;
 use axum::extract::State;
 use axum::http::{header, HeaderMap, StatusCode};
 use axum::routing::{get, post};
@@ -122,6 +127,7 @@ pub fn test_token(account_id: &str) -> String {
         provider: "dev".into(),
         subject: "s".into(),
         display_name: "n".into(),
+        role: "player".into(),
         created_at: "t".into(),
     })
 }
@@ -130,12 +136,16 @@ fn dev_signin_enabled(flag: Option<&str>) -> bool {
     flag == Some("1")
 }
 
-#[derive(Debug, Deserialize)]
+/// No `Debug`: `password` must never end up in a log line.
+#[derive(Deserialize)]
 pub struct SignInRequest {
     pub provider: String,
     pub subject: String,
     #[serde(default)]
     pub display_name: String,
+    /// Only read for provider "developer".
+    #[serde(default)]
+    pub password: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -148,12 +158,90 @@ fn valid_field(s: &str) -> bool {
     !s.trim().is_empty() && s.len() <= MAX_FIELD_LEN
 }
 
+/// Failed developer sign-ins all take this long, so timing does not tell a wrong password from an unknown user.
+const DEVELOPER_FAIL_DELAY: Duration = Duration::from_millis(400);
+const MAX_PASSWORD_LEN: usize = 1024;
+
+/// argon2id (the `argon2` crate default) PHC string with a fresh random salt.
+pub fn hash_password(password: &str) -> Result<String, String> {
+    let mut salt = [0u8; 16];
+    getrandom::fill(&mut salt).map_err(|e| e.to_string())?;
+    let salt = SaltString::encode_b64(&salt).map_err(|e| e.to_string())?;
+    Argon2::default()
+        .hash_password(password.as_bytes(), &salt)
+        .map(|h| h.to_string())
+        .map_err(|e| e.to_string())
+}
+
+pub fn verify_password(password: &str, phc: &str) -> bool {
+    PasswordHash::new(phc).is_ok_and(|h| Argon2::default().verify_password(password.as_bytes(), &h).is_ok())
+}
+
+/// Username 3-32 chars of `[a-z0-9_-]`, password at least 12 chars.
+pub fn check_developer_input(username: &str, password: &str) -> Result<(), &'static str> {
+    if !(3..=32).contains(&username.len()) || !username.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_' || b == b'-') {
+        return Err("username must be 3-32 characters of a-z 0-9 _ -");
+    }
+    if password.chars().count() < 12 {
+        return Err("password must be at least 12 characters");
+    }
+    Ok(())
+}
+
+/// The `create-developer` CLI: creates the developer account or resets its password and display name.
+pub async fn create_developer(db: &db::Db, username: &str, display_name: &str, password: &str) -> Result<Account, String> {
+    check_developer_input(username, password).map_err(String::from)?;
+    if !valid_field(display_name) {
+        return Err("display name must be 1-256 characters".into());
+    }
+    let hash = hash_password(password)?;
+    db::upsert_developer(db, username, display_name.trim(), &hash).await.map_err(|e| e.to_string())
+}
+
+async fn developer_signin(state: AppState, req: SignInRequest) -> Result<Json<SignInResponse>, StatusCode> {
+    let started = Instant::now();
+    if !valid_field(&req.subject) || req.password.len() > MAX_PASSWORD_LEN {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+    let Some(pool) = state.db.as_ref() else {
+        return Err(StatusCode::SERVICE_UNAVAILABLE);
+    };
+    let creds = db::developer_credentials(pool, &req.subject).await.map_err(|e| {
+        eprintln!("signin: db error: {e}");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+    let account = match creds {
+        Some((account, hash)) => {
+            let password = req.password;
+            let ok = tokio::task::spawn_blocking(move || verify_password(&password, &hash)).await.unwrap_or(false);
+            ok.then_some(account)
+        }
+        None => None,
+    };
+    match account {
+        Some(account) => {
+            let token = store_session(account.clone());
+            Ok(Json(SignInResponse { token, account }))
+        }
+        None => {
+            tokio::time::sleep_until((started + DEVELOPER_FAIL_DELAY).into()).await;
+            Err(StatusCode::UNAUTHORIZED)
+        }
+    }
+}
+
 async fn signin(
     State(state): State<AppState>,
     Json(req): Json<SignInRequest>,
 ) -> Result<Json<SignInResponse>, StatusCode> {
+    if req.provider == "developer" {
+        return developer_signin(state, req).await;
+    }
     if !dev_signin_enabled(std::env::var("PEAR_DEV_SIGNIN").ok().as_deref()) {
         return Err(StatusCode::FORBIDDEN);
+    }
+    if req.provider != "dev" {
+        return Err(StatusCode::BAD_REQUEST);
     }
     if !valid_field(&req.provider)
         || !valid_field(&req.subject)
@@ -242,6 +330,7 @@ mod tests {
             provider: "dev".into(),
             subject: "s".into(),
             display_name: "n".into(),
+            role: "player".into(),
             created_at: "t".into(),
         }
     }
@@ -317,6 +406,26 @@ mod tests {
         assert!(!valid_field("  "));
         assert!(!valid_field(&"x".repeat(MAX_FIELD_LEN + 1)));
         assert!(valid_field("apple"));
+    }
+
+    #[test]
+    fn password_hash_round_trip() {
+        let h = hash_password("correct horse battery").unwrap();
+        assert!(h.starts_with("$argon2id$"), "{h}");
+        assert!(verify_password("correct horse battery", &h));
+        assert!(!verify_password("correct horse batterz", &h));
+        assert!(!verify_password("x", "not a phc string"));
+        assert_ne!(h, hash_password("correct horse battery").unwrap()); // fresh salt each time
+    }
+
+    #[test]
+    fn developer_input_rules() {
+        assert!(check_developer_input("ann_b-2", "twelve chars!").is_ok());
+        assert!(check_developer_input("ab", "twelve chars!").is_err());
+        assert!(check_developer_input(&"a".repeat(33), "twelve chars!").is_err());
+        assert!(check_developer_input("Ann", "twelve chars!").is_err());
+        assert!(check_developer_input("ann.b", "twelve chars!").is_err());
+        assert!(check_developer_input("ann", "short").is_err());
     }
 
     async fn request(raw: &str) -> String {

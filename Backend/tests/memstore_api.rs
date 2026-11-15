@@ -31,7 +31,7 @@ async fn sign_in(addr: std::net::SocketAddr, subject: &str) -> String {
         "POST",
         "/api/accounts/signin",
         None,
-        Some(&json!({"provider": "test", "subject": subject, "display_name": subject})),
+        Some(&json!({"provider": "dev", "subject": subject, "display_name": subject})),
     )
     .await;
     assert_eq!(st, 200, "signin: {body}");
