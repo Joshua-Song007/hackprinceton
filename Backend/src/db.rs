@@ -37,33 +37,38 @@ pub fn connect_lazy(url: &str) -> DbResult<PgPool> {
 /// 0005_developer.sql only adds columns, so it is skipped when `accounts.role` already exists.
 /// 0006_sessions.sql is skipped when the `sessions` table already exists.
 pub async fn migrate(pool: &PgPool) -> DbResult<()> {
+    // One transaction under an advisory lock: two processes (or parallel tests) migrating a fresh database would
+    // otherwise both see a table missing and race on CREATE. Released at commit.
+    let mut tx = pool.begin().await?;
+    sqlx::query("SELECT pg_advisory_xact_lock(7254)").execute(&mut *tx).await?;
     for (table, sql) in [("accounts", MIGRATION_0001), ("plugins", MIGRATION_0002), ("plugin_versions", MIGRATION_0003), ("friendships", MIGRATION_0004)] {
         let exists: bool = sqlx::query("SELECT to_regclass($1) IS NOT NULL")
             .bind(format!("public.{table}"))
-            .fetch_one(pool)
+            .fetch_one(&mut *tx)
             .await?
             .try_get(0)?;
         if !exists {
-            sqlx::raw_sql(sql).execute(pool).await?;
+            sqlx::raw_sql(sql).execute(&mut *tx).await?;
         }
     }
     let has_role: bool = sqlx::query(
         "SELECT EXISTS (SELECT 1 FROM information_schema.columns \
          WHERE table_schema = 'public' AND table_name = 'accounts' AND column_name = 'role')",
     )
-    .fetch_one(pool)
+    .fetch_one(&mut *tx)
     .await?
     .try_get(0)?;
     if !has_role {
-        sqlx::raw_sql(MIGRATION_0005).execute(pool).await?;
+        sqlx::raw_sql(MIGRATION_0005).execute(&mut *tx).await?;
     }
     let has_sessions: bool = sqlx::query("SELECT to_regclass('public.sessions') IS NOT NULL")
-        .fetch_one(pool)
+        .fetch_one(&mut *tx)
         .await?
         .try_get(0)?;
     if !has_sessions {
-        sqlx::raw_sql(MIGRATION_0006).execute(pool).await?;
+        sqlx::raw_sql(MIGRATION_0006).execute(&mut *tx).await?;
     }
+    tx.commit().await?;
     Ok(())
 }
 

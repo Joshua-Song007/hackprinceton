@@ -197,6 +197,7 @@ async fn published_script_runs_live_and_debug_sees_it() {
     assert_eq!(snapshot["players"], json!([]));
 
     let mut play = ws_connect(addr, &format!("/play/{gid}?token={owner}")).await.expect("play upgrade");
+    assert_eq!(play.recv().await["name"], "_welcome");
     assert!(debug.recv_kind("join").await["player"].is_string());
     let log = debug.recv_kind("log").await;
     assert!(log["msg"].as_str().unwrap().starts_with("joined "), "{log}");
