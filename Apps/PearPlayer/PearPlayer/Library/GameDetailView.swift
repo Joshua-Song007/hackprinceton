@@ -188,7 +188,7 @@ struct GameDetailView: View {
                 if case .working = play {
                     ProgressView().tint(PearTheme.onAccent).frame(minWidth: 200)
                 } else {
-                    Label("Host a lobby", systemImage: "plus.circle.fill")
+                    Label(model.refereeDevice ? "Host a match on this screen" : "Host a lobby", systemImage: "plus.circle.fill")
                         .font(PearTheme.sans(18, .semibold))
                         .frame(minWidth: 220, minHeight: 52)
                 }
@@ -209,7 +209,7 @@ struct GameDetailView: View {
                     .background(PearTheme.bgField, in: RoundedRectangle(cornerRadius: PearTheme.radiusControl))
                     .overlay(RoundedRectangle(cornerRadius: PearTheme.radiusControl).strokeBorder(PearTheme.lineControl))
                     .accessibilityLabel("Lobby code")
-                Button("Join with code") {
+                Button(model.refereeDevice ? "Watch with code" : "Join with code") {
                     if let code = QDLobby.normalize(typedCode) { Task { await playTapped(lobby: code) } }
                 }
                 .buttonStyle(PearSecondaryButtonStyle())
@@ -242,7 +242,7 @@ struct GameDetailView: View {
                 }
                 .buttonStyle(.plain)
                 .disabled(isWorking)
-                .accessibilityLabel("Join lobby \(l.code), \(l.players.count) players")
+                .accessibilityLabel("\(model.refereeDevice ? "Watch" : "Join") lobby \(l.code), \(l.players.count) players")
             }
             result
         }

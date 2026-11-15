@@ -1,5 +1,8 @@
 import Foundation
 import Observation
+#if canImport(UIKit)
+import UIKit
+#endif
 import PearCloud
 import PearLibrary
 import PearRuntime
@@ -183,7 +186,7 @@ final class PlayerModel {
             #if os(iOS)
             guard let session = QuickDrawSession(
                 base: client.baseURL, gameId: result.game.gameId, token: token, version: result.game.version,
-                lobby: lobby, title: entry.title)
+                lobby: lobby, title: entry.title, isReferee: refereeDevice)
             else { throw CloudError.invalidResponse }
             quickDraw = session
             return
@@ -198,6 +201,15 @@ final class PlayerModel {
         let session = try GameSession(game: result.game, playerId: account.id, channel: channel)
         session.start()
         activeSession = session
+    }
+
+    /// An iPad hosts Quick Draw as the referee on its big screen; the iPhones are the guns.
+    var refereeDevice: Bool {
+        #if os(iOS)
+        UIDevice.current.userInterfaceIdiom == .pad
+        #else
+        false
+        #endif
     }
 
     func leaveGame() {
