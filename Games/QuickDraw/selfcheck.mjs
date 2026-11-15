@@ -90,20 +90,15 @@ function make() {
   assert.equal(h.ctx.state.phase, "roundOver"); // stale readies do not start the next round
 }
 
-// Cue timestamp is preannounced at arming with the same value as the timer delay, state, and fire event.
+// Arming schedules the cue 2 to 6 s out; a raise before the cue is a foul whatever time it reports.
 {
   const h = make(); h.lobby();
   h.ready("p1"); h.ready("p2"); h.tick();
   const arm = h.fired.find((f) => f[0] === "arming")[1], t = h.timers.at(-1);
   assert.equal(arm.round, h.ctx.state.round);
-  assert.equal(arm.fireAt, Math.round(1_000_000 + t.ms)); // ctx.now() + scheduled delay
-  assert.ok(t.ms >= 2000 && arm.fireAt - 1_000_000 >= 2000); // real lead
-  assert.equal(h.fired.filter((f) => f[0] === "state").at(-1)[1].fireAt, arm.fireAt);
-  h.raised("p1", 0); // before the cue timestamp: foul, even with a plausible time
+  assert.ok(t.ms >= 2000 && t.ms <= 6000);
+  h.raised("p1", 0); // before the cue: foul, even with a plausible time
   assert.deepEqual([h.results().at(-1).winnerId, h.results().at(-1).reason], ["p2", "foul"]);
-  assert.equal(h.ctx.state.fireAt, null);
-  const g = make(); g.lobby(); g.toFire();
-  assert.equal(g.fired.filter((f) => f[0] === "fire").at(-1)[1].fireAt, g.fired.find((f) => f[0] === "arming")[1].fireAt);
 }
 
 // Foul: raise while arming, and an early (null) raise after the cue state.

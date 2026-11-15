@@ -1,4 +1,4 @@
-// Publishes Games/QuickDraw to a Pear backend and prints the phone/iPad URLs.
+// Publishes Games/QuickDraw to a Pear backend and prints the two phone URLs.
 // Usage: node Deploy/publish-quickdraw.mjs [https://host] [gameId]   (needs PEAR_DEV_SIGNIN=1 on the server)
 // With a gameId it publishes a new version of that game instead of creating one.
 import fs from "node:fs";
@@ -34,6 +34,5 @@ const v = await api("POST", `/api/games/${id}/versions`, owner.token, {
   run_mode: scene.runMode,
 });
 console.log(`game ${id} version ${v.version}`);
-console.log(`iPad:    ${base}/qd-ref.html?game=${id}&name=Referee`);
 console.log(`phone 1: ${base}/qd-phone.html?game=${id}&name=Player1`);
 console.log(`phone 2: ${base}/qd-phone.html?game=${id}&name=Player2`);

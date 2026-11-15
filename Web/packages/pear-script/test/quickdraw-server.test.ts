@@ -77,7 +77,7 @@ describe('Quick Draw server script', () => {
     h.tick();
     expect(h.lastState().phase).toBe('arming');
     const arm = h.timers.filter((t) => t.live).at(-1)!;
-    expect(h.events('arming')).toEqual([{ round: 1, fireAt: expect.any(Number) }]);
+    expect(h.events('arming')).toEqual([{ round: 1 }]);
     h.raised('p1', null);
     expect(arm.live).toBe(false);
     expect(h.events('roundResult')).toEqual([
@@ -91,7 +91,7 @@ describe('Quick Draw server script', () => {
     h.ready('p2');
     h.tick();
     h.tick();
-    expect(h.events('fire')).toEqual([{ round: 2, fireAt: expect.any(Number) }]);
+    expect(h.events('fire')).toEqual([{ round: 2 }]);
     h.raised('p2', 300);
     expect(h.lastState().phase).toBe('fire'); // waiting for p1's report
     h.raised('p1', 250);
@@ -197,13 +197,5 @@ describe('Quick Draw server script', () => {
     expect(h.lastState()).toMatchObject({ phase: 'lobby', queue: ['q2'] });
     expect(h.lastState().players.filter((p: any) => p.role === 'phone').map((p: any) => p.id)).toEqual(['p1', 'q1']);
     expect(h.lastState().players.map((p: any) => p.ready)).toEqual([false, false, false]);
-  });
-
-  it('keeps pos in state only', () => {
-    const h = twoPhones();
-    const before = h.fired.length;
-    h.s.remote('p1', 'pos', { lat: 40.35, lon: -74.65, acc: 12 });
-    expect(h.fired.length).toBe(before);
-    expect(JSON.parse(h.s.stateJSON()).players.p1.pos).toMatchObject({ lat: 40.35, lon: -74.65, acc: 12 });
   });
 });

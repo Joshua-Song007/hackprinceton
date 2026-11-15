@@ -22,7 +22,6 @@ export default (function () {
       ctx.state.timer = null;
       ctx.state.queue = []; // phone ids waiting for a slot, FIFO; their role is "queued" and they cannot ready or draw
       ctx.state.reactions = []; // [{id, ms}] in arrival order, current round only
-      ctx.state.fireAt = null; // server unix ms of the cue, announced when arming starts; null outside arming/fire
     }
   }
 
@@ -54,7 +53,6 @@ export default (function () {
       phase: ctx.state.phase,
       round: ctx.state.round,
       matchRound: ctx.state.matchRound,
-      fireAt: ctx.state.fireAt,
       scores: ctx.state.scores,
       queue: ctx.state.queue.slice(),
       players: Object.keys(ctx.state.players).map(function (id) {
@@ -94,7 +92,6 @@ export default (function () {
   function backToLobby(ctx) {
     clearTimer(ctx);
     ctx.state.phase = "lobby";
-    ctx.state.fireAt = null;
     ctx.state.round += 1;
     ctx.state.matchRound = 0;
     ctx.state.reactions = [];
@@ -116,7 +113,6 @@ export default (function () {
     ctx.state.round += 1;
     ctx.state.matchRound += 1;
     ctx.state.phase = "countdown";
-    ctx.state.fireAt = null;
     ctx.state.reactions = [];
     ctx.state.timer = ctx.after(COUNTDOWN_MS, "countdown", { round: ctx.state.round });
     ctx.remote.fireAll("countdown", { round: ctx.state.round, matchRound: ctx.state.matchRound, ms: COUNTDOWN_MS });
@@ -125,15 +121,12 @@ export default (function () {
   function startArming(ctx) {
     ctx.state.phase = "arming";
     const delay = ARM_MIN_MS + Math.random() * (ARM_MAX_MS - ARM_MIN_MS);
-    // ctx.now() is Date.now() (server unix ms, same epoch as the _time reply), so clients map fireAt to local time.
-    ctx.state.fireAt = Math.round(ctx.now() + delay);
     ctx.state.timer = ctx.after(delay, "arm", { round: ctx.state.round });
-    ctx.remote.fireAll("arming", { round: ctx.state.round, fireAt: ctx.state.fireAt });
+    ctx.remote.fireAll("arming", { round: ctx.state.round });
   }
 
   function finishRound(ctx, winner, reason) {
     clearTimer(ctx);
-    ctx.state.fireAt = null;
     const phones = ids(ctx, "phone");
     const reactionMs = {};
     phones.forEach(function (id) { reactionMs[id] = null; });
@@ -167,7 +160,7 @@ export default (function () {
     onPlayerJoin(ctx, player) {
       init(ctx);
       // role stays null until the client says which it is; joining mid-match leaves it null (spectating).
-      ctx.state.players[player.id] = { name: player.name || player.id, role: null, ready: false, pos: null };
+      ctx.state.players[player.id] = { name: player.name || player.id, role: null, ready: false };
       broadcast(ctx);
     },
 
@@ -237,12 +230,6 @@ export default (function () {
             }
           }
         } else return;
-      } else if (name === "pos") {
-        // Position-streaming demo: kept in state only, never forwarded to other clients.
-        const lat = Number(data.lat), lon = Number(data.lon), acc = Number(data.acc);
-        if (me.role !== "phone" || !isFinite(lat) || !isFinite(lon)) return;
-        me.pos = { lat: lat, lon: lon, acc: isFinite(acc) ? acc : 0, at: ctx.now() };
-        return;
       } else return;
       broadcast(ctx);
     },
@@ -255,7 +242,7 @@ export default (function () {
       } else if (tag === "arm" && ctx.state.phase === "arming") {
         ctx.state.phase = "fire";
         ctx.state.timer = ctx.after(GIVE_UP_MS, "giveup", { round: ctx.state.round });
-        ctx.remote.fireAll("fire", { round: ctx.state.round, fireAt: ctx.state.fireAt });
+        ctx.remote.fireAll("fire", { round: ctx.state.round });
       } else if (tag === "resolve" && ctx.state.phase === "fire") {
         ctx.state.timer = null;
         finishRound(ctx, fastest(ctx), "fast");

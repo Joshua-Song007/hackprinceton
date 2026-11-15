@@ -1,4 +1,4 @@
-// Live smoke: a ref and two simulated phones play Quick Draw to matchOver on a deployed backend.
+// Live smoke: two simulated phones play Quick Draw to matchOver on a deployed backend (no referee: both Ready, the server counts down).
 // Usage: node Deploy/smoke-quickdraw.mjs <https://host> <gameId>   (Node 22+, PEAR_DEV_SIGNIN=1)
 const [base = "https://155-138-208-146.sslip.io", game] = process.argv.slice(2);
 if (!game) throw new Error("usage: node Deploy/smoke-quickdraw.mjs <host> <gameId>");
@@ -30,26 +30,21 @@ const until = (c, pred, what, ms = 15000) => new Promise((res, rej) => {
   c.onEvent = (f) => { prev?.(f); if (pred(f)) { clearTimeout(t); c.onEvent = prev; res(f); } };
 });
 
-const ref = await join("Referee", "ref");
 const p1 = await join("Smoke1", "phone");
 const p2 = await join("Smoke2", "phone");
-// phones answer every fire with a reaction; p1 is always faster
+// Each phone taps Ready once per round it sees in lobby/roundOver, and answers every fire; p1 is always faster.
 for (const [p, ms] of [[p1, 180], [p2, 260]]) {
-  p.onEvent = (f) => { if (f.name === "fire") setTimeout(() => p.send("raised", { sinceFireMs: ms }), 20); };
+  let readied = null;
+  p.onEvent = (f) => {
+    if (f.name === "state" && (f.data.phase === "lobby" || f.data.phase === "roundOver") && readied !== f.data.round
+      && f.data.players?.filter((x) => x.role === "phone").length === 2) { readied = f.data.round; p.send("ready", { round: f.data.round }); }
+    if (f.name === "fire") setTimeout(() => p.send("raised", { round: f.data.round, sinceFireMs: ms }), 20);
+  };
 }
-await until(ref, (f) => f.name === "state" && f.data.players?.filter((x) => x.role === "phone").length === 2, "two phones in state");
-p1.send("ready"); p2.send("ready");
-for (let round = 1; ; round++) {
-  await until(ref, (f) => f.name === "state" && (f.data.phase === "ready" || f.data.phase === "roundOver") || f.name === "matchOver", `ready for round ${round}`);
-  if (ref.events.some((f) => f.name === "matchOver")) break;
-  ref.events = ref.events.filter((f) => f.name !== "state");
-  ref.send("start");
-  const rr = await until(ref, (f) => f.name === "roundResult" && f.data.round === round, `roundResult ${round}`);
-  console.log(`round ${round}: winner ${rr.data.winnerId === p1.id ? "Smoke1" : "Smoke2"} (${rr.data.reason})`, JSON.stringify(rr.data.reactionMs));
-  if (round > 5) throw new Error("no matchOver after 5 rounds");
-}
-const mo = ref.events.find((f) => f.name === "matchOver");
+const mo = await until(p1, (f) => f.name === "matchOver", "matchOver", 90000);
+for (const rr of p1.events.filter((f) => f.name === "roundResult"))
+  console.log(`round ${rr.data.matchRound}: winner ${rr.data.winnerId === p1.id ? "Smoke1" : rr.data.winnerId === p2.id ? "Smoke2" : "none"} (${rr.data.reason})`, JSON.stringify(rr.data.reactionMs));
 if (mo.data.winnerId !== p1.id) throw new Error("expected Smoke1 to win");
 console.log("matchOver: Smoke1 wins", JSON.stringify(mo.data.scores));
-for (const c of [ref, p1, p2]) c.ws.close();
+for (const c of [p1, p2]) c.ws.close();
 console.log("SMOKE PASS");

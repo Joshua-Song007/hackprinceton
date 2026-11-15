@@ -1,5 +1,6 @@
 // Play for a game that has nothing to draw (Quick Draw): two real phones join the published game, so Studio simulates no players and mounts no 3D scene.
 import type { EntityDescription, SceneDescription } from '@pear/runtime';
+import { publishLinks } from './publishView';
 import { announce, button, el, openSheet } from './ui';
 
 export interface PhoneLink { label: string; url: string }
@@ -13,10 +14,7 @@ export function isPhoneOnly(scene: SceneDescription): boolean {
 
 /** The two phone pages of one published version of the game (the version pins which scripts the session runs). */
 export function phoneLinks(serverUrl: string, gameId: string, version: number): PhoneLink[] {
-  // shortcut: duplicates publishLinks in #176's publishView.ts so this commit builds alone; switch to it once #176 is merged.
-  const base = (serverUrl || globalThis.location?.origin || '').replace(/\/+$/, '');
-  const game = encodeURIComponent(gameId);
-  return [1, 2].map((n) => ({ label: `Phone ${n}`, url: `${base}/qd-phone.html?game=${game}&name=Player${n}&version=${version}` }));
+  return publishLinks(serverUrl, gameId).map((l) => ({ ...l, url: `${l.url}&version=${version}` }));
 }
 
 // A phone cannot open localhost, and iOS grants motion access only on HTTPS.
