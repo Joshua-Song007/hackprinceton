@@ -52,12 +52,13 @@ PEARUI v1 (ui.json): server-driven native UI; the same JSON renders on iOS and w
     ui: {"type":"column","children":[
       {"type":"sensor","kind":"location","event":"location","hz":1,"id":"gps"},
       {"type":"map","markers":"ev.view.markers","follow":"me"},
-      {"type":"text","value":"{{ev.view.hint}}"},
-      {"type":"button","label":"Tag","action":{"send":"tag"},"if":"ev.view.role == 'hunter'"},
-      {"type":"effect","id":"near","on":"ev.view.hint","haptic":"heavy"}]}
+      {"type":"text","value":"{{ev.you.hint}}"},
+      {"type":"button","label":"Tag","action":{"send":"tag"},"if":"ev.you.role == 'hunter'"},
+      {"type":"effect","id":"near","on":"ev.you.hint","haptic":"heavy"}]}
     server (JS): const R=6371000,rad=d=>d*Math.PI/180;
       const haversine=(a,b)=>{const h=Math.sin(rad(b.lat-a.lat)/2)**2+Math.cos(rad(a.lat))*Math.cos(rad(b.lat))*Math.sin(rad(b.lng-a.lng)/2)**2;return 2*R*Math.asin(Math.sqrt(h))};
       on "location" {lat,lng,acc}: store per player; hint = d<15?"Tag range":d<50?"Close":"Cold" (d metres to nearest runner); on "tag" accept only if haversine<=15.
+      Per-player secrets (role, hint, other players' positions): ctx.remote.fire(playerId,"you",{role,hint,...}) and read ev.you.* in the UI; fireAll("view",...) is seen by everyone, so keep only public facts there.
     Markers are [{lat,lng,label,tone}] (tone good=green, bad=red, else orange). One location stream per screen.
 
 SCENARIO (run_scenario: headless, real sockets against the hosted server)
