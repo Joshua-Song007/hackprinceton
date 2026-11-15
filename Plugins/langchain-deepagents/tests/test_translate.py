@@ -53,6 +53,17 @@ def test_scripts_path_traversal_is_not_a_script_write(tmp_path):
     (tmp_path / "x.js").write_text("x")
     assert not translate_module._in_scripts(tmp_path, "/scripts/../x.js")
     assert translate_module._in_scripts(tmp_path, "/scripts/a.js")
+    assert translate_module._in_scripts(tmp_path, "scripts/a.js")
+    assert not translate_module._in_scripts(tmp_path, "scripts/../x.js")
+
+
+def test_write_without_leading_slash_emits_file_written(tmp_path):
+    (tmp_path / "scripts").mkdir()
+    (tmp_path / "scripts" / "a.client.js").write_text("y", encoding="utf-8")
+    state = new_state()
+    events = translate(updates((), ai(("write_file", {"file_path": "scripts/a.client.js"}, "w1"))), tmp_path, state)
+    events += translate(updates((), ToolMessage(content="ok", tool_call_id="w1", name="write_file")), tmp_path, state)
+    assert events == [{"type": "file_written", "path": "scripts/a.client.js", "content": "y"}]
 
 
 def test_openai_and_gemini_stream_shapes(tmp_path):

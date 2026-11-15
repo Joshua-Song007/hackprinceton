@@ -13,3 +13,13 @@ Backend/target/
 .env
 
 .impeccable/hook.cache.json
+
+# SSH keys never belong in the repo (it syncs through OneDrive); the Vultr key lives at ~/.ssh/pear_vultr, host alias `pear-vultr` in ~/.ssh/config
+pear_vultr
+pear_vultr.pub
+*.pem
+id_ed25519*
+id_rsa*
+
+# Local agent scratch (subagent briefs, reports)
+.pi/

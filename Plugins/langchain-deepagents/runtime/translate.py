@@ -52,7 +52,7 @@ def _status(name: str, status: str, detail: str) -> dict:
 
 def _in_scripts(project_dir: Path, file_path) -> bool:
     """True for files the panel applies: anything under /scripts/ or /assets/, /scene.json, /ui.json, /controller.json, /cues.json, and /instructions.json (a proposal)."""
-    if not isinstance(file_path, str) or not file_path.startswith("/"):
+    if not isinstance(file_path, str):
         return False
     target = (project_dir / file_path.lstrip("/")).resolve()
     return (target in [(project_dir / name).resolve() for name in GAME_FILES]
