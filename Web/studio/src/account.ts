@@ -1,6 +1,6 @@
 // Account: dev sign-in (provider "dev", subject = name), server URL, game picker, Publish with the version shown.
 // Only game content goes to the server (Network Rule); the token is kept in localStorage, or in memory for test-player tabs.
-import { ApiError, CloudClient, type Account, type Game, type GameVersion } from '@pear/cloud';
+import { ApiError, CloudClient, type Account, type Game, type GameManifest, type GameVersion } from '@pear/cloud';
 import type { PreferenceStore } from './preferences';
 import { Project, type ProjectSnapshot } from './project';
 import { openPublishSheet } from './publishView';
@@ -37,6 +37,8 @@ export type PublishStepState = 'running' | 'done' | 'error';
 
 /** What the server confirmed after the verify step. */
 export interface PublishConfirmation { gameId: string; version: number; runMode: string; serverUrl: string; publishedAt: number }
+/** What the publish sheet adds to the project's version: the ui.json asset and `metadata.manifest`, which `Project.toVersion` does not carry. */
+export interface PublishExtra { assets?: Record<string, unknown>; metadata?: { manifest?: GameManifest } }
 export type PublishOutcome = { ok: true; confirmation: PublishConfirmation } | { ok: false; step: PublishStepId; reason: string };
 
 /** JSON with object keys sorted, so a server that reorders keys (Postgres jsonb) still compares equal. */
@@ -180,9 +182,10 @@ export class AccountController {
   }
 
   /** Publishes the project as a new version of the selected game and records the version on the project. */
-  async publish(project: Project): Promise<GameVersion> {
+  async publish(project: Project, extra: PublishExtra = {}): Promise<GameVersion> {
     if (!this.gameId) throw new Error('Pick or create a game first.');
-    const body = project.toVersion();
+    const base = project.toVersion();
+    const body = { ...base, assets: { ...base.assets, ...extra.assets }, metadata: { ...base.metadata, ...extra.metadata } };
     const version = await this.client.publish(this.gameId, body);
     project.setCloud(this.gameId, version.version);
     project.markSaved();
@@ -205,7 +208,7 @@ export class AccountController {
    * Publish, then prove it: re-fetch the version the server stored and compare its number and scene with what was sent.
    * Never throws; the failing step and a plain-language reason come back in the outcome.
    */
-  async publishVerified(project: Project, onStep: (step: PublishStepId, state: PublishStepState) => void = () => {}): Promise<PublishOutcome> {
+  async publishVerified(project: Project, onStep: (step: PublishStepId, state: PublishStepState) => void = () => {}, extra: PublishExtra = {}): Promise<PublishOutcome> {
     let step: PublishStepId = 'signIn';
     const run = async <T>(id: PublishStepId, work: () => Promise<T>): Promise<T> => {
       step = id;
@@ -225,7 +228,7 @@ export class AccountController {
       });
       const gameId = this.gameId!;
       const sentScene = project.toVersion().scene;
-      const published = await run('upload', () => this.publish(project));
+      const published = await run('upload', () => this.publish(project, extra));
       const stored = await run('verify', async () => {
         const v = await this.client.fetchVersion(gameId, published.version);
         if (v.version !== published.version) throw new Error(`Verification failed: the server returned version ${v.version}, not ${published.version}.`);
