@@ -42,8 +42,9 @@ export default (function () {
     const phones = ids(ctx, "phone");
     const p = ctx.state.phase;
     if (p === "lobby") {
-      if (phones.length < 2) return "waiting for " + (2 - phones.length) + " more phone" + (phones.length === 0 ? "s" : "");
-      return "waiting for both phones to calibrate";
+      if (phones.length < 2) return "waiting for " + (2 - phones.length) + " phone" + (phones.length === 0 ? "s" : "") + " to join";
+      const slow = phones.filter(function (id) { return !ctx.state.players[id].ready; }).map(function (id) { return ctx.state.players[id].name; });
+      return "waiting for " + slow.join(" and ") + " to tap Ready";
     }
     if (p === "countdown") return "get ready";
     if (p === "arming") return "hold still";
@@ -60,6 +61,7 @@ export default (function () {
       scores: ctx.state.scores,
       queue: ctx.state.queue.slice(),
       phones: ids(ctx, "phone"),
+      referees: ids(ctx, "referee"),
       players: Object.keys(ctx.state.players).map(function (id) {
         const p = ctx.state.players[id];
         const idle = ctx.state.idle && ctx.state.idle.id === id ? ctx.state.idle.at : null;
@@ -253,6 +255,8 @@ export default (function () {
         } else if (data.role === "phone") {
           me.role = "queued"; // commit() promotes it at once when it is first in line for a free slot
           ctx.state.queue.push(player.id);
+        } else if (data.role === "referee") {
+          me.role = "referee"; // master screen: never queued, never a slot; every phone-only handler below already rejects it
         } else return;
       } else if (name === "ready") {
         // data.round must be the round the phone last saw in "state": a ready from before an invalidation is stale.

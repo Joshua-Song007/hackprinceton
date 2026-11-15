@@ -76,7 +76,7 @@ describe('Quick Draw server script', () => {
   it('plays lobby, ready, auto countdown, foul, fast, match over, replay, then a leave returns to lobby', () => {
     const h = twoPhones();
     expect(h.lastState().phase).toBe('lobby');
-    expect(h.lastState().needs).toBe('waiting for both phones to calibrate');
+    expect(h.lastState().needs).toBe('waiting for Ann and Bo to tap Ready');
 
     h.ready('p1');
     expect(h.lastState().phase).toBe('lobby'); // one phone is not enough
@@ -142,7 +142,7 @@ describe('Quick Draw server script', () => {
     const countdown = h.timers.filter((t) => t.live).at(-1)!;
     h.s.leave('p1');
     expect(countdown.live).toBe(false);
-    expect(h.lastState()).toMatchObject({ phase: 'lobby', matchRound: 0, scores: { p2: 0 }, needs: 'waiting for 1 more phone' });
+    expect(h.lastState()).toMatchObject({ phase: 'lobby', matchRound: 0, scores: { p2: 0 }, needs: 'waiting for 1 phone to join' });
     expect(h.lastState().players.map((p: any) => p.ready)).toEqual([false]);
     expect(h.errors).toEqual([]);
   });
@@ -287,5 +287,29 @@ describe('Quick Draw server script', () => {
     expect(h.lastState()).toMatchObject({ phase: 'lobby', queue: ['q2'] });
     expect(h.lastState().players.filter((p: any) => p.role === 'phone').map((p: any) => p.id)).toEqual(['p1', 'q1']);
     expect(h.lastState().players.map((p: any) => p.ready)).toEqual([false, false, false]);
+  });
+
+  it('referee joins outside phones and queue, never blocks a match, cannot ready, and leaving does not reset', () => {
+    const h = make();
+    h.s.join('r', 'Ref');
+    h.s.remote('r', 'role', { role: 'referee' });
+    h.s.remote('r', 'role', { role: 'referee' }); // repeat is a no-op that still broadcasts
+    expect(h.lastState()).toMatchObject({ referees: ['r'], phones: [], queue: [], needs: 'waiting for 2 phones to join' });
+    expect(h.lastState().players[0].role).toBe('referee');
+    h.s.join('p1', 'Ann');
+    h.s.join('p2', 'Bo');
+    h.s.remote('p1', 'role', { role: 'phone' });
+    h.s.remote('p2', 'role', { role: 'phone' });
+    h.s.join('r2', 'Ref2');
+    h.s.remote('r2', 'role', { role: 'referee' });
+    expect(h.lastState()).toMatchObject({ referees: ['r', 'r2'], phones: ['p1', 'p2'], queue: [] });
+    h.ready('r'); // a referee cannot ready
+    h.ready('p1');
+    expect(h.lastState().needs).toBe('waiting for Bo to tap Ready');
+    h.ready('p2');
+    expect(h.lastState().phase).toBe('countdown');
+    h.s.leave('r');
+    expect(h.lastState()).toMatchObject({ phase: 'countdown', referees: ['r2'] });
+    expect(h.errors).toEqual([]);
   });
 });
