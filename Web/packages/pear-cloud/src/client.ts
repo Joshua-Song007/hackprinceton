@@ -21,6 +21,16 @@ export interface SignInResponse {
   token: string;
   account: Account;
 }
+export interface Instance {
+  game_id: string;
+  title?: string;
+  lobby: string;
+  version: number | null;
+  players: { id: string; name: string }[];
+  started_at: string;
+  last_activity_at: string;
+}
+
 export interface Game {
   id: string;
   owner_id: string;
@@ -268,6 +278,16 @@ export class CloudClient {
 
   fetchVersion(gameId: string, version: number | 'latest' = 'latest'): Promise<GameVersion> {
     return this.request('GET', `/api/games/${encodeURIComponent(gameId)}/versions/${version}`);
+  }
+
+  /** Developer-only list of live lobbies (401 signed out, 403 for players). */
+  listInstances(): Promise<Instance[]> {
+    return this.request('GET', '/api/instances');
+  }
+
+  /** Drops one player from a live lobby (404 when already gone). */
+  kickPlayer(gameId: string, lobby: string, playerId: string): Promise<void> {
+    return this.request('DELETE', `/api/instances/${encodeURIComponent(gameId)}/${encodeURIComponent(lobby)}/players/${encodeURIComponent(playerId)}`);
   }
 
   /** Player socket for `/play/{id}`. `version` pins a version; omitted means latest. */

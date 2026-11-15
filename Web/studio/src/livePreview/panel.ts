@@ -34,6 +34,15 @@ interface Device {
 
 export const livePreviewPanel = (account: AccountController): PanelSpec => ({ id: 'livePreview', title: 'Live Preview', create: () => createLivePreviewPanel(account) });
 
+/** Lobby hand-off from the Lobbies panel: picks the game, then the panel (open or about to open) connects to this lobby. */
+let pendingLobby: string | null = null;
+let handoff: (() => void) | null = null;
+export function openInLivePreview(account: AccountController, gameId: string, lobby: string): void {
+  pendingLobby = lobby;
+  if (account.gameId !== gameId) account.select(gameId);
+  else handoff?.();
+}
+
 export function createLivePreviewPanel(account: AccountController): PanelView {
   const root = el('div', { class: 'lp-root' });
   const terminal = new PreviewTerminal();
@@ -43,6 +52,11 @@ export function createLivePreviewPanel(account: AccountController): PanelView {
   });
   DEVICES.forEach((s) => map.addDevice(s.id, s.label, s.color, { lat: DEFAULT_CENTER.lat + s.offset.lat, lng: DEFAULT_CENTER.lng + s.offset.lng }));
 
+  const takePending = () => {
+    const l = pendingLobby && normalizeLobby(pendingLobby);
+    pendingLobby = null;
+    if (l) lobbyInput.value = l;
+  };
   const lobbyInput = el('input', { type: 'text', class: 'lp-lobby', value: randomLobby(), maxlength: 12, 'aria-label': 'Lobby code', spellcheck: 'false', autocomplete: 'off' }) as HTMLInputElement;
   const statusEl = el('span', { class: 'lp-status', role: 'status' });
   const connectBtn = button('Connect', () => connect());
@@ -244,10 +258,16 @@ export function createLivePreviewPanel(account: AccountController): PanelView {
     // Game switched while the panel is open: reconnect to the new game; a re-sign-in alone is not a reason to drop the lobby.
     if (account.gameId !== currentGame) {
       currentGame = account.gameId;
+      takePending();
       connect();
     } else setStatus();
   });
   let currentGame = account.gameId;
+  handoff = () => {
+    takePending();
+    connect();
+  };
+  takePending();
   connect();
 
   return {
@@ -255,6 +275,7 @@ export function createLivePreviewPanel(account: AccountController): PanelView {
     focus: () => lobbyInput.focus(),
     dispose() {
       disposed = true;
+      handoff = null;
       unsub();
       ro?.disconnect();
       teardown();
