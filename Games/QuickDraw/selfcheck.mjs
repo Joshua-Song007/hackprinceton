@@ -33,7 +33,8 @@ function make() {
     },
     // both ready -> countdown -> arming -> fire
     toFire() {
-      h.ready("p1"); h.ready("p2");
+      if (s.phase === "roundOver") { h.send("p1", "lowered"); h.send("p2", "lowered"); h.tick(); } // min display time over, both lowered: the next round starts by itself
+      else { h.ready("p1"); h.ready("p2"); }
       assert.equal(s.phase, "countdown");
       h.tick(); assert.equal(s.phase, "arming");
       h.tick(); assert.equal(s.phase, "fire");
@@ -131,7 +132,7 @@ function make() {
   h.tick();
   assert.deepEqual([h.results().at(-1).winnerId, h.results().at(-1).reason], [null, "tie"]);
   assert.equal(h.ctx.state.phase, "roundOver");
-  h.ready("p1"); h.ready("p2"); h.tick(); h.tick(); assert.equal(h.ctx.state.phase, "fire");
+  h.tick(); h.tick(); h.tick(); assert.equal(h.ctx.state.phase, "fire"); // next-round timer, countdown, arming
   game.onTimer(h.ctx, "giveup", { round: staleRound }); // stale token
   assert.equal(h.ctx.state.phase, "fire");
   h.raised("p1", 100); // report window replaces the give-up timer; one raise still resolves
@@ -221,6 +222,21 @@ function make() {
   h.join("z"); h.join("y"); h.send("z", "role", { role: "phone" }); h.send("y", "role", { role: "phone" });
   assert.deepEqual([h.ctx.state.players.z.role, h.ctx.state.players.y.role], ["phone", "queued"]);
   h.send("y", "role", { role: "phone" }); assert.deepEqual(h.ctx.state.queue, ["y"]);
+}
+
+// Idle kick, auto next round, raised tracking (details in Web/packages/pear-script/test/quickdraw-server.test.ts).
+{
+  const h = make(); h.lobby(); h.join("q"); h.send("q", "role", { role: "phone" });
+  h.ready("p1");
+  const t = h.timers.at(-1);
+  assert.equal(t.tag, "idle");
+  h.tick(); // p2 never readied: back of the queue, q promoted, p1 stays ready
+  assert.deepEqual([h.ctx.state.queue, h.ctx.state.players.q.role, h.ctx.state.players.p1.ready], [["p2"], "phone", true]);
+  h.ready("q"); h.tick(); h.tick(); h.raised("p1", 100); h.raised("q", 200);
+  assert.equal(h.ctx.state.players.p1.raised, true);
+  h.tick(); assert.equal(h.ctx.state.phase, "roundOver"); // minimum time over but both still raised
+  h.send("p1", "lowered"); assert.equal(h.ctx.state.phase, "roundOver");
+  h.send("q", "lowered"); assert.equal(h.ctx.state.phase, "countdown"); // no re-tap
 }
 
 console.log("QuickDraw selfcheck passed");

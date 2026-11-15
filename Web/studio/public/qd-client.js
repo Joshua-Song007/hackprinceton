@@ -1,10 +1,14 @@
 // Shared helper for qd-phone.html: dev sign-in, /play/{game} socket, role event,
-// auto-reconnect. Page URL: ?game=<gameId>&name=<display name>[&version=<n>] (no version: the latest published one).
+// auto-reconnect. Page URL: ?game=<gameId>&name=<display name>[&version=<n>][&lobby=CODE] (no version: the latest published one;
+// no lobby: the shared OPEN lobby; CODE is 4-8 of A-Z0-9).
 (function () {
   const params = new URLSearchParams(location.search);
   const game = params.get("game") || "";
   const name = (params.get("name") || "Player").slice(0, 40);
   const version = /^\d+$/.test(params.get("version") || "") ? params.get("version") : "";
+
+  const lobbyParam = (params.get("lobby") || "").toUpperCase();
+  const lobby = /^[A-Z0-9]{4,8}$/.test(lobbyParam) ? lobbyParam : "";
 
   // sessionStorage: survives a reload (same account id), but two tabs stay distinct players.
   function subject() {
@@ -47,7 +51,7 @@
         return retry(e.message);
       }
       const scheme = location.protocol === "https:" ? "wss" : "ws";
-      ws = new WebSocket(`${scheme}://${location.host}/play/${encodeURIComponent(game)}?token=${encodeURIComponent(token)}${version ? "&version=" + version : ""}`);
+      ws = new WebSocket(`${scheme}://${location.host}/play/${encodeURIComponent(game)}?token=${encodeURIComponent(token)}${version ? "&version=" + version : ""}${lobby ? "&lobby=" + lobby : ""}`);
       const mine = ws;
       mine.onmessage = (ev) => {
         let frame;
@@ -77,5 +81,5 @@
     };
   }
 
-  window.QD = { game, name, connect };
+  window.QD = { game, name, lobby: lobby || "OPEN", connect };
 })();
