@@ -220,6 +220,13 @@ dialog.sheet.sheet--form[open] { display: flex; flex-direction: column; }
 .scr h2 { font: var(--text-title); font-size: 13px; margin: 24px 0 8px; color: var(--text-secondary); }
 .scr .om-btn { height: 32px; padding: 0 14px; font-size: 13px; }
 .scr .om-btn--borderless { padding: 0 10px; }
+/* Login/sign-up forms: labels above fields, full-width buttons, visible errors (the sheet rules only apply inside dialog.sheet) */
+.scr-login .om-prop { grid-template-columns: minmax(0, 1fr); gap: 4px; margin-top: 12px; }
+.scr-login .om-field input { padding-left: 10px; }
+.scr-login .sheet-actions { display: flex; gap: var(--space-2); margin-top: 16px; }
+.scr-login .sheet-actions .om-btn { flex: 1; }
+.scr .sheet-error { color: var(--error); font-size: 12px; margin: var(--space-2) 0 0; }
+.scr-login .om-btn--borderless { text-decoration: underline; text-underline-offset: 2px; padding-left: 0; }
 .scr .scr-new { height: 44px; padding: 0 20px; gap: 8px; font-size: 15px; font-weight: 600; }
 .scr .scr-new .om-icon { width: 16px; height: 16px; }
 .scr .om-field { height: 32px; }
