@@ -25,6 +25,7 @@ const MIGRATION_0002: &str = include_str!("../migrations/0002_plugins.sql");
 const MIGRATION_0003: &str = include_str!("../migrations/0003_marketplace_cloud.sql");
 const MIGRATION_0004: &str = include_str!("../migrations/0004_friends.sql");
 const MIGRATION_0005: &str = include_str!("../migrations/0005_developer.sql");
+const MIGRATION_0006: &str = include_str!("../migrations/0006_sessions.sql");
 
 /// Lazy pool: no connection is made until a query runs.
 pub fn connect_lazy(url: &str) -> DbResult<PgPool> {
@@ -34,6 +35,7 @@ pub fn connect_lazy(url: &str) -> DbResult<PgPool> {
 /// Applies 0001_init.sql, 0002_plugins.sql and 0003_marketplace_cloud.sql, each once: a step is
 /// skipped when its table (`accounts`, `plugins`, `plugin_versions`) already exists.
 /// 0005_developer.sql only adds columns, so it is skipped when `accounts.role` already exists.
+/// 0006_sessions.sql is skipped when the `sessions` table already exists.
 pub async fn migrate(pool: &PgPool) -> DbResult<()> {
     for (table, sql) in [("accounts", MIGRATION_0001), ("plugins", MIGRATION_0002), ("plugin_versions", MIGRATION_0003), ("friendships", MIGRATION_0004)] {
         let exists: bool = sqlx::query("SELECT to_regclass($1) IS NOT NULL")
@@ -54,6 +56,13 @@ pub async fn migrate(pool: &PgPool) -> DbResult<()> {
     .try_get(0)?;
     if !has_role {
         sqlx::raw_sql(MIGRATION_0005).execute(pool).await?;
+    }
+    let has_sessions: bool = sqlx::query("SELECT to_regclass('public.sessions') IS NOT NULL")
+        .fetch_one(pool)
+        .await?
+        .try_get(0)?;
+    if !has_sessions {
+        sqlx::raw_sql(MIGRATION_0006).execute(pool).await?;
     }
     Ok(())
 }
@@ -176,6 +185,53 @@ fn account_from_row(r: &sqlx::postgres::PgRow) -> DbResult<Account> {
 }
 
 const ACCOUNT_COLS: &str = "id::text AS id, provider, subject, display_name, role, created_at::text AS created_at";
+
+/// Stores a session by token hash, valid for `ttl_secs`.
+pub async fn insert_session(pool: &PgPool, token_hash: &str, account_id: &str, ttl_secs: i64) -> DbResult<()> {
+    sqlx::query("INSERT INTO sessions (token_hash, account_id, expires_at) VALUES ($1, $2::uuid, now() + make_interval(secs => $3))")
+        .bind(token_hash)
+        .bind(account_id)
+        .bind(ttl_secs as f64)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+/// The account for a live session. An expired row is deleted (None). A row not used for over an hour
+/// has its `last_used_at` and `expires_at` pushed out (sliding `ttl_secs`), so a busy token writes at most once an hour.
+pub async fn session_account(pool: &PgPool, token_hash: &str, ttl_secs: i64) -> DbResult<Option<Account>> {
+    let row = sqlx::query(
+        "SELECT a.id::text AS id, a.provider, a.subject, a.display_name, a.role, a.created_at::text AS created_at, \
+         (s.expires_at > now()) AS live, (s.last_used_at < now() - interval '1 hour') AS stale \
+         FROM sessions s JOIN accounts a ON a.id = s.account_id WHERE s.token_hash = $1",
+    )
+    .bind(token_hash)
+    .fetch_optional(pool)
+    .await?;
+    let Some(row) = row else { return Ok(None) };
+    if !row.try_get::<bool, _>("live")? {
+        delete_session(pool, token_hash).await?;
+        return Ok(None);
+    }
+    if row.try_get::<bool, _>("stale")? {
+        sqlx::query("UPDATE sessions SET last_used_at = now(), expires_at = now() + make_interval(secs => $2) WHERE token_hash = $1")
+            .bind(token_hash)
+            .bind(ttl_secs as f64)
+            .execute(pool)
+            .await?;
+    }
+    Ok(Some(account_from_row(&row)?))
+}
+
+pub async fn delete_session(pool: &PgPool, token_hash: &str) -> DbResult<()> {
+    sqlx::query("DELETE FROM sessions WHERE token_hash = $1").bind(token_hash).execute(pool).await?;
+    Ok(())
+}
+
+/// Deletes every expired session; returns how many.
+pub async fn purge_expired_sessions(pool: &PgPool) -> DbResult<u64> {
+    Ok(sqlx::query("DELETE FROM sessions WHERE expires_at <= now()").execute(pool).await?.rows_affected())
+}
 
 /// Game columns for a query over `games g LEFT JOIN accounts a ON a.id = g.owner_id`.
 const GAME_COLS: &str = "g.id::text AS id, g.owner_id::text AS owner_id, COALESCE(a.display_name, '') AS owner_name, \

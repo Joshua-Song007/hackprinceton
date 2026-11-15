@@ -200,7 +200,7 @@ async fn debug(
     uri: Uri,
     ws: Result<WebSocketUpgrade, WebSocketUpgradeRejection>,
 ) -> Response {
-    let Some(account) = accounts::authenticate_request(&headers, uri.query()) else {
+    let Some(account) = accounts::authenticate_request(&headers, uri.query()).await else {
         return StatusCode::UNAUTHORIZED.into_response();
     };
     if !valid_uuid(&game_id) {

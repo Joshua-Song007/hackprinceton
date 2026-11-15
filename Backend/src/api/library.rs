@@ -50,7 +50,7 @@ async fn list_library(
     State(state): State<AppState>,
     headers: HeaderMap,
 ) -> Result<Json<Vec<CatalogEntry>>, StatusCode> {
-    authenticate(&headers).ok_or(StatusCode::UNAUTHORIZED)?;
+    authenticate(&headers).await.ok_or(StatusCode::UNAUTHORIZED)?;
     let pool = state.db.as_ref().ok_or(StatusCode::SERVICE_UNAVAILABLE)?;
     db::list_catalog(pool)
         .await

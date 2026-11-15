@@ -4,7 +4,7 @@ Status: provisional contract between `PearCloud/CloudClient.swift` and the Rust 
 
 Carries game content only. Never USIS packets or output commands.
 
-All bodies are JSON. Authenticated routes send `Authorization: Bearer <sessionToken>`.
+All bodies are JSON. Authenticated routes send `Authorization: Bearer <sessionToken>`. Sign-in sessions persist in Postgres for 30 days, sliding (each use pushes the expiry out, written at most once an hour), so they survive server restarts; only the token hash is stored, and sign-out or account deletion ends them. Without a database sessions are in memory only.
 
 Routes
 

@@ -55,7 +55,7 @@ fn db_err(what: &str) -> impl Fn(sqlx::Error) -> StatusCode + '_ {
 }
 
 async fn list(State(state): State<AppState>, headers: HeaderMap) -> Result<Json<Vec<FriendEntry>>, StatusCode> {
-    let me = authenticate(&headers).ok_or(StatusCode::UNAUTHORIZED)?;
+    let me = authenticate(&headers).await.ok_or(StatusCode::UNAUTHORIZED)?;
     let pool = state.db.as_ref().ok_or(StatusCode::SERVICE_UNAVAILABLE)?;
     let friends = db::list_friends(pool, &me.id).await.map_err(db_err("list"))?;
     let live: Vec<Option<(String, String)>> = friends.iter().map(|f| game_of(&f.id)).collect();
@@ -82,7 +82,7 @@ async fn list(State(state): State<AppState>, headers: HeaderMap) -> Result<Json<
 }
 
 async fn requests(State(state): State<AppState>, headers: HeaderMap) -> Result<Json<Requests>, StatusCode> {
-    let me = authenticate(&headers).ok_or(StatusCode::UNAUTHORIZED)?;
+    let me = authenticate(&headers).await.ok_or(StatusCode::UNAUTHORIZED)?;
     let pool = state.db.as_ref().ok_or(StatusCode::SERVICE_UNAVAILABLE)?;
     let (incoming, outgoing) = db::list_friend_requests(pool, &me.id).await.map_err(db_err("requests"))?;
     Ok(Json(Requests { incoming, outgoing }))
@@ -93,7 +93,7 @@ async fn add(
     headers: HeaderMap,
     Json(req): Json<AddRequest>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
-    let me = authenticate(&headers).ok_or(StatusCode::UNAUTHORIZED)?;
+    let me = authenticate(&headers).await.ok_or(StatusCode::UNAUTHORIZED)?;
     let pool = state.db.as_ref().ok_or(StatusCode::SERVICE_UNAVAILABLE)?;
     match db::send_friend_request(pool, &me.id, &req.code).await.map_err(db_err("add"))? {
         RequestOutcome::NoSuchCode => Err(StatusCode::NOT_FOUND),
@@ -104,7 +104,7 @@ async fn add(
 }
 
 async fn accept(State(state): State<AppState>, headers: HeaderMap, Path(id): Path<String>) -> Result<StatusCode, StatusCode> {
-    let me = authenticate(&headers).ok_or(StatusCode::UNAUTHORIZED)?;
+    let me = authenticate(&headers).await.ok_or(StatusCode::UNAUTHORIZED)?;
     if !valid_uuid(&id) {
         return Err(StatusCode::NOT_FOUND);
     }
@@ -116,7 +116,7 @@ async fn accept(State(state): State<AppState>, headers: HeaderMap, Path(id): Pat
 }
 
 async fn remove(State(state): State<AppState>, headers: HeaderMap, Path(id): Path<String>) -> Result<StatusCode, StatusCode> {
-    let me = authenticate(&headers).ok_or(StatusCode::UNAUTHORIZED)?;
+    let me = authenticate(&headers).await.ok_or(StatusCode::UNAUTHORIZED)?;
     if !valid_uuid(&id) {
         return Err(StatusCode::NOT_FOUND);
     }

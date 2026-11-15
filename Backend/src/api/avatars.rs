@@ -38,7 +38,7 @@ pub(crate) fn sniff(bytes: &[u8]) -> Option<&'static str> {
 }
 
 async fn upload(headers: HeaderMap, body: Bytes) -> Result<StatusCode, StatusCode> {
-    let me = authenticate(&headers).ok_or(StatusCode::UNAUTHORIZED)?;
+    let me = authenticate(&headers).await.ok_or(StatusCode::UNAUTHORIZED)?;
     let declared = headers.get(header::CONTENT_TYPE).and_then(|v| v.to_str().ok()).unwrap_or_default();
     if !matches!(declared, "image/jpeg" | "image/png") || sniff(&body) != Some(declared) {
         return Err(StatusCode::UNSUPPORTED_MEDIA_TYPE);
@@ -51,7 +51,7 @@ async fn upload(headers: HeaderMap, body: Bytes) -> Result<StatusCode, StatusCod
 }
 
 async fn remove(headers: HeaderMap) -> Result<StatusCode, StatusCode> {
-    let me = authenticate(&headers).ok_or(StatusCode::UNAUTHORIZED)?;
+    let me = authenticate(&headers).await.ok_or(StatusCode::UNAUTHORIZED)?;
     blobs().put(&key(&me.id), Vec::new()).await.map_err(|e| {
         eprintln!("avatar: clear: {e}");
         StatusCode::INTERNAL_SERVER_ERROR

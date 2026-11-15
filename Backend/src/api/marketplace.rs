@@ -61,8 +61,8 @@ fn store(state: &AppState) -> Result<&Db, ApiError> {
         .ok_or_else(|| error(StatusCode::SERVICE_UNAVAILABLE, "database unavailable"))
 }
 
-fn signed_in(headers: &HeaderMap) -> Result<Account, ApiError> {
-    authenticate(headers).ok_or_else(|| error(StatusCode::UNAUTHORIZED, "sign in first"))
+async fn signed_in(headers: &HeaderMap) -> Result<Account, ApiError> {
+    authenticate(headers).await.ok_or_else(|| error(StatusCode::UNAUTHORIZED, "sign in first"))
 }
 
 /// Plugin ids: 1-64 of [a-z0-9-].
@@ -185,7 +185,7 @@ async fn bundle_bytes(State(state): State<AppState>, Path(id): Path<String>, Que
 }
 
 async fn publish(State(state): State<AppState>, headers: HeaderMap, body: Bytes) -> Result<(StatusCode, Json<Value>), ApiError> {
-    let me = signed_in(&headers)?;
+    let me = signed_in(&headers).await?;
     let db = store(&state)?;
     let files = bundle::read_tarball(&body).map_err(|e| error(StatusCode::BAD_REQUEST, &e))?;
     match publish_files(db, Some(&me.id), files, "pending").await? {
@@ -209,7 +209,7 @@ async fn review(
     Path((id, version)): Path<(String, String)>,
     Json(req): Json<ReviewRequest>,
 ) -> Result<Json<Value>, ApiError> {
-    let me = signed_in(&headers)?;
+    let me = signed_in(&headers).await?;
     if !is_reviewer(&me.id) {
         return Err(error(StatusCode::FORBIDDEN, "not a plugin reviewer"));
     }
@@ -226,7 +226,7 @@ async fn review(
 }
 
 async fn record_install(State(state): State<AppState>, headers: HeaderMap, Path(id): Path<String>, body: Bytes) -> Result<Json<Value>, ApiError> {
-    let me = signed_in(&headers)?;
+    let me = signed_in(&headers).await?;
     let db = store(&state)?;
     let asked = serde_json::from_slice::<Value>(&body).ok().and_then(|b| b["version"].as_str().map(String::from));
     let version = match asked {
@@ -241,7 +241,7 @@ async fn record_install(State(state): State<AppState>, headers: HeaderMap, Path(
 }
 
 async fn record_uninstall(State(state): State<AppState>, headers: HeaderMap, Path(id): Path<String>) -> Result<Json<Value>, ApiError> {
-    let me = signed_in(&headers)?;
+    let me = signed_in(&headers).await?;
     let installs = db::set_plugin_install(store(&state)?, &id, &me.id, None)
         .await
         .map_err(|e| db_err("uninstall", e))?
@@ -250,7 +250,7 @@ async fn record_uninstall(State(state): State<AppState>, headers: HeaderMap, Pat
 }
 
 async fn mine(State(state): State<AppState>, headers: HeaderMap) -> Result<Json<Vec<db::InstallRecord>>, ApiError> {
-    let me = signed_in(&headers)?;
+    let me = signed_in(&headers).await?;
     db::plugin_installs_of(store(&state)?, &me.id).await.map(Json).map_err(|e| db_err("mine", e))
 }
 

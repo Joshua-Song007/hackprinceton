@@ -38,8 +38,8 @@ pub struct CreateGameRequest {
     pub title: String,
 }
 
-fn require_account(headers: &HeaderMap) -> Result<Account, StatusCode> {
-    authenticate(headers).ok_or(StatusCode::UNAUTHORIZED)
+async fn require_account(headers: &HeaderMap) -> Result<Account, StatusCode> {
+    authenticate(headers).await.ok_or(StatusCode::UNAUTHORIZED)
 }
 
 fn db_err(what: &str, e: sqlx::Error) -> StatusCode {
@@ -86,7 +86,7 @@ async fn create_game(
     headers: HeaderMap,
     Json(req): Json<CreateGameRequest>,
 ) -> Result<(StatusCode, Json<Game>), StatusCode> {
-    let account = require_account(&headers)?;
+    let account = require_account(&headers).await?;
     if !valid_title(&req.title) {
         return Err(StatusCode::BAD_REQUEST);
     }
@@ -102,7 +102,7 @@ async fn list_games(
     headers: HeaderMap,
     RawQuery(query): RawQuery,
 ) -> Result<Json<Vec<Game>>, StatusCode> {
-    let account = require_account(&headers)?;
+    let account = require_account(&headers).await?;
     let all = query_param(query.as_deref(), "all") == Some("1");
     if all && !account.is_developer() {
         return Err(StatusCode::FORBIDDEN);
@@ -133,7 +133,7 @@ async fn update_game(
     Path(game_id): Path<String>,
     Json(req): Json<UpdateGameRequest>,
 ) -> Result<Json<Game>, StatusCode> {
-    let account = require_account(&headers)?;
+    let account = require_account(&headers).await?;
     if !valid_uuid(&game_id)
         || (req.title.is_none() && req.description.is_none())
         || req.title.as_deref().is_some_and(|t| !valid_title(t))
@@ -156,7 +156,7 @@ async fn put_cover(
     Path(game_id): Path<String>,
     body: Bytes,
 ) -> Result<StatusCode, StatusCode> {
-    let account = require_account(&headers)?;
+    let account = require_account(&headers).await?;
     if !valid_uuid(&game_id) {
         return Err(StatusCode::BAD_REQUEST);
     }
@@ -177,7 +177,7 @@ async fn remove_cover(
     headers: HeaderMap,
     Path(game_id): Path<String>,
 ) -> Result<StatusCode, StatusCode> {
-    let account = require_account(&headers)?;
+    let account = require_account(&headers).await?;
     if !valid_uuid(&game_id) {
         return Err(StatusCode::BAD_REQUEST);
     }
@@ -207,7 +207,7 @@ async fn publish_version(
     Path(game_id): Path<String>,
     Json(body): Json<NewGameVersion>,
 ) -> Result<(StatusCode, Json<GameVersion>), StatusCode> {
-    let account = require_account(&headers)?;
+    let account = require_account(&headers).await?;
     if !valid_uuid(&game_id) || !valid_version(&body) {
         return Err(StatusCode::BAD_REQUEST);
     }
@@ -226,7 +226,7 @@ async fn fetch_version(
     headers: HeaderMap,
     Path((game_id, version)): Path<(String, String)>,
 ) -> Result<Json<GameVersion>, StatusCode> {
-    require_account(&headers)?;
+    require_account(&headers).await?;
     let version = parse_version(&version).map_err(|_| StatusCode::BAD_REQUEST)?;
     if !valid_uuid(&game_id) {
         return Err(StatusCode::BAD_REQUEST);
@@ -244,7 +244,7 @@ async fn remove_game(
     headers: HeaderMap,
     Path(game_id): Path<String>,
 ) -> Result<StatusCode, StatusCode> {
-    let account = require_account(&headers)?;
+    let account = require_account(&headers).await?;
     if !valid_uuid(&game_id) {
         return Err(StatusCode::BAD_REQUEST);
     }
@@ -274,7 +274,7 @@ struct LobbyInfo {
 
 /// GET /api/games/{id}/lobbies: the game's live lobbies, from the in-memory registry only.
 async fn list_lobbies(headers: HeaderMap, Path(id): Path<String>) -> Result<Json<Vec<LobbyInfo>>, StatusCode> {
-    require_account(&headers)?;
+    require_account(&headers).await?;
     let out = session::lobbies(&id)
         .into_iter()
         .map(|(code, ps)| LobbyInfo {

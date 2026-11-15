@@ -254,7 +254,7 @@ async fn apple_signin(
             eprintln!("apple signin: db error: {e}");
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
-    let token = store_session(account.clone());
+    let token = store_session(account.clone()).await;
     Ok(Json(SignInResponse { token, account }))
 }
 
