@@ -18,10 +18,33 @@ type RuntimeMessage =
   | { type: 'done'; id: string; summary?: string }
   | { type: 'error'; id: string; message: string };
 
+/** How the rest of Studio puts text into the chat's prompt (the panel attaches itself while it is open). */
+export interface ChatLink {
+  /** Fills the prompt in Instructions mode without sending it. Returns a sentence when there is no panel to fill. */
+  send(text: string): string | undefined;
+  attach(fill: (text: string) => void): () => void;
+}
+
+export function createChatLink(): ChatLink {
+  let fill: ((text: string) => void) | null = null;
+  return {
+    send(text) {
+      if (!fill) return 'Open the Deep Agent panel first.';
+      fill(text);
+      return undefined;
+    },
+    attach(f) {
+      fill = f;
+      return () => { if (fill === f) fill = null; };
+    },
+  };
+}
+
 export interface DeepAgentOptions {
   url: string;
   project: Project;
   openScript(ref: ScriptRef): void;
+  chat?: ChatLink;
   WebSocketImpl?: typeof WebSocket;
 }
 
@@ -42,7 +65,7 @@ export function deepAgentPanel(opts: DeepAgentOptions): PanelSpec {
   return { id: 'panel.deepagents', title: 'Deep Agent', create: () => createView(opts) };
 }
 
-function createView({ url, project, openScript, WebSocketImpl }: DeepAgentOptions): PanelView {
+function createView({ url, project, openScript, chat, WebSocketImpl }: DeepAgentOptions): PanelView {
   const Socket = WebSocketImpl ?? WebSocket;
   let socket: WebSocket | undefined;
   let retryTimer: ReturnType<typeof setTimeout> | undefined;
@@ -246,6 +269,13 @@ function createView({ url, project, openScript, WebSocketImpl }: DeepAgentOption
   });
 
   const offProject = project.onChange((c) => { if (c === 'proposal') render(); });
+  const offChat = chat?.attach((text) => {
+    mode = 'instructions';
+    modeSelect.value = 'instructions';
+    input.setAttribute('placeholder', PLACEHOLDER[mode]);
+    input.value = text;
+    input.focus();
+  });
   render();
   connect();
 
@@ -255,6 +285,7 @@ function createView({ url, project, openScript, WebSocketImpl }: DeepAgentOption
     dispose: () => {
       disposed = true;
       offProject();
+      offChat?.();
       clearTimeout(retryTimer);
       socket?.close();
     },

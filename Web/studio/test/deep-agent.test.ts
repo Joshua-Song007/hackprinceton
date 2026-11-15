@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { deepAgentPanel } from '../src/panels/deep-agent';
+import { createChatLink, deepAgentPanel, type ChatLink } from '../src/panels/deep-agent';
 import { Project, templateSnapshot } from '../src/project';
 import type { ScriptRef } from '../src/editor';
 
@@ -44,10 +44,10 @@ class MockSocket {
   push(msg: object) { this.onmessage?.({ data: JSON.stringify(msg) }); }
 }
 
-function setup() {
+function setup(chat?: ChatLink) {
   const project = new Project(templateSnapshot('blank'));
   const opened: ScriptRef[] = [];
-  const spec = deepAgentPanel({ url: 'ws://localhost:9410/ws', project, openScript: (r) => opened.push(r), WebSocketImpl: MockSocket as unknown as typeof WebSocket });
+  const spec = deepAgentPanel({ url: 'ws://localhost:9410/ws', project, openScript: (r) => opened.push(r), chat, WebSocketImpl: MockSocket as unknown as typeof WebSocket });
   const view = spec.create();
   const root = view.element as unknown as FakeNode;
   const ws = MockSocket.instances.at(-1)!;
@@ -323,6 +323,30 @@ describe('deep-agent.ts', () => {
       ws.push({ type: 'file_written', id, path: 'instructions.json', content: JSON.stringify(instructions) });
       project.rejectProposal();
       expect(root.byLabel('Files').buttons()).toHaveLength(0);
+    });
+  });
+
+  describe('chat link', () => {
+    it('fills the prompt in Instructions mode without sending, and a prompt sent after goes as an instructions run', () => {
+      const chat = createChatLink();
+      const { root, ws, project } = setup(chat);
+      project.setInstructions({ title: 'Mine', players: { min: 1, max: 1 }, roles: [], phases: [] } as never);
+      expect(chat.send('fix these')).toBeUndefined();
+      expect(root.find((n) => n.tag === 'textarea')[0]!.value).toBe('fix these');
+      expect(root.byLabel('Mode').value).toBe('instructions');
+      expect(root.find((n) => n.tag === 'textarea')[0]!.attrs.placeholder).toContain('instructions');
+      expect(ws.sent).toHaveLength(0);
+      root.buttons().find((b) => b.textContent === 'Send')!.fire('click');
+      expect(ws.sent[0]).toMatchObject({ type: 'prompt', mode: 'instructions', text: 'fix these' });
+    });
+
+    it('says so when no panel is open, and disposing the panel detaches it', () => {
+      const chat = createChatLink();
+      expect(chat.send('x')).toBe('Open the Deep Agent panel first.');
+      const { view } = setup(chat);
+      expect(chat.send('x')).toBeUndefined();
+      view.dispose?.();
+      expect(chat.send('x')).toBe('Open the Deep Agent panel first.');
     });
   });
 });

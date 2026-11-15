@@ -11,7 +11,7 @@ import { MarketplaceController, hostedRuntimeUrls, localRuntimeUrls, openScriptA
 import { BrowserInstaller, TauriInstaller } from './marketplace/installer';
 import { MARKETPLACE_PANEL_ID, marketplacePanel } from './marketplace/panel';
 import { RegistryClient } from './marketplace/registry';
-import { deepAgentPanel } from './panels/deep-agent';
+import { createChatLink, deepAgentPanel } from './panels/deep-agent';
 import { PreferenceStore, bindPreferences, inDesktopApp, openSettingsSheet } from './preferences';
 import { createPeripheralsPanel, openPeripheralPicker } from './peripheralsPanel';
 import { deviceMenuItems } from './deviceMenu';
@@ -55,6 +55,13 @@ const joinVersion = async (version: number | 'latest') => {
 };
 const run = new RunController({ project, debug, account, viewport, editor, reveal: (id) => layout.show(id), onReload: testPlayer ? joinVersion : undefined, onPhones: openPhoneSheet, agentUrl: () => marketplace.runtimeUrlOf('langchain-deepagents')?.ws ?? null });
 
+const chat = createChatLink();
+const sendToChat = (text: string): string | undefined => {
+  if (!marketplace.runtimeUrlOf('langchain-deepagents')) return 'Install the Deep Agent plugin first.';
+  layout.show('panel.deepagents');
+  return chat.send(text);
+};
+
 const marketplaceProjectId = () => (project.gameId ?? 'local').replace(/[^A-Za-z0-9_-]/g, '_');
 // Desktop runs plugin runtimes on this machine; a signed-in browser uses the backend's hosted runtime.
 const runtimeUrls = (manifest: Parameters<typeof localRuntimeUrls>[0]) => {
@@ -66,7 +73,7 @@ const marketplace = new MarketplaceController({
   installer: inDesktopApp() ? new TauriInstaller() : new BrowserInstaller(),
   runtimeUrls,
   host: { register: (spec) => layout.register(spec), unregister: (id) => layout.unregister(id), openRight: (id) => layout.openRight(id) },
-  panels: { 'langchain-deepagents': (manifest) => deepAgentPanel({ url: runtimeUrls(manifest).ws, project, openScript: openScriptAndReveal(editor, (id) => layout.show(id)) }) },
+  panels: { 'langchain-deepagents': (manifest) => deepAgentPanel({ url: runtimeUrls(manifest).ws, project, chat, openScript: openScriptAndReveal(editor, (id) => layout.show(id)) }) },
   projectId: marketplaceProjectId,
   storage: localStorage,
 });
@@ -79,7 +86,7 @@ const panels: PanelSpec[] = [
   { id: 'inspector', title: 'Inspector', create: () => createInspectorPanel(project, selection) },
   { id: 'editor', title: 'Script editor', create: () => createEditorPanel(project, editor) },
   { id: 'console', title: 'Console', create: () => createConsolePanel(debug) },
-  { id: 'test', title: 'Test', create: () => createTestPanel(project, run) },
+  { id: 'test', title: 'Test', create: () => createTestPanel(project, run, sendToChat) },
 ];
 // Desktop: a dockview popout window (window.open, same JS context) keeps the panel live with the main window's state.
 layout = new LayoutManager(document.getElementById('dock')!, panels, inDesktopApp() ? {

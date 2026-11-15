@@ -436,9 +436,15 @@ Not in overview.md; added at user request 2026-11-14 (overview.md stays unchange
 
 ### 12.4 Playtest report
 
-- [ ] `Web/studio/src/playtestReport.ts` — pure: collect `unsure` notes (phase, line, why) and the run outcome into a report; prefill text for a revise prompt.
-- [ ] `Web/studio/src/playtestView.ts` — renders the report; "Send to chat" button.
-- [ ] `Web/studio/test/playtestReport.test.ts` — grouping, empty run, prefill text.
+- [x] `Web/studio/src/playtestReport.ts` — pure: `buildPlaytestReport` (unsure notes grouped by phase in the instructions' order, then unknown ids, then no phase; the same note from several players merged; notes about the run kept apart as problems), `playtestPrompt` (revise prompt, cut to 4000 characters by whole items), `playtestLines` (the view's text) and `sendReport`.
+- [x] `Web/studio/src/playtestView.ts` — renders the report (summary, player rows, notes by phase, run problems) with "Send to chat".
+- [x] `Web/studio/src/agentPlayers.ts` — `AgentNoteRecord.kind` ('unsure' or 'run'), `lookBack()` (one `report` call holding the clock, notes at the last game time, summary kept, then the driver stops), clock holds kept in a set.
+- [x] `Web/studio/src/run.ts` — `report`, `finishing`, `finishPlaytest()` (sentences when it cannot run); `stop()` keeps a partial report from live and retired agents; agents taken off a player are retired with their notes; `begin` clears the report.
+- [x] `Web/studio/src/panels/deep-agent.ts` — `ChatLink` and `createChatLink()`: fills the prompt in Instructions mode, never sends.
+- [x] `Web/studio/src/main.ts` — the chat link, `sendToChat`.
+- [x] `Web/studio/src/testPanel.ts` — Playtest group: Finish playtest button and the report (also after the run stopped).
+- [x] `Web/studio/test/playtestReport.test.ts` — grouping, merge, run problems, empty run, prompt and cap, lines, `sendReport`. The view is not unit-tested (node environment, no DOM).
+- [x] `Web/studio/test/agentPlayers.test.ts`, `Web/studio/test/agentRun.test.ts`, `Web/studio/test/deep-agent.test.ts` — look back, finish and stop, retired agents, chat link.
 
 ### 12.5 Panel
 

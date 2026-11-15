@@ -8,6 +8,7 @@ import type { PanelView } from './layout';
 import type { Project } from './project';
 import { SIM_DEVICE_NAMES, TIME_SCALES, rigWarning, type BotMode, type PlayerSource, type RunController, type TestPlayer } from './run';
 import { checkGame, gestureControls, type Check } from './gamePanel';
+import { renderPlaytest } from './playtestView';
 
 export const MAP_SIZE = 216;
 const MIN_HALF = 8;
@@ -43,7 +44,7 @@ const GESTURES = [['Tap (T)', 'tap'], ['Double tap (G)', 'doubleTap'], ['Flick (
 const DEVICE_INFO: Record<SimDeviceKind, [string, string]> = { airpods: ['airpods', 'head'], phone: ['phone', 'hand'], watch: ['watch', 'leftWrist'] };
 const DEVICE_LABEL: Record<SimDeviceKind, string> = { airpods: 'Virtual AirPods', phone: 'Virtual phone', watch: 'Virtual watch' };
 
-export function createTestPanel(project: Project, run: RunController): PanelView {
+export function createTestPanel(project: Project, run: RunController, sendToChat: (text: string) => string | undefined = () => 'The chat is not available here.'): PanelView {
   const root = el('div', { class: 'pn', role: 'region', 'aria-label': 'Test', tabindex: -1 });
   const group = (t: string) => el('div', { class: 'pn-group' }, [t]);
   const css = (name: string) => getComputedStyle(document.documentElement).getPropertyValue(name).trim() || 'currentColor';
@@ -61,7 +62,7 @@ export function createTestPanel(project: Project, run: RunController): PanelView
   let moved = 0;
   let start: [number, number] = [0, 0];
   const msg = el('p', { class: 'pn-empty', role: 'status' });
-  const structureKey = () => [run.running, run.driven, run.players.map((p) => `${p.id}:${p.wander}:${p.run.recording}:${p.run.replaying}:${p.run.clip?.length ?? 0}:${p.source}:${p.botMode}:${p.run.role}:${p.run.phoneUp}:${[...p.liveDevices]}:${p.agent ? `${p.agent.seat.persona}/${p.agent.seat.role}` : ''}`).join(), project.instructions?.roles.map((r) => r.id).join() ?? '', run.rig.join(), [...run.rooms.keys()].map((k) => `${k}=${run.holderOf(k)}`).join(), run.relay.status, run.relay.devices.map((d) => d.id).join(), run.timeScale, run.status.kind].join('|');
+  const structureKey = () => [run.running, run.driven, run.players.map((p) => `${p.id}:${p.wander}:${p.run.recording}:${p.run.replaying}:${p.run.clip?.length ?? 0}:${p.source}:${p.botMode}:${p.run.role}:${p.run.phoneUp}:${[...p.liveDevices]}:${p.agent ? `${p.agent.seat.persona}/${p.agent.seat.role}` : ''}`).join(), project.instructions?.roles.map((r) => r.id).join() ?? '', run.rig.join(), [...run.rooms.keys()].map((k) => `${k}=${run.holderOf(k)}`).join(), run.relay.status, run.relay.devices.map((d) => d.id).join(), run.timeScale, run.status.kind, run.finishing, run.report ? `${run.report.calls}/${run.report.groups.length}/${run.report.lookedBack}` : '', run.players.some((p) => p.agent)].join('|');
 
   const slider = (label: string, input: HTMLElement, out: HTMLElement) =>
     el('div', { style: 'display:grid;grid-template-columns:72px minmax(0,1fr) 52px;align-items:center;gap:8px;font-size:11px;color:var(--text-secondary);min-height:var(--row-height)' }, [label, input, out]);
@@ -175,6 +176,21 @@ export function createTestPanel(project: Project, run: RunController): PanelView
     toggle.setAttribute('aria-pressed', String(!!p.agent));
     for (const s of [persona, role]) s.addEventListener('change', () => p.agent && apply(true)); // a new seat is a new agent, so the persona takes effect
     return [toggle, persona, ...(roles.length ? [role] : [])];
+  };
+
+  /** The playtest: a Finish button while agents play in local Play, and the last report (also after the run stopped). */
+  const playtestSection = (): Node[] => {
+    const playing = run.running && run.status.kind === 'local' && run.players.some((p) => p.agent);
+    if (!playing && !run.report) return [];
+    const out: Node[] = [group('Playtest')];
+    if (playing) {
+      const finish = button('Finish playtest', () => { void run.finishPlaytest().then((m) => { msg.textContent = m ?? ''; }); }, { variant: 'small', ariaLabel: 'Finish playtest: the agents look back at the instructions' });
+      finish.disabled = run.finishing;
+      out.push(el('div', { style: 'padding:4px 12px' }, [finish]));
+      if (run.finishing) out.push(el('p', { class: 'om-sub', role: 'status', style: 'padding:0 12px' }, ['Asking the agents to look back.']));
+    }
+    if (run.report) out.push(renderPlaytest(run.report, sendToChat));
+    return out;
   };
 
   const playersSection = (): Node[] => {
@@ -396,6 +412,7 @@ export function createTestPanel(project: Project, run: RunController): PanelView
       group('Checklist'), checklist(),
       ...timeScaleSection(),
       group(`Players (${run.players.length})`), ...playersSection(),
+      ...playtestSection(),
       ...mapSection(), ...controlsSection(), ...devicesSection(),
     );
     update();

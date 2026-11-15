@@ -10,8 +10,9 @@ import {
 import { LocalServer, ScriptSandbox, type ScriptOutput } from '@pear/script';
 import prelude from '../../../Packages/PearScript/Sources/PearScript/Resources/prelude.js?raw';
 import { SIM_DEVICE_KINDS, SimDevices, UsisPlayer, attachGestureKeys, attachMouseLook, type SimDeviceKind, type SimDevicesOptions } from '@pear/sim';
-import { AgentDriver, type AgentSeat } from './agentPlayers';
+import { AgentDriver, type AgentNoteRecord, type AgentSeat } from './agentPlayers';
 import { socketTransport, type AgentTransport, type DecideRequest } from './agentTransport';
+import { buildPlaytestReport, type PlaytestReport } from './playtestReport';
 import type { AccountController } from './account';
 import { describeError } from './account';
 import type { DebugStore } from './debug-panel';
@@ -742,6 +743,11 @@ export class RunController {
   private agentSeq = 0;
   private agentTransport: AgentTransport | null = null;
   private agentTimer: ReturnType<typeof setInterval> | null = null;
+  /** The last playtest report (kept after the run stops, cleared when the next run begins), and whether the agents are looking back now. */
+  report: PlaytestReport | null = null;
+  finishing = false;
+  /** Agents taken off a player (driven, wandering, another source, switched off) whose notes still belong in the report. */
+  private retired: AgentDriver[] = [];
 
   constructor(private deps: RunDeps) {
     this.relay.onChange = () => { for (const l of this.listeners) l(); };
@@ -847,7 +853,46 @@ export class RunController {
 
   private dropAgent(p: TestPlayer): void {
     p.agent?.dispose();
+    if (p.agent && (p.agent.calls || p.agent.notes.length)) this.retired.push(p.agent);
     p.agent = null;
+  }
+
+  private buildReport(lookedBack: boolean): PlaytestReport {
+    const instructions = this.deps.project.instructions;
+    const drivers = [...this.retired, ...this.players.flatMap((p) => (p.agent ? [p.agent] : []))];
+    const notes: AgentNoteRecord[] = drivers.flatMap((d) => d.notes).sort((a, b) => a.gameTime - b.gameTime);
+    return buildPlaytestReport({
+      title: instructions?.title ?? '',
+      phases: instructions?.phases.map((ph) => ({ id: ph.id, title: ph.title })) ?? [],
+      gameTime: this.gameTime(),
+      players: drivers.map((d) => ({
+        id: d.id, persona: d.seat.persona, role: instructions?.roles.find((r) => r.id === d.seat.role)?.name ?? '', calls: d.calls, status: d.status, summary: d.summary,
+      })),
+      notes,
+      lookedBack,
+    });
+  }
+
+  /** The end-of-run look back: every agent that played answers once about what was unclear, then stops, and the report is built. Returns a sentence when it cannot run. */
+  async finishPlaytest(): Promise<string | undefined> {
+    if (!this.server) return 'Agent players run in local Play only.';
+    const live = this.players.flatMap((p) => (p.agent ? [p.agent] : []));
+    if (!live.length) return 'No agent players to finish.';
+    if (this.finishing) return 'The agents are already looking back.';
+    if (live.every((d) => d.looked)) return 'The playtest is finished.';
+    if (!live.some((d) => d.calls)) return 'The agents have not played yet.';
+    const transport = this.agentTransport;
+    this.finishing = true;
+    for (const l of this.listeners) l();
+    try {
+      await Promise.all(live.map((d) => d.lookBack()));
+      if (this.agentTransport !== transport) return undefined; // stopped meanwhile: stop() kept what it had
+      this.report = this.buildReport(live.every((d) => d.looked));
+    } finally {
+      this.finishing = false;
+      for (const l of this.listeners) l();
+    }
+    return undefined;
   }
 
   /** Makes a player an agent (a Deep Agent plays it from the instructions) or, with null, a plain player again. Returns an error sentence, or undefined. */
@@ -1109,6 +1154,7 @@ export class RunController {
   private async begin(kind: RunKind, gameId?: string, version?: number): Promise<void> {
     const { project, debug, editor, viewport, account } = this.deps;
     this.stop();
+    this.report = null;
     editor.clearErrors();
     let scene: SceneDescription;
     try {
@@ -1448,6 +1494,9 @@ export class RunController {
     this.walkTimer = null;
     if (this.agentTimer) clearInterval(this.agentTimer);
     this.agentTimer = null;
+    const agents = this.players.flatMap((p) => (p.agent ? [p.agent] : []));
+    if (this.finishing || agents.some((d) => !d.looked && (d.calls || d.notes.length)) || this.retired.some((d) => d.calls || d.notes.length)) this.report = this.buildReport(false);
+    this.retired = [];
     for (const p of this.players) p.agent?.dispose();
     this.agentTransport?.close();
     this.agentTransport = null;

@@ -14,10 +14,12 @@ const player = (id: string, x: number, z: number, kinds: SimDeviceKind[] = ['air
 
 const instructions = parseInstructions({
   title: 'T', roles: [{ id: 'ref', name: 'Referee', brief: 'Runs it', kind: 'ref' }, { id: 'runner', name: 'Runner', brief: 'Runs', kind: 'player' }],
+  phases: [{ id: 'p1', title: 'Warm up', text: 'Stretch', steps: [] }],
 });
 
 type Internals = {
   server: unknown;
+  agentTransport: unknown;
   holders: Map<string, string>;
   cue(p: TestPlayer, kind: string, text: string): void;
   applyAgent(p: TestPlayer, a: unknown): void;
@@ -29,7 +31,7 @@ function setup(opts: { instructions?: boolean; url?: string | null; local?: bool
   const logs: string[] = [];
   const deps = {
     project: { instructions: opts.instructions === false ? null : instructions },
-    debug: { addOutput: (_l: string, text: string) => void logs.push(text) },
+    debug: { addOutput: (_l: string, text: string) => void logs.push(text), setServerConnected: vi.fn() },
     viewport: { setRunning: vi.fn() },
     agentUrl: () => (opts.url === undefined ? 'ws://runtime' : opts.url),
   } as unknown as RunDeps;
@@ -38,7 +40,7 @@ function setup(opts: { instructions?: boolean; url?: string | null; local?: bool
   run.players = players;
   run.driven = 'player-1';
   const internals = run as unknown as Internals;
-  if (opts.local !== false) internals.server = {};
+  if (opts.local !== false) internals.server = { dispose() {} };
   return { run, players, logs, internals };
 }
 
@@ -155,5 +157,81 @@ describe('hold and release', () => {
     internals.walk();
     expect([...players[1]!.run.devices.position]).not.toEqual(before[0]);
     expect(seen).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('the playtest report', () => {
+  type Pending = { resolve(r: { unsure: { phase: string; line: string; why: string }[]; summary: string }): void; reject(e: Error): void };
+  function seeded() {
+    const s = setup();
+    const reports: Pending[] = [];
+    s.internals.agentTransport = {
+      decide: () => new Promise(() => {}),
+      report: () => new Promise((resolve, reject) => reports.push({ resolve, reject } as Pending)),
+      close() {},
+    };
+    s.run.setAgent('player-2', { persona: 'cheats', role: 'runner' });
+    const driver = s.players[1]!.agent!;
+    driver.calls = 2;
+    driver.notes.push({ from: 'player-2', gameTime: 3, phase: 'p1', line: 'Stretch', why: 'how long?', kind: 'unsure' });
+    return { ...s, reports, driver };
+  }
+
+  it('finishing answers with a sentence when there is nothing to finish', async () => {
+    expect(await setup({ local: false }).run.finishPlaytest()).toMatch(/local Play/);
+    expect(await setup().run.finishPlaytest()).toBe('No agent players to finish.');
+    const fresh = setup();
+    fresh.run.setAgent('player-2', { persona: 'follows', role: '' });
+    expect(await fresh.run.finishPlaytest()).toBe('The agents have not played yet.');
+  });
+
+  it('asks each agent to look back, then builds the report with the instructions title, phase and role names', async () => {
+    const { run, reports } = seeded();
+    const seen = vi.fn();
+    run.onChange(seen);
+    const done = run.finishPlaytest();
+    expect(run.finishing).toBe(true);
+    expect(await run.finishPlaytest()).toBe('The agents are already looking back.');
+    reports[0]!.resolve({ unsure: [{ phase: 'p1', line: 'Pass it', why: 'to whom?' }], summary: 'Fine.' });
+    expect(await done).toBeUndefined();
+    expect(run.finishing).toBe(false);
+    expect(run.report).toMatchObject({
+      title: 'T', lookedBack: true, calls: 2,
+      players: [{ id: 'player-2', persona: 'cheats', role: 'Runner', summary: 'Fine.' }],
+      groups: [{ phase: 'p1', title: 'Warm up', items: [{ line: 'Pass it' }, { line: 'Stretch' }] }], // the look back's note carries the driver's last game time (0 here: it never decided)
+    });
+    expect(seen).toHaveBeenCalled();
+    expect(await run.finishPlaytest()).toBe('The playtest is finished.');
+  });
+
+  it('a stop without the look back keeps a report of the notes so far, and a finished one is left alone', async () => {
+    const a = seeded();
+    a.run.stop();
+    expect(a.run.report).toMatchObject({ lookedBack: false, groups: [{ title: 'Warm up' }] });
+    const b = seeded();
+    const done = b.run.finishPlaytest();
+    b.reports[0]!.resolve({ unsure: [], summary: '' });
+    await done;
+    const finished = b.run.report;
+    b.run.stop();
+    expect(b.run.report).toBe(finished);
+  });
+
+  it('a stop during the look back keeps the partial report and drops the late answer', async () => {
+    const { run, reports } = seeded();
+    const done = run.finishPlaytest();
+    run.stop();
+    reports[0]!.resolve({ unsure: [{ phase: 'p1', line: 'Late', why: 'too late' }], summary: 'late' });
+    await done;
+    expect(run.finishing).toBe(false);
+    expect(run.report).toMatchObject({ lookedBack: false });
+    expect(JSON.stringify(run.report)).not.toContain('Late');
+  });
+
+  it('an agent taken off its player still has its notes in the report', () => {
+    const { run } = seeded();
+    run.drive('player-2');
+    run.stop();
+    expect(run.report).toMatchObject({ players: [{ id: 'player-2' }], groups: [{ items: [{ line: 'Stretch', from: ['player-2'] }] }] });
   });
 });

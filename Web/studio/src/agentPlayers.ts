@@ -27,6 +27,8 @@ export interface AgentNoteRecord {
   phase: string;
   line: string;
   why: string;
+  /** 'unsure' is about the instructions; 'run' is about the run itself (a failed call, the call limit, a failed look back). */
+  kind: 'unsure' | 'run';
 }
 
 /** What a driver needs from the run it plays in. */
@@ -58,6 +60,9 @@ export class AgentDriver {
   calls = 0;
   readonly notes: AgentNoteRecord[] = [];
   lastSay = '';
+  summary = '';
+  looked = false;
+  lastGameTime = 0;
   private queue: Action[] = [];
   private current: { kind: 'wait' | 'walk'; until: number } | null = null;
   private acting = false;
@@ -65,7 +70,8 @@ export class AgentDriver {
   private thinking = false;
   private disposed = false;
   readonly seat: AgentSeat;
-  private release: (() => void) | null = null;
+  readonly id: string;
+  private releases = new Set<() => void>();
   private seen = new Set<string>();
   private every: number;
   private cap: number;
@@ -74,6 +80,7 @@ export class AgentDriver {
 
   constructor(private o: AgentDriverOptions) {
     this.seat = o.seat;
+    this.id = o.id;
     this.every = o.every ?? AGENT_EVERY_S;
     this.cap = o.cap ?? AGENT_CALL_CAP;
     this.walkTimeout = o.walkTimeout ?? AGENT_WALK_TIMEOUT_S;
@@ -87,7 +94,7 @@ export class AgentDriver {
 
   /** Called every 100 ms by the run: advances the current plan, or asks for a new one when it is time. */
   tick(): void {
-    if (this.disposed || this.thinking || this.status === 'limit') return;
+    if (this.disposed || this.looked || this.thinking || this.status === 'limit') return;
     const now = this.seconds();
     if (this.current) {
       const done = this.current.kind === 'wait' ? now >= this.current.until : !this.o.host.walking() || now >= this.current.until;
@@ -116,7 +123,7 @@ export class AgentDriver {
   }
 
   private note(entry: Omit<AgentNoteRecord, 'from' | 'gameTime'>, gameTime: number): void {
-    const key = `${entry.phase}|${entry.line}|${entry.why}`;
+    const key = `${entry.kind}|${entry.phase}|${entry.line}|${entry.why}`;
     if (this.seen.has(key)) return;
     this.seen.add(key);
     this.notes.push({ from: this.o.id, gameTime, ...entry });
@@ -124,9 +131,10 @@ export class AgentDriver {
 
   private async decide(): Promise<void> {
     const observation = this.o.host.observation();
+    this.lastGameTime = observation.gameTime;
     if (this.calls >= this.cap) {
       this.status = 'limit';
-      this.note({ phase: '', line: '', why: `Agent call limit reached (${this.cap}); this player stopped acting.` }, observation.gameTime);
+      this.note({ phase: '', line: '', why: `Agent call limit reached (${this.cap}); this player stopped acting.`, kind: 'run' }, observation.gameTime);
       return;
     }
     this.calls++;
@@ -138,31 +146,61 @@ export class AgentDriver {
       released = true;
       this.o.clock.release();
     };
-    this.release = release;
+    this.releases.add(release);
     this.o.clock.hold();
     try {
       const { role, instructions } = this.o.host.intro();
       const reply = await this.o.transport.decide({
         run: this.o.run, player: this.o.id, persona: this.o.seat.persona, role, instructions, observation, game_time: observation.gameTime,
       });
-      if (this.disposed) return;
-      for (const n of reply.unsure) this.note(n, observation.gameTime);
+      if (this.disposed || this.looked) return;
+      for (const n of reply.unsure) this.note({ ...n, kind: 'unsure' }, observation.gameTime);
       this.queue = parseActions(reply.actions);
       this.acting = true;
       this.nextAt = this.seconds();
     } catch (e) {
-      if (this.disposed) return;
-      this.note({ phase: '', line: '', why: e instanceof Error ? e.message : String(e) }, observation.gameTime);
+      if (this.disposed || this.looked) return;
+      this.note({ phase: '', line: '', why: e instanceof Error ? e.message : String(e), kind: 'run' }, observation.gameTime);
       this.queue = [];
       this.acting = false;
       this.nextAt = this.seconds() + this.backoff;
     } finally {
       release();
-      this.release = null;
-      if (!this.disposed) {
+      this.releases.delete(release);
+      if (!this.disposed && !this.looked) {
         this.thinking = false;
         this.status = this.queue.length ? 'acting' : 'idle';
       }
+    }
+  }
+
+  /** The end-of-run look back: no more decisions, one `report` call (holding the clock), its notes and summary kept, then the driver stops. */
+  async lookBack(): Promise<void> {
+    if (this.disposed || this.looked) return;
+    this.looked = true;
+    this.status = 'thinking';
+    this.queue = [];
+    this.current = null;
+    let released = false;
+    const release = () => {
+      if (released) return;
+      released = true;
+      this.o.clock.release();
+    };
+    this.releases.add(release);
+    this.o.clock.hold();
+    try {
+      const reply = await this.o.transport.report({ run: this.o.run, player: this.o.id });
+      if (this.disposed) return;
+      for (const n of reply.unsure) this.note({ ...n, kind: 'unsure' }, this.lastGameTime);
+      this.summary = reply.summary;
+    } catch (e) {
+      if (this.disposed) return;
+      this.note({ phase: '', line: '', why: `Look back failed: ${e instanceof Error ? e.message : String(e)}`, kind: 'run' }, this.lastGameTime);
+    } finally {
+      release();
+      this.releases.delete(release);
+      this.dispose();
     }
   }
 
@@ -172,6 +210,6 @@ export class AgentDriver {
     this.status = 'stopped';
     this.queue = [];
     this.current = null;
-    this.release?.();
+    for (const r of [...this.releases]) r();
   }
 }

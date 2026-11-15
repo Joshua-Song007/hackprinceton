@@ -237,3 +237,13 @@ Local Play can seat a Deep Agent in a player (Test panel: Agent, persona, instru
 - [x] `Web/studio/src/main.ts` — `agentUrl`.
 - [x] `Web/studio/src/marketplace/controller.ts` — `runtimeUrlOf`.
 - [x] `Web/studio/test/agentRun.test.ts`, `Web/studio/test/agentPlayers.test.ts`
+
+### 2026-11-15 — Playtest report (Phase 12.4)
+Paths: `Web/studio/src/playtestReport.ts`, `Web/studio/src/playtestView.ts`, `Web/studio/src/agentPlayers.ts`, `Web/studio/src/run.ts`, `Web/studio/src/panels/deep-agent.ts`, `Web/studio/src/main.ts`, `Web/studio/src/testPanel.ts`
+
+The Test panel's Finish playtest asks each agent player to look back once (the plugin's `report`, clock held), then builds a report: what was unclear, grouped by instructions phase with the same note from several players merged, each agent's summary, calls, and run problems (call limit, failed calls) kept apart. Stopping without the look back keeps a partial report from the notes so far; agents taken off a player keep their notes. Send to chat fills the Deep Agent prompt in Instructions mode and never sends.
+- [x] `Web/studio/src/playtestReport.ts`, `Web/studio/src/playtestView.ts`
+- [x] `Web/studio/src/agentPlayers.ts` — `kind` on notes, `lookBack`.
+- [x] `Web/studio/src/run.ts` — `report`, `finishPlaytest`, retired agents.
+- [x] `Web/studio/src/panels/deep-agent.ts`, `Web/studio/src/main.ts`, `Web/studio/src/testPanel.ts`
+- [x] `Web/studio/test/playtestReport.test.ts`, `Web/studio/test/agentPlayers.test.ts`, `Web/studio/test/agentRun.test.ts`, `Web/studio/test/deep-agent.test.ts`

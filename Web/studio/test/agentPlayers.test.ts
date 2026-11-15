@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { parseScene, type Action, type Observation } from '@pear/runtime';
 import type { CallResult, HandlerCall, ScriptSandbox } from '@pear/script';
 import { AgentDriver, type AgentHost } from '../src/agentPlayers';
-import type { AgentTransport, DecideRequest, PlanReply } from '../src/agentTransport';
+import type { AgentTransport, DecideRequest, PlanReply, ReportReply } from '../src/agentTransport';
 import { createPauseClock } from '../src/pauseClock';
 import { LocalRun, createPlayServer, joinPlay } from '../src/run';
 
@@ -37,9 +37,10 @@ const flush = () => new Promise((r) => setTimeout(r, 0));
 function fakes() {
   const requests: DecideRequest[] = [];
   const waiting: { resolve(r: PlanReply): void; reject(e: Error): void }[] = [];
+  const reports: { resolve(r: ReportReply): void; reject(e: Error): void; request: { run: string; player: string } }[] = [];
   const transport: AgentTransport = {
     decide: (r) => (requests.push(r), new Promise<PlanReply>((resolve, reject) => waiting.push({ resolve, reject }))),
-    report: async () => ({ unsure: [], summary: '' }),
+    report: (request) => new Promise<ReportReply>((resolve, reject) => reports.push({ resolve, reject, request })),
     close() {},
   };
   const applied: Action[] = [];
@@ -50,7 +51,7 @@ function fakes() {
     walking: () => state.walking,
     intro: () => ({ role: { id: 'r', name: 'R', brief: 'b', kind: 'player' }, instructions: { title: 'T' } }),
   };
-  return { requests, waiting, transport, applied, state, host };
+  return { requests, waiting, reports, transport, applied, state, host };
 }
 
 const driver = (f: ReturnType<typeof fakes>, w: ReturnType<typeof world>, extra: Partial<ConstructorParameters<typeof AgentDriver>[0]> = {}) =>
@@ -78,7 +79,7 @@ describe('AgentDriver', () => {
     f.waiting[0]!.reject(new Error('no key'));
     await flush();
     expect(w.clock.held).toBe(0);
-    expect(d.notes).toMatchObject([{ from: 'player-2', why: 'no key' }]);
+    expect(d.notes).toMatchObject([{ from: 'player-2', why: 'no key', kind: 'run' }]);
     w.advance(9000);
     d.tick();
     expect(f.requests).toHaveLength(1);
@@ -166,7 +167,7 @@ describe('AgentDriver', () => {
     d.tick();
     f.waiting[1]!.resolve({ actions: [], unsure: [{ phase: 'p1', line: 'Pass it', why: 'to whom?' }] });
     await flush();
-    expect(d.notes).toEqual([{ from: 'player-2', gameTime: 0, phase: 'p1', line: 'Pass it', why: 'to whom?' }]);
+    expect(d.notes).toEqual([{ from: 'player-2', gameTime: 0, phase: 'p1', line: 'Pass it', why: 'to whom?', kind: 'unsure' }]);
   });
 
   it('stops at the call cap, noting it once', async () => {
@@ -182,6 +183,57 @@ describe('AgentDriver', () => {
     expect(f.requests).toHaveLength(2);
     expect(d.status).toBe('limit');
     expect(d.notes.filter((n) => n.why.includes('call limit'))).toHaveLength(1);
+    expect(d.notes.find((n) => n.why.includes('call limit'))?.kind).toBe('run');
+  });
+
+  it('look back holds the clock for one report call, keeps its notes at the last game time and summary, then stops the driver', async () => {
+    const w = world(), f = fakes(), d = driver(f, w);
+    d.tick();
+    f.waiting[0]!.resolve({ actions: [], unsure: [] });
+    await flush();
+    const done = d.lookBack();
+    expect(w.clock.held).toBe(1);
+    expect(f.reports[0]!.request).toEqual({ run: 'run-1', player: 'player-2' });
+    f.reports[0]!.resolve({ unsure: [{ phase: 'p1', line: 'Pass it', why: 'to whom?' }], summary: 'Mostly fine.' });
+    await done;
+    expect(w.clock.held).toBe(0);
+    expect(d.summary).toBe('Mostly fine.');
+    expect(d.notes).toEqual([{ from: 'player-2', gameTime: 0, phase: 'p1', line: 'Pass it', why: 'to whom?', kind: 'unsure' }]);
+    expect(d.looked).toBe(true);
+    expect(d.status).toBe('stopped');
+    d.tick();
+    await d.lookBack();
+    expect(f.requests).toHaveLength(1);
+    expect(f.reports).toHaveLength(1);
+  });
+
+  it('a failed look back is a note about the run, and the clock is still released', async () => {
+    const w = world(), f = fakes(), d = driver(f, w);
+    d.tick();
+    f.waiting[0]!.resolve({ actions: [], unsure: [] });
+    await flush();
+    const done = d.lookBack();
+    f.reports[0]!.reject(new Error('timed out'));
+    await done;
+    expect(w.clock.held).toBe(0);
+    expect(d.notes).toMatchObject([{ kind: 'run', why: 'Look back failed: timed out' }]);
+    expect(d.summary).toBe('');
+  });
+
+  it('a decide still in flight at the look back has its answer dropped and each hold given back once', async () => {
+    const w = world(), f = fakes(), d = driver(f, w);
+    d.tick();
+    const done = d.lookBack();
+    expect(w.clock.held).toBe(2);
+    f.waiting[0]!.resolve({ actions: [{ type: 'say', text: 'late' }], unsure: [{ phase: '', line: 'x', why: 'y' }] });
+    await flush();
+    expect(w.clock.held).toBe(1);
+    f.reports[0]!.resolve({ unsure: [], summary: '' });
+    await done;
+    expect(w.clock.held).toBe(0);
+    d.tick();
+    expect(f.applied).toEqual([]);
+    expect(d.notes).toEqual([]);
   });
 
   it('dispose while thinking gives the hold back once and drops the answer', async () => {
