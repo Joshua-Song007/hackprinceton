@@ -11,7 +11,7 @@ Generated from `Web/studio/src/api.ts` by `Web/studio/scripts/gen-api-doc.mjs`. 
 | Handler | Description |
 |---|---|
 | `onLookAt(self, ctx)` | The head ray has stayed on this entity for 0.5 s. |
-| `onGesture(self, ctx, g)` | A gesture arrived from any device. flick carries dir. |
+| `onGesture(self, ctx, g)` | A gesture arrived from any device. type is a built-in gesture or the name of a scene motion gesture (scene.gestures). flick and motion gestures carry dir. "raise" and "lower" come only when the scene has gestures.raise: the device tilted away from (raise) or back toward (lower) its rest pose; they carry g.t, the time of the device packet that crossed. |
 | `onHeartRate(self, ctx, bpm)` | Heart rate changed. ctx.intensity is the normalized 0..1 value. |
 | `onRaycastHit(self, ctx)` | The aim ray hit this entity. |
 | `onTriggerEnter(self, ctx)` | The player entered this entity's trigger volume. |
@@ -22,12 +22,10 @@ Generated from `Web/studio/src/api.ts` by `Web/studio/scripts/gen-api-doc.mjs`. 
 `onLookAt` parameters: `self: Self`, `ctx: Ctx`
 
 ```js
-onLookAt(self, ctx) { self.audio.play("growl"); }
+onLookAt(self, ctx) { self.audio.play("beep"); }
 ```
 
-`onGesture` parameters: `self: Self`, `ctx: Ctx`, `g: { type: "tap" | "doubleTap" | "flick" | "squeeze" | "pinch" | string, dir?: [number, number, number] }`
-
-`type` is a built-in gesture or the name of a scene motion gesture (`scene.gestures`), which also carries `dir`. `ctx.positionAccuracy` is the horizontal accuracy of `ctx.position` in meters, or `null` without the location permission or a fix.
+`onGesture` parameters: `self: Self`, `ctx: Ctx`, `g: { type: "tap" | "doubleTap" | "flick" | "squeeze" | "pinch" | "raise" | "lower" | string, dir?: [number, number, number], t?: number }`
 
 ```js
 onGesture(self, ctx, g) { if (g.type === "flick") ctx.remote.fire("punch", { dir: g.dir }); }
@@ -76,10 +74,13 @@ onTick(self, ctx, dt) { self.speed = Math.max(0, self.speed - dt); }
 | `self.name: string` | Name of the entity this script is attached to. |
 | `self.speed: number` | Speed multiplier for this entity. Read and write. |
 | `self.position: [x, y, z]` | Entity position in meters. Reading it works; writes have no effect. |
-| `self.audio.play(sound: string)` | Plays a named sound on this entity. |
-| `self.audio.stop()` | Stops the sound playing on this entity. |
+| `self.audio.play(sound: string)` | Plays a built-in sound in the Studio. Built-in sounds: "beep". An unknown name logs a warning in the browser console and plays nothing. |
+| `self.audio.stop()` | Stops the sound and any speech that is playing. |
+| `self.audio.speak(text: string)` | Speaks the text aloud with the browser's speech synthesis. Does nothing where speech is unavailable. |
+| `self.calibrate()` | Makes this player's current device orientation the rest pose that gestures.raise measures from. Call it when the player holds the device in their starting position. |
 | `ctx.intensity: number` | Normalized heart rate, 0..1. Set on heart-rate calls. |
 | `ctx.player.id: string | null` | This player's id from the game server; null until the server welcome arrives. |
+| `ctx.positionAccuracy: number | null` | Horizontal accuracy of ctx.position in meters. null without the location permission or a fix. |
 | `ctx.position: [x, y, z] | null` | This player's position. Only set when scene.permissions.location is true, else null. |
 | `ctx.remote.fire(name: string, data?: any)` | Sends a remote event to the server. The only way off the client. |
 | `ctx.spawn(name: string)` | Asks the runtime to spawn an entity. Not simulated in local runs. |
@@ -107,13 +108,25 @@ const [x, y, z] = self.position;
 `self.audio.play`
 
 ```js
-self.audio.play("growl");
+self.audio.play("beep");
 ```
 
 `self.audio.stop`
 
 ```js
 self.audio.stop();
+```
+
+`self.audio.speak`
+
+```js
+self.audio.speak("Hands up!");
+```
+
+`self.calibrate`
+
+```js
+self.calibrate();
 ```
 
 `ctx.intensity`
@@ -126,6 +139,12 @@ const d = ctx.intensity;
 
 ```js
 if (ctx.player.id) console.log(ctx.player.id);
+```
+
+`ctx.positionAccuracy`
+
+```js
+if (ctx.positionAccuracy !== null && ctx.positionAccuracy > 10) return;
 ```
 
 `ctx.position`

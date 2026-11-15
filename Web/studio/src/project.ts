@@ -1,7 +1,7 @@
 // Project model: scene JSON + client/server script sources + cloud link, dirty tracking and IndexedDB autosave.
 // The Flagship template is imported from Games/Flagship through Vite (never copied into the Studio).
 import type { GameVersion, NewGameVersion } from '@pear/cloud';
-import { parseGestures, parseInputs, parsePeripherals, parseScene, type CustomGesture, type PeripheralKind, type SceneDescription, type SceneInputs } from '@pear/runtime';
+import { parseGestures, parseInputs, parsePeripherals, parseRaise, parseScene, type CustomGesture, type PeripheralKind, type SceneDescription, type SceneInputs } from '@pear/runtime';
 import flagshipScene from '../../../Games/Flagship/scene.json';
 import hotPotatoScene from '../../../Games/HotPotato/scene.json';
 import { blankClientScripts, blankScene, blankServerScripts } from './templates/blank';
@@ -417,6 +417,7 @@ export class Project {
       case 'gestures':
         try {
           parseGestures(value);
+          parseRaise((value as { raise?: unknown } | undefined)?.raise);
         } catch (e) {
           return e instanceof Error ? e.message : String(e);
         }
@@ -454,7 +455,10 @@ export class Project {
       else this.scene.inputs = structuredClone(change.inputs);
     }
     if (change.gestures !== undefined) {
-      if (Object.keys(change.gestures).length) this.scene.gestures = structuredClone(change.gestures);
+      // `gestures.raise` is not a motion gesture, so the Devices panel does not carry it: keep the scene's own.
+      const raise = (this.scene.gestures as { raise?: unknown } | undefined)?.raise;
+      const next = { ...structuredClone(change.gestures), ...(raise ? { raise } : {}) };
+      if (Object.keys(next).length) this.scene.gestures = next;
       else delete this.scene.gestures;
     }
     if (change.location) this.scene.permissions = { ...(this.scene.permissions as object | undefined), location: true };

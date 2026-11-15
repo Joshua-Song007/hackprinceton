@@ -16,6 +16,7 @@ import type { DebugStore } from './debug-panel';
 import type { EditorBus } from './editor';
 import type { PanelView } from './layout';
 import { rigFor } from './needs';
+import { ScriptAudio } from './scriptAudio';
 import { RelayClient } from './relay';
 import type { Project } from './project';
 import { el, icon } from './ui';
@@ -23,7 +24,8 @@ import { el, icon } from './ui';
 /** `onTick` rate: 5 Hz, enough to report a position without flooding the worker. */
 const TICK_MS = 200;
 
-export type EffectOutput = Exclude<ScriptOutput, { kind: 'log' }>;
+/** `calibrate` is handled inside LocalRun and never reaches `onOutput`. */
+export type EffectOutput = Exclude<ScriptOutput, { kind: 'log' } | { kind: 'calibrate' }>;
 
 export interface LocalRunOptions {
   scene: SceneDescription;
@@ -31,6 +33,8 @@ export interface LocalRunOptions {
   sandbox: ScriptSandbox;
   /** Haptic, remote, audio and spawn effects of client handlers. */
   onOutput?(output: EffectOutput, script: string): void;
+  /** Plays `audio` outputs (the creator's player only); without it they are only reported through `onOutput`. */
+  audio?: Pick<ScriptAudio, 'handle'>;
   /** A client script that failed to load (syntax error, unknown handler). */
   onLoadError?(script: string, message: string): void;
   /** Every USIS packet, `source` included (only the debug panel and Packets tab see it). */
@@ -43,7 +47,7 @@ export interface LocalRunOptions {
 export class LocalRun {
   readonly devices: SimDevices;
   readonly entities: WorldEntity[];
-  private bus = new InputBus();
+  private bus: InputBus;
   private events: SceneEvents;
   private now: () => number;
   private headStamps: number[] = [];
@@ -65,6 +69,7 @@ export class LocalRun {
 
   constructor(private options: LocalRunOptions) {
     this.now = options.now ?? (() => performance.now());
+    this.bus = new InputBus({ raise: options.scene.raise });
     this.events = new SceneEvents(options.scene);
     this.entities = this.events.entities;
     this.devices = new SimDevices((p) => {
@@ -188,7 +193,13 @@ export class LocalRun {
         positionAccuracy: this.options.scene.permissions.location ? this.accuracy : null,
         ...(intensity !== undefined ? { intensity } : {}),
       });
-      for (const o of result.outputs) this.options.onOutput?.(o, script);
+      for (const o of result.outputs) {
+        if (o.kind === 'calibrate') this.bus.calibrate(); // self.calibrate(): current pose becomes the raise rest pose
+        else {
+          if (o.kind === 'audio') this.options.audio?.handle(o);
+          this.options.onOutput?.(o, script);
+        }
+      }
     }
   }
 }
@@ -733,6 +744,7 @@ export class RunController {
         editor.reportError({ kind: 'client', name: script }, message);
       },
       onOutput: (o, script) => this.handleOutput(o, script),
+      audio: new ScriptAudio(),
       devices: { kinds: this.rig },
     });
     this.local = run;
@@ -929,7 +941,7 @@ export class RunController {
     if (o.kind === 'haptic') {
       this.out('log', `haptic ${o.pattern} ${o.intensity}`);
       if (this.players[0]) (this.players[0].hapticAt = Date.now(), this.sendHaptic(this.players[0], o.pattern, o.intensity));
-    } else if (o.kind === 'audio') this.out('log', `audio ${o.action} ${o.sound ?? ''} on ${o.entity}`.trim());
+    } else if (o.kind === 'audio') this.out('log', `audio ${o.action} ${o.sound ?? o.text ?? ''} on ${o.entity}`.trim());
     else if (o.kind === 'spawn') this.out('log', `spawn ${o.name} (not simulated locally)`);
     else if (this.server && this.local?.playerId) this.server.remote(this.local.playerId, o.name, o.data);
     else if (this.play) {

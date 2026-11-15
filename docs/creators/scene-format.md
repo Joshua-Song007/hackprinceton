@@ -33,6 +33,8 @@ A scene is one JSON object (`scene.json`, or the `scene` inside a `*.pear.json` 
 
 `gestures` (optional) defines motion gestures: `{ "swing": { "slot": "hand", "axis": [0, 0, -1], "threshold": 20, "cooldownMs": 400 } }`. The runtime fires `onGesture` with `type` set to the name and `dir` set to the axis when the slot device's acceleration (m/s², device frame) along `axis` rises past `threshold`, then waits `cooldownMs`. Names must not match a built-in gesture. Edit them under Scene settings > Motion gestures.
 
+`gestures.raise` (optional) turns on raise detection: `{ "raise": { "angleDeg": 80, "hysteresisDeg": 10 } }` (both optional, these are the defaults). Per device, the runtime measures the angle between the rest gravity direction and the current one (from the orientation, so turning in place never counts). At `angleDeg` or more it fires `onGesture` with `type` `"raise"`; back at `angleDeg - hysteresisDeg` or less it fires `"lower"`. Both carry `g.t`, the time of the packet that crossed. Rest is the first orientation packet until the script calls `self.calibrate()`. It works the same for simulated, replayed and Live devices. It has no entry in Scene settings; edit the scene JSON.
+
 ## Entity fields
 
 `name`, `position` [x, y, z] meters, `rotation` quaternion [x, y, z, w] (the Inspector shows degrees), `scale` [x, y, z], `shape` (`box` default, or `sphere`), `color` (CSS colour; drawing only), `children`, `components`.

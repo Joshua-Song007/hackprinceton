@@ -10,7 +10,8 @@ export type LogLevel = 'log' | 'warn' | 'error';
 export type ScriptOutput =
   | { kind: 'haptic'; pattern: string; intensity: number }
   | { kind: 'remote'; name: string; data: unknown }
-  | { kind: 'audio'; entity: string; action: 'play' | 'stop'; sound?: string }
+  | { kind: 'audio'; entity: string; action: 'play' | 'stop' | 'speak'; sound?: string; text?: string }
+  | { kind: 'calibrate' }
   | { kind: 'spawn'; name: string }
   | { kind: 'log'; level: LogLevel; text: string };
 
@@ -81,7 +82,8 @@ interface SelfObject {
   readonly name: string;
   speed: number;
   position: number[];
-  audio: { play(sound: string): void; stop(): void };
+  audio: { play(sound: string): void; stop(): void; speak(text: string): void };
+  calibrate(): void;
 }
 
 interface Loaded {
@@ -171,7 +173,9 @@ export class ScriptRuntime {
         audio: {
           play: (sound) => this.push({ kind: 'audio', entity: entity.id, action: 'play', sound: String(sound) }),
           stop: () => this.push({ kind: 'audio', entity: entity.id, action: 'stop' }),
+          speak: (text) => this.push({ kind: 'audio', entity: entity.id, action: 'speak', text: String(text) }),
         },
+        calibrate: () => this.push({ kind: 'calibrate' }),
       };
       this.selves.set(entity.id, self);
     }

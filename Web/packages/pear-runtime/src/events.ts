@@ -133,7 +133,7 @@ export class SceneEvents {
 
     for (const d of frame.devices) {
       if (d.stale) continue;
-      for (const g of d.gestures) events.push({ handler: 'onGesture', args: [g.dir ? { type: g.type, dir: g.dir } : { type: g.type }] });
+      for (const g of d.gestures) events.push({ handler: 'onGesture', args: [{ type: g.type, ...(g.dir ? { dir: g.dir } : {}), ...(g.t !== undefined ? { t: g.t } : {}) }] });
     }
 
     // Custom motion gestures: accel along the axis rising past the threshold fires once, then cools down.

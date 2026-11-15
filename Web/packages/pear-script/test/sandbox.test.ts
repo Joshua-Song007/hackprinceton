@@ -78,6 +78,21 @@ describe('ScriptRuntime with Flagship scripts', () => {
     expect(rt.call({ script: 'm', entity: ref('E'), handler: 'onLookAt', args: [] }).error).toMatch(/is not defined \(line 4\)$/);
   });
 
+  it('self.audio.speak, self.audio.play and self.calibrate become outputs; ctx has none', () => {
+    const rt = new ScriptRuntime(prelude);
+    rt.load(
+      't',
+      'export default script({ onGesture(self, ctx, g) { self.audio.speak("hands up " + g.t); self.audio.play("beep"); self.calibrate(); } });',
+    );
+    const r = rt.call({ script: 't', entity: ref('E'), handler: 'onGesture', args: [{ type: 'raise', t: 7 }] });
+    expect(r.error).toBeUndefined();
+    expect(r.outputs).toEqual([
+      { kind: 'audio', entity: 'E', action: 'speak', text: 'hands up 7' },
+      { kind: 'audio', entity: 'E', action: 'play', sound: 'beep' },
+      { kind: 'calibrate' },
+    ]);
+  });
+
   it('exposes self.position and hides page globals', () => {
     const rt = new ScriptRuntime(prelude);
     rt.load(

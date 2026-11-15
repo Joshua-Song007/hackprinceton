@@ -43,6 +43,8 @@ export interface SceneDescription {
   peripherals: PeripheralKind[];
   /** Creator-defined motion gestures, recognized by the runtime from `accel` and delivered as `onGesture({ type: name })`. */
   gestures: Record<string, CustomGesture>;
+  /** `gestures.raise`: when present, `onGesture` gets `raise`/`lower` as the device tilts away from its rest pose. */
+  raise?: RaiseGesture;
   clientScripts: string[];
   serverScripts: string[];
   entities: EntityDescription[];
@@ -72,6 +74,12 @@ export interface CustomGesture {
   axis: Vec3;
   threshold: number;
   cooldownMs: number;
+}
+
+/** Raise when the device's gravity direction is `angleDeg` away from rest; lower again at `angleDeg - hysteresisDeg`. */
+export interface RaiseGesture {
+  angleDeg: number;
+  hysteresisDeg: number;
 }
 
 type Obj = Record<string, unknown>;
@@ -198,6 +206,7 @@ export function parsePeripherals(raw: unknown): PeripheralKind[] {
 export function parseGestures(raw: unknown): Record<string, CustomGesture> {
   const out: Record<string, CustomGesture> = {};
   for (const [name, def] of Object.entries(obj(raw ?? {}, 'gestures'))) {
+    if (name === 'raise') continue; // not a motion gesture: see parseRaise
     const path = `gestures.${name}`;
     if (!/^[A-Za-z][A-Za-z0-9_]{0,31}$/.test(name)) throw new SceneError(`${path}: name must be a letter then letters, digits or _ (32 max)`);
     if ((GESTURE_TYPES as readonly string[]).includes(name)) throw new SceneError(`${path}: '${name}' is a built-in gesture`);
@@ -216,6 +225,17 @@ export function parseGestures(raw: unknown): Record<string, CustomGesture> {
   return out;
 }
 
+/** Validates `gestures.raise` (angle 0 to 180 exclusive, hysteresis 0 up to the angle); undefined when the scene has none. */
+export function parseRaise(raw: unknown): RaiseGesture | undefined {
+  if (raw === undefined) return undefined;
+  const g = obj(raw, 'gestures.raise');
+  const angleDeg = num(g.angleDeg, 'gestures.raise.angleDeg', 80);
+  const hysteresisDeg = num(g.hysteresisDeg, 'gestures.raise.hysteresisDeg', 10);
+  if (!(angleDeg > 0 && angleDeg < 180)) throw new SceneError('gestures.raise.angleDeg must be between 0 and 180');
+  if (!(hysteresisDeg >= 0 && hysteresisDeg < angleDeg)) throw new SceneError('gestures.raise.hysteresisDeg must be >= 0 and less than angleDeg');
+  return { angleDeg, hysteresisDeg };
+}
+
 /** Validates parsed scene JSON. Throws `SceneError` with the Swift loader's messages. */
 export function parseScene(input: unknown): SceneDescription {
   const s = obj(input, 'scene');
@@ -224,6 +244,7 @@ export function parseScene(input: unknown): SceneDescription {
     throw new SceneError(`requiredTier must be 1...3, got ${requiredTier}`);
   const runMode = str(s.runMode, 'runMode', 'screen');
   if (runMode !== 'screen' && runMode !== 'device') throw new SceneError(`runMode must be screen or device, got '${runMode}'`);
+  const raise = parseRaise(s.gestures == null ? undefined : obj(s.gestures, 'gestures').raise);
   const names = (x: unknown, path: string) => list(x, path).map((n, i) => str(n, `${path}[${i}]`));
   return {
     name: str(s.name, 'name', ''),
@@ -234,6 +255,7 @@ export function parseScene(input: unknown): SceneDescription {
     inputs: s.inputs === undefined || s.inputs === null ? null : parseInputs(s.inputs),
     peripherals: parsePeripherals(s.peripherals),
     gestures: parseGestures(s.gestures),
+    ...(raise ? { raise } : {}),
     clientScripts: names(s.clientScripts, 'clientScripts'),
     serverScripts: names(s.serverScripts, 'serverScripts'),
     entities: list(s.entities, 'entities').map((e, i) => parseEntity(e, `entities[${i}]`)),
