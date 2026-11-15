@@ -3,7 +3,9 @@
 
 export type Tone = 'neutral' | 'accent' | 'good' | 'bad' | 'warn';
 export type Size = 's' | 'm' | 'l' | 'xl' | 'huge';
-export interface Style { tone?: Tone; size?: Size; align?: 'start' | 'center' | 'end'; pad?: number; grow?: boolean }
+export interface Style { tone?: Tone; size?: Size; align?: 'start' | 'center' | 'end'; pad?: number; grow?: boolean;
+  /** Rounded panel fill / dashed outline (full width, min 52pt), monospace, tracked caps label, one shrinking line. */
+  card?: boolean; dashed?: boolean; mono?: boolean; caps?: boolean; fit?: boolean }
 
 export type Action = { send: string; data?: Record<string, unknown> } | { set: string; value?: unknown };
 
