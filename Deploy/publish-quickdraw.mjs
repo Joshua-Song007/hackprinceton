@@ -29,12 +29,19 @@ const scripts = (names) => Object.fromEntries(names.map((n) => [n, read(`scripts
 const owner = process.env.PEAR_DEV_USER && process.env.PEAR_DEV_PASSWORD
   ? await api("POST", "/api/accounts/signin", null, { provider: "developer", subject: process.env.PEAR_DEV_USER, password: process.env.PEAR_DEV_PASSWORD })
   : await api("POST", "/api/accounts/signin", null, { provider: "dev", subject: "quickdraw-owner", display_name: "Quick Draw" });
-const id = existing || (await api("POST", "/api/games", owner.token, { title: "Quick Draw" })).id;
+const id = existing || (await api("POST", "/api/games", owner.token, { title: process.env.PEAR_GAME_TITLE || "Quick Draw" })).id;
+// ui.json (PearUI screens, plan.md Phase 14 C1) travels as an inline version asset {contentType, data(base64)}, the
+// format PearCloud (iOS) and Studio decode. PEAR_NO_UI=1 publishes without it, so the player app keeps its built-in
+// native Quick Draw screens.
+const assets = {};
+if (process.env.PEAR_NO_UI !== "1" && fs.existsSync(path.join(dir, "ui.json"))) {
+  assets["ui.json"] = { contentType: "application/json", data: Buffer.from(read("ui.json")).toString("base64") };
+}
 const v = await api("POST", `/api/games/${id}/versions`, owner.token, {
   scene,
   client_scripts: scripts(scene.clientScripts),
   server_scripts: scripts(scene.serverScripts),
-  assets: {},
+  assets,
   metadata: { manifest },
   run_mode: scene.runMode,
 });

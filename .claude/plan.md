@@ -335,6 +335,8 @@ Not planned: multiple developer roles or audit log (one developer role for the h
 - Workers for resume: run on the 2 remote laptops (V2 autonomy, `.claude/instructions.md` Speed Rules). This laptop orchestrates only.
 
 ### Agreements (Socratic session, binding)
+- A0 (user, 2026-11-15 04:03, PARAMOUNT): Pear is NOT a screen game. It is a mixed-reality, outdoor, social experience: iOS hardware (phone GPS/motion/haptics, AirPods, Watch) replicates outdoor games (Manhunt, capture the flag, tag, hide and seek) that get people outside and together. Studio simulation only simulates human interaction (positions, movement, motion, taps); no 3D rendering unless a game specifically needs it. Phase 14 succeeds when a location game like Manhunt can be vibe-coded through the LangChain plugin, live-previewed (GPS map, simulated players), set up and shipped, at mass scale (many mini/outdoor games).
+- Acceptance test (supersedes Quick Draw as the main target): "Manhunt" built by the Deep Agents game mode via Pear MCP: game.js with server-side distance/tag logic, ui.json (map + status + actions, location sensor), scenario.json with gps paths that passes headless; shown in Studio Live Preview with draggable GPS devices; saved as a playable version. Quick Draw parity stays a secondary check (live Quick Draw stays native for the 05:00 demo).
 - A1 Users: 4-person team, demo speed. No public sign-up, quotas, review.
 - A2 Agent writes the full game (scripts, scene, instructions, ui) in a self-iterating loop: write → headless sim → read report → fix; human verifies in Studio Live Preview, then publishes.
 - A3 MCP both ways: Pear MCP server exposes prepackaged tools + kit reference; agent may also call external MCP servers.
@@ -354,7 +356,7 @@ Not planned: multiple developer roles or audit log (one developer role for the h
 - Unknown `type` renders nothing (forward compatible). Schema file: `Schema/pearui.schema.json`.
 
 ### C1 amendments (as built, binding)
-- Storage: a version has no extra-file slot. `ui.json` (and any non-script file, e.g. `scenario.json`) is a version ASSET: upload `PUT /api/games/{id}/assets/ui.json`, list it in the version's `assets` map under `"ui.json"`; clients read it via `GET /api/assets/{sha256}`. PearPlayer looks for an asset named `ui.json` or ending in `/ui.json`.
+- Storage: a version has no extra-file slot. `ui.json` (and any non-script file) is a version asset stored INLINE as `assets["ui.json"] = {contentType, data}` (data base64), the only form PearCloud (iOS, `Packages/PearCloud/Sources/PearCloud/CloudClient.swift:266`) and Studio decode. The content-addressed `{sha256,size,content_type}` form crashes the iPhone decode (verified in Simulator 2026-11-15); do not use it for versions until PearCloud supports it.
 - Join hello: a PearUI client sends `{"name":"role","data":{"role":"referee"|"phone","kind":"ipad"|"phone"}}` on socket open/reload (same as native Quick Draw). Scripts that ignore `role` are unaffected.
 - Expr: Swift also supports `.length` on arrays/strings; web `@pear/ui` does not yet (add to `Web/packages/pear-ui/src/expr.ts` on resume). Equality is loose on number vs string (`2 == '2'`).
 - Raise detection: PearUI has no client logic, so Quick Draw's 60/45 pitch hysteresis must move server side: client streams `aim {pitch,roll,yaw}` from a `sensor` node; game.js gets an additive `aim` handler feeding the existing raised/lowered path (14.7).
