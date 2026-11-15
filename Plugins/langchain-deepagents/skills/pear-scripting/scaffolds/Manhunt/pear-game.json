@@ -1,0 +1,8 @@
+{
+  "format": "pear-game/1",
+  "name": "Manhunt",
+  "scene": "scene.json",
+  "scripts": { "client": ["player"], "server": ["game"] },
+  "players": { "min": 3, "max": 8 },
+  "capabilities": { "tier": 1, "sensors": [] }
+}

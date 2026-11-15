@@ -207,6 +207,12 @@ Goal: updating a game from Studio never needs a Vultr refresh; one Publish uploa
 
 Not planned: a general UI description language beyond the Quick Draw and Hot Potato widget set; Studio-hosted agent runners in a live lobby; recorded audio pipeline (cues stay synthesized); collaborative editing (Phase 6).
 
+### Accounts and Studio default (user 2026-11-15 05:00, top priority)
+- [ ] `Backend/src/api/accounts.rs` — username + password signup (`POST /api/accounts/signup`, argon2id, role player, 409 on taken, password ≥ 10); passwordless `dev` sign-in restricted to sims (`PEAR_DEV_SIGNIN=1` + subject prefix `sim-`). (#226, Jacob)
+- [ ] `Web/studio/src/loginScreen.ts`, `Web/studio/src/signupScreen.ts` — Sign in + Create account (username/password); name-only dev sign-in removed from the UI. (#227, Tien)
+- [ ] `Web/studio/src/layout.ts` — default layout = Live Preview + editor + terminal + explorer; 3D `viewport` closed by default, opened only for 3D screen games (A0). (#227, Tien)
+- Note: `Apps/PearStudio` (Swift, RealityKit) is the legacy Phase 2 app and is not the developer environment; the developer environment is the web Studio (`Web/studio`, hosted at the server root, or `npm run tauri dev` for the desktop shell).
+
 ### Phase 13 dispatch (2026-11-15 04:45, remote Windows workers via assigned `ready` issues)
 - Jacob: #194 runtime members + per-player send → #208 13.7 publish gate → #209 session upgrade/ghost kick → #210 Flagship spec, smoke-game, preflight, /api/version → #215 Backend conformance.
 - Tien: #190 vibe-code run → #203 14.8 game media → #213 conformance fixtures + TS test + scripting-api.md → #211 Deep Agents write safety → #212 gen-skill + evals → #214 cues, check panel, lobby versions.

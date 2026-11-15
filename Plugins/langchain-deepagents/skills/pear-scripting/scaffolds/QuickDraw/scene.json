@@ -1,0 +1,20 @@
+{
+  "name": "Quick Draw",
+  "requiredTier": 1,
+  "playerOrigin": [0, 1.6, 0],
+  "runMode": "device",
+  "inputs": { "gestures": ["tap"], "players": [2, 2] },
+  "gestures": { "raise": { "angleDeg": 60, "hysteresisDeg": 15 } },
+  "clientScripts": ["player"],
+  "serverScripts": ["game"],
+  "entities": [
+    {
+      "name": "PlayerScriptHost",
+      "position": [0, 0, 0],
+      "scale": [0, 0, 0],
+      "components": [
+        { "type": "script", "name": "player" }
+      ]
+    }
+  ]
+}

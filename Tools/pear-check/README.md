@@ -12,3 +12,4 @@ Report: `ok`, `tested`, `untested` (events no scenario sends, no ui.json, items 
 
 `check.json`: `{"version":1,"selfcheck":"selfcheck.mjs"?,"scenarios":[...],"untested":["..."]}`. A scenario is the headless C2 scenario (`devices` with `role`, `rules`, `script`; `expect` of `{by, device, expr}`; `durationMs` is virtual) minus `game`, plus `name` and these extras: device `count: N` (clones `Name1..NameN`), device `joinAt`, script step `{at, leave: true}` (ghost player), script step `{at, every, until, send}` (repeat).
 The hosted runner (`Web/packages/pear-sim`) ignores the extras.
+Live counterpart: `node Deploy/smoke-game.mjs <gameId> --spec Games/X/check.json [--cloud URL]` replays the same scenarios over real sockets against a local or hosted backend (read-only, own lobby per scenario).

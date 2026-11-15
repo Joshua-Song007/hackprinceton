@@ -97,14 +97,14 @@ describe('LocalServer', () => {
     expect(state(s).ok).toBe(true);
   });
 
-  it('ctx is frozen with only state, remote, now, after, cancel, agent; no IO globals', () => {
+  it('ctx is frozen with only state, remote, lobby, players, phases, now, after, cancel, agent; no IO globals', () => {
     const src = `export default serverScript({ onRemote(ctx) {
       ctx.remote.fireAll("probe", { keys: Object.keys(ctx).sort(), frozen: Object.isFrozen(ctx),
         io: [typeof fetch, typeof document, typeof WebSocket, typeof window] });
     } });`;
     const { s, fired } = make([src]);
     s.remote('a', 'x', null);
-    expect(fired[0]![2]).toEqual({ keys: ['after', 'agent', 'cancel', 'now', 'remote', 'state'], frozen: true, io: ['undefined', 'undefined', 'undefined', 'undefined'] });
+    expect(fired[0]![2]).toEqual({ keys: ['after', 'agent', 'cancel', 'enterPhase', 'lobby', 'now', 'phaseEnteredAt', 'players', 'remote', 'state'], frozen: true, io: ['undefined', 'undefined', 'undefined', 'undefined'] });
   });
 
   it('rejects scripts that do not load', () => {
@@ -116,5 +116,86 @@ describe('LocalServer', () => {
     const { s, logs } = make([`export default serverScript({ onRemote() { console.log("hi", { n: 1 }); console.warn("w"); } });`]);
     s.remote('a', 'x', null);
     expect(logs).toEqual(['log:hi {"n":1}', 'warn:w']);
+  });
+
+  it('ctx.lobby defaults to OPEN and follows the option', () => {
+    const src = `export default serverScript({ onRemote(ctx) { ctx.state.l = ctx.lobby; } });`;
+    const a = make([src]);
+    a.s.remote('a', 'x', null);
+    expect(state(a.s).l).toBe('OPEN');
+    const s = new LocalServer({ prelude, onFire: () => {}, lobby: 'ABCD' });
+    s.load([src]);
+    s.remote('a', 'x', null);
+    expect(state(s).l).toBe('ABCD');
+  });
+
+  it('ctx.players() lists names and last-seen, without a leaver', () => {
+    let t = 1000;
+    const s = new LocalServer({ prelude, onFire: () => {}, now: () => t });
+    s.load([`export default serverScript({
+      onPlayerLeave(ctx) { ctx.state.left = ctx.players().map((p) => p.id); },
+      onRemote(ctx) { ctx.state.all = ctx.players(); },
+    });`]);
+    s.join('a', 'Ann');
+    s.join('b');
+    t = 2500;
+    s.remote('a', 'x', null);
+    expect(state(s).all).toEqual([{ id: 'a', name: 'Ann', lastSeen: 2500 }, { id: 'b', name: '', lastSeen: 1000 }]);
+    s.leave('a');
+    expect(state(s).left).toEqual(['b']);
+  });
+
+  it('player timers pass the player id and are cancelled when the player leaves', () => {
+    const { s, timers, fire } = make([`export default serverScript({
+      onRemote(ctx, p) { ctx.after(100, 'ping', { n: 1 }, p.id); ctx.after(100, 'g'); },
+      onTimer(ctx, tag, data, pid) { ctx.state.f = (ctx.state.f || []).concat([[tag, data, pid ?? null]]); },
+    });`]);
+    s.join('a');
+    s.remote('a', 'x', null);
+    fire(0);
+    fire(1);
+    expect(state(s).f).toEqual([['ping', { n: 1 }, 'a'], ['g', null, null]]);
+    s.remote('a', 'x', null);
+    s.leave('a');
+    expect(timers[2]!.live).toBe(false);
+    expect(timers[3]!.live).toBe(true);
+  });
+
+  it('ctx.cancel on a fired or unknown handle returns false without error', () => {
+    const { s, fire, errors } = make([`export default serverScript({
+      onRemote(ctx, p, name) {
+        if (name === 'arm') ctx.state.id = ctx.after(100, 't');
+        else ctx.state.r = [ctx.cancel(ctx.state.id), ctx.cancel(ctx.state.id), ctx.cancel(999)];
+      },
+    });`]);
+    s.remote('a', 'arm', null);
+    fire(0);
+    s.remote('a', 'go', null);
+    expect(state(s).r).toEqual([false, false, false]);
+    expect(errors).toEqual([]);
+  });
+
+  it('phaseEnteredAt returns the current or named phase entry time, else null', () => {
+    let t = 10;
+    const s = new LocalServer({ prelude, onFire: () => {}, now: () => t });
+    s.load([`export default serverScript({
+      onRemote(ctx, p, name) {
+        if (name === 'ask') ctx.state.r = [ctx.phaseEnteredAt(), ctx.phaseEnteredAt('lobby'), ctx.phaseEnteredAt('nope')];
+        else ctx.enterPhase(name);
+      },
+    });`]);
+    s.remote('a', 'ask', null);
+    expect(state(s).r).toEqual([null, null, null]);
+    s.remote('a', 'lobby', null);
+    t = 99;
+    s.remote('a', 'play', null);
+    s.remote('a', 'ask', null);
+    expect(state(s).r).toEqual([99, 10, null]);
+  });
+
+  it('ctx.remote.fire sends to one player only', () => {
+    const { s, fired } = make([`export default serverScript({ onRemote(ctx) { ctx.remote.fire('hunter', 'pos', { lat: 1 }); } });`]);
+    s.remote('prey', 'x', null);
+    expect(fired).toEqual([['hunter', 'pos', { lat: 1 }]]);
   });
 });

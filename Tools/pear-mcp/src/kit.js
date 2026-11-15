@@ -9,9 +9,13 @@ FILES (save_version {id, files}; paths are keys, values are strings)
   ui.json (or any other .json/.html/.css/.js name)   stored as a version ASSET (PearUI screens, scenario.json)
 Scripts: \`export default (function () { return { onRemote(ctx, player, name, data) {...} }; })();\` or
 \`export default serverScript({...})\` / \`script({...})\`. The first statement must be the \`export default\`.
-Server handlers: onPlayerJoin(ctx, player) onPlayerLeave(ctx, player) onRemote(ctx, player, name, data) onTimer(ctx, tag, data)
+Server handlers: onPlayerJoin(ctx, player) onPlayerLeave(ctx, player) onRemote(ctx, player, name, data) onTimer(ctx, tag, data, playerId?)
 Server ctx: ctx.state (plain object, lives in the session) ctx.remote.fire(playerId, name, data) ctx.remote.fireAll(name, data)
-  ctx.now() ctx.after(ms, tag, data)->id (50ms..1h, max 64 pending) ctx.cancel(id) console.log
+  ctx.now() ctx.after(ms, tag, data, playerId?)->id (50ms..1h, max 64 pending) ctx.cancel(id)->true if it was still pending, false if fired/cancelled/unknown (never throws) console.log
+  Private send: ctx.remote.fire(playerId, name, data) reaches ONE player only (use it for secrets like hunter positions or roles); fireAll reaches everyone.
+  ctx.lobby (lobby code string, "OPEN" by default) ctx.players() -> [{id, name, lastSeen}] (connected players in join order; lastSeen = ms epoch of last join/remote event, compare with ctx.now())
+  Per-player timer: ctx.after(ms, tag, data, playerId) calls onTimer(ctx, tag, data, playerId) and is cancelled automatically when that player leaves (no player = lobby-wide timer, 3 args).
+  Phases: ctx.enterPhase(name)->ms epoch (record it each time the game changes phase) ctx.phaseEnteredAt(name?)->ms epoch the current (or named) phase was last entered, null if never; use it to show countdowns after a reconnect.
 Client handlers: onLookAt onGesture(self,ctx,g) onHeartRate onRaycastHit onTriggerEnter onTriggerExit onRemote(self,ctx,name,data) onTick(self,ctx,dt)
 Client ctx: ctx.remote.fire(name,data) ctx.haptic(pattern,intensity) ctx.player.id/role ctx.position ctx.intensity self.audio.play/speak
 Scripts see only these APIs. No fs, network or source access.
@@ -48,12 +52,13 @@ PEARUI v1 (ui.json): server-driven native UI; the same JSON renders on iOS and w
     ui: {"type":"column","children":[
       {"type":"sensor","kind":"location","event":"location","hz":1,"id":"gps"},
       {"type":"map","markers":"ev.view.markers","follow":"me"},
-      {"type":"text","value":"{{ev.view.hint}}"},
-      {"type":"button","label":"Tag","action":{"send":"tag"},"if":"ev.view.role == 'hunter'"},
-      {"type":"effect","id":"near","on":"ev.view.hint","haptic":"heavy"}]}
+      {"type":"text","value":"{{ev.you.hint}}"},
+      {"type":"button","label":"Tag","action":{"send":"tag"},"if":"ev.you.role == 'hunter'"},
+      {"type":"effect","id":"near","on":"ev.you.hint","haptic":"heavy"}]}
     server (JS): const R=6371000,rad=d=>d*Math.PI/180;
       const haversine=(a,b)=>{const h=Math.sin(rad(b.lat-a.lat)/2)**2+Math.cos(rad(a.lat))*Math.cos(rad(b.lat))*Math.sin(rad(b.lng-a.lng)/2)**2;return 2*R*Math.asin(Math.sqrt(h))};
       on "location" {lat,lng,acc}: store per player; hint = d<15?"Tag range":d<50?"Close":"Cold" (d metres to nearest runner); on "tag" accept only if haversine<=15.
+      Per-player secrets (role, hint, other players' positions): ctx.remote.fire(playerId,"you",{role,hint,...}) and read ev.you.* in the UI; fireAll("view",...) is seen by everyone, so keep only public facts there.
     Markers are [{lat,lng,label,tone}] (tone good=green, bad=red, else orange). One location stream per screen.
 
 SCENARIO (run_scenario: headless, real sockets against the hosted server)

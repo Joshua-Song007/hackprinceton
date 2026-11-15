@@ -126,3 +126,96 @@ fn factory_runs_fixture_through_public_api() {
         vec![Outgoing::FireAll { name: "hit".into(), data: json!({"from": "p1", "dir": [0, 1, 0]}) }]
     );
 }
+
+#[test]
+fn lobby_comes_from_the_session_key_and_defaults_to_open() {
+    let src = r#"export default serverScript({ onRemote(ctx) { ctx.remote.fireAll("lobby", ctx.lobby); } });"#;
+    let lobby = |key: &str| {
+        let mut h = QuickJsHost::new(key, &[src.to_string()]).unwrap();
+        h.on_remote("a", "x", &Value::Null)
+    };
+    assert_eq!(lobby("game/ABCD"), vec![Outgoing::FireAll { name: "lobby".into(), data: json!("ABCD") }]);
+    assert_eq!(lobby("game"), vec![Outgoing::FireAll { name: "lobby".into(), data: json!("OPEN") }]);
+}
+
+#[test]
+fn players_list_has_names_and_last_seen_and_drops_leavers() {
+    let src = r#"export default serverScript({
+      onPlayerJoin(ctx, p) { ctx.state.joined = ctx.players().map((x) => x.id); },
+      onPlayerLeave(ctx, p) { ctx.state.left = ctx.players().map((x) => x.id); },
+      onRemote(ctx, p, name) {
+        const me = ctx.players().find((x) => x.id === p.id);
+        ctx.state.seen = { name: me.name, recent: ctx.now() - me.lastSeen < 1000, n: ctx.players().length };
+      },
+    });"#;
+    let mut h = host(src);
+    h.set_player_name("a", "Ann");
+    h.on_player_join("a");
+    h.on_player_join("b");
+    assert_eq!(state(&h)["joined"], json!(["a", "b"]));
+    h.on_remote("a", "ping", &Value::Null);
+    assert_eq!(state(&h)["seen"], json!({"name": "Ann", "recent": true, "n": 2}));
+    h.on_player_leave("a");
+    assert_eq!(state(&h)["left"], json!(["b"]));
+}
+
+#[test]
+fn player_timers_carry_the_player_and_die_with_them() {
+    let src = r#"export default serverScript({
+      onRemote(ctx, p, name) {
+        if (name === "arm") { ctx.state.t = ctx.after(1000, "ping", { n: 1 }, p.id); ctx.state.g = ctx.after(2000, "ping", { n: 1 }); }
+      },
+      onTimer(ctx, tag, data, playerId) { ctx.state.fired = (ctx.state.fired || []).concat([[tag, data, playerId === undefined ? null : playerId]]); },
+    });"#;
+    let mut h = host(src);
+    let out = h.on_remote("a", "arm", &Value::Null);
+    assert_eq!(out.len(), 2);
+    h.on_timer("ping", &json!({"n": 1})); // the global one: no player arg
+    let Outgoing::After { tag, data, .. } = &out[0] else { panic!("After") };
+    h.on_timer(tag, data);
+    assert_eq!(state(&h)["fired"], json!([["ping", {"n": 1}, null], ["ping", {"n": 1}, "a"]]));
+    // an unfired player timer is cancelled when that player leaves
+    h.on_remote("b", "arm", &Value::Null);
+    assert_eq!(h.on_player_leave("b"), vec![Outgoing::Cancel { id: 3 }]);
+}
+
+#[test]
+fn cancel_on_a_fired_or_unknown_handle_is_a_quiet_false() {
+    let src = r#"export default serverScript({
+      onRemote(ctx, p, name) {
+        if (name === "arm") ctx.state.id = ctx.after(100, "t");
+        if (name === "cancel") ctx.state.r = [ctx.cancel(ctx.state.id), ctx.cancel(ctx.state.id), ctx.cancel(999)];
+      },
+    });"#;
+    let mut h = host(src);
+    h.on_remote("a", "arm", &Value::Null);
+    h.on_timer("t", &Value::Null);
+    assert!(h.on_remote("a", "cancel", &Value::Null).is_empty());
+    assert_eq!(state(&h)["r"], json!([false, false, false]));
+    assert!(h.errors().is_empty());
+}
+
+#[test]
+fn phase_entered_at_tracks_current_and_named_phases() {
+    let src = r#"export default serverScript({
+      onRemote(ctx, p, name) {
+        if (name === "enter") ctx.enterPhase(p.id);
+        if (name === "ask") ctx.state.r = [ctx.phaseEnteredAt(), ctx.phaseEnteredAt("lobby"), ctx.phaseEnteredAt("nope")];
+      },
+    });"#;
+    let mut h = host(src);
+    h.on_remote("a", "ask", &Value::Null);
+    assert_eq!(state(&h)["r"], json!([null, null, null]));
+    h.on_remote("lobby", "enter", &Value::Null);
+    h.on_remote("play", "enter", &Value::Null);
+    h.on_remote("a", "ask", &Value::Null);
+    let r = state(&h)["r"].clone();
+    assert!(r[0].as_f64().unwrap() >= r[1].as_f64().unwrap() && r[1].is_number() && r[2].is_null());
+}
+
+#[test]
+fn per_player_fire_reaches_only_that_player() {
+    let src = r#"export default serverScript({ onRemote(ctx, p) { ctx.remote.fire("hunter", "pos", { lat: 1 }); } });"#;
+    let out = host(src).on_remote("prey", "x", &Value::Null);
+    assert_eq!(out, vec![Outgoing::Fire { player: "hunter".into(), name: "pos".into(), data: json!({"lat": 1}) }]);
+}

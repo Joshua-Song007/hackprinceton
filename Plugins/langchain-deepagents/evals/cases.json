@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "note": "Prompt-to-game cases scored by Tools/pear-check (run: uv run python evals/run_evals.py [case-id ...]). Opt-in: needs a live model key; not part of the default tests.",
+  "cases": [
+    {"id": "manhunt-gps", "outdoor": true, "players": [3, 12], "ui": true,
+     "prompt": "Make a Manhunt game: one hunter per three players, everyone shares GPS, the hunter tags a runner within 15 metres, and the hunter gets hot/cold hints."},
+    {"id": "capture-flag-gps", "outdoor": true, "players": [4, 16], "ui": true,
+     "prompt": "Make a capture the flag game for two teams on foot. Each team has a home point on the map; carrying the enemy flag back to your home point scores. Use GPS positions."},
+    {"id": "zone-tag-gps", "outdoor": true, "players": [2, 12], "ui": true,
+     "prompt": "Make a tag game in a shrinking GPS circle. Whoever is it passes the tag by getting within 10 metres of someone; players outside the circle are eliminated."},
+    {"id": "hot-potato-pass", "outdoor": false, "players": [2, 8], "ui": false,
+     "prompt": "Make a hot potato party game: one player holds the potato, flicking the phone passes it to a random other player, and whoever holds it when the timer ends is out."},
+    {"id": "quick-draw-duel", "outdoor": false, "players": [2, 2], "ui": false,
+     "prompt": "Make a two-player quick draw duel: after a random delay a cue plays and the first player to raise their phone wins the round; raising early loses it."}
+  ]
+}

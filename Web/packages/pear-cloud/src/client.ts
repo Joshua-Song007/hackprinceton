@@ -254,6 +254,16 @@ export class CloudClient {
     return this.request('PUT', `/api/games/${encodeURIComponent(gameId)}/cover`, undefined, image);
   }
 
+  /** Raw body to the content-addressed asset store (10 MB, owner or developer); `name` is [A-Za-z0-9._-]{1,128}. */
+  uploadAsset(gameId: string, name: string, data: Blob): Promise<{ name: string; sha256: string; size: number; content_type: string }> {
+    return this.request('PUT', `/api/games/${encodeURIComponent(gameId)}/assets/${encodeURIComponent(name)}`, undefined, data);
+  }
+
+  /** Public URL of a stored asset by content hash. */
+  assetUrl(sha256: string): string {
+    return `${this.baseUrl}/api/assets/${encodeURIComponent(sha256)}`;
+  }
+
   deleteCover(gameId: string): Promise<void> {
     return this.request('DELETE', `/api/games/${encodeURIComponent(gameId)}/cover`);
   }

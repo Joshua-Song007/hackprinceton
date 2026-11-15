@@ -282,6 +282,27 @@ ctx.agent.run("Describe the winner in one line").then((t) => ctx.remote.fireAll(
 console.log("joined");
 ```
 
+## Runtime support
+
+Evidence: the shared fixtures in `Tests/conformance/*.json`, run by `Web/packages/pear-runtime/test/conformance.test.ts` (TypeScript runtime: `ScriptRuntime` for client scripts, `LocalServer` for server scripts). "Verified" means a fixture exercises the member. Rust (`Backend/tests/conformance.rs`) and Swift (`ConformanceTests.swift`) run the same files once they land; until then their cells say what the code does, not what a test proved.
+
+| Member | TypeScript (Studio) | Rust server (hosted) | Swift (iOS) |
+|---|---|---|---|
+| client `ctx.remote.fire(name, data)` | supported, verified | n/a (client only) | supported, not yet verified |
+| client `ctx.haptic(pattern, intensity)` | supported, verified (emits an output; the Studio rig draws a ring) | n/a | supported, not yet verified |
+| client `ctx.spawn(name)` | supported, verified as an output only; nothing is spawned in Studio local runs | n/a | not yet verified |
+| client `ctx.player.id`, `ctx.player.role` | supported, verified | n/a | `role` is Studio Test panel only; not yet verified |
+| client `ctx.intensity`, `ctx.position`, `ctx.positionAccuracy` | supported, verified | n/a | not yet verified |
+| client `self.audio.play`, `console.*` | supported, verified | n/a | not yet verified |
+| server `ctx.state` | supported, verified | supported, covered by `Backend/tests/script_host.rs` | n/a |
+| server `ctx.remote.fire`, `fireAll` | supported, verified | supported (`script_host.rs`) | n/a |
+| server `ctx.after`, `ctx.cancel` | supported, verified (50 ms clamp, cancel) | supported (`script_host.rs`) | n/a |
+| server `ctx.now` | supported, not in a fixture (clock is not deterministic) | supported | n/a |
+| server `ctx.agent.run` | unsupported: always rejects "agent runtime not configured" in Studio | supported when the backend has the agent env | n/a |
+| server handler throws | reported through `onError`, next script still runs; verified | reported | n/a |
+
+Not simulated in Studio: a server script's infinite loop is not stopped (no 1 s CPU cap on the in-page host).
+
 ## Limits and sandbox
 
 - A client handler is stopped after 250 ms (watchdog); the error appears in the Output tab.

@@ -1,0 +1,27 @@
+{
+  "name": "client ctx members",
+  "runtime": "client",
+  "scripts": {
+    "main": "export default script({\n  onGesture(self, ctx, g) {\n    ctx.remote.fire(\"punch\", { dir: g.dir, who: ctx.player.id, role: ctx.player.role });\n    ctx.haptic(\"thud\", 0.8);\n    ctx.spawn(\"coin\");\n    self.audio.play(\"boom\");\n    console.log(\"flick\", g.dir);\n  },\n  onHeartRate(self, ctx, bpm) { ctx.remote.fire(\"hr\", { i: ctx.intensity, pos: ctx.position, acc: ctx.positionAccuracy }); }\n});"
+  },
+  "calls": [
+    {
+      "call": { "script": "main", "entity": { "id": "E", "name": "E", "position": [0, 0, 0] }, "handler": "onGesture", "args": [{ "type": "flick", "dir": [1, 0, 0] }], "playerId": "p1", "role": "ref" },
+      "outputs": [
+        { "kind": "remote", "name": "punch", "data": { "dir": [1, 0, 0], "who": "p1", "role": "ref" } },
+        { "kind": "haptic", "pattern": "thud", "intensity": 0.8 },
+        { "kind": "spawn", "name": "coin" },
+        { "kind": "audio", "entity": "E", "action": "play", "sound": "boom" },
+        { "kind": "log", "level": "log", "text": "flick [1,0,0]" }
+      ]
+    },
+    {
+      "call": { "script": "main", "entity": { "id": "E", "name": "E", "position": [0, 0, 0] }, "handler": "onHeartRate", "args": [120], "intensity": 0.5, "position": [1, 2, 3], "positionAccuracy": 4 },
+      "outputs": [{ "kind": "remote", "name": "hr", "data": { "i": 0.5, "pos": [1, 2, 3], "acc": 4 } }]
+    },
+    {
+      "call": { "script": "main", "entity": { "id": "E", "name": "E", "position": [0, 0, 0] }, "handler": "onHeartRate", "args": [60], "intensity": 0 },
+      "outputs": [{ "kind": "remote", "name": "hr", "data": { "i": 0, "pos": null, "acc": null } }]
+    }
+  ]
+}

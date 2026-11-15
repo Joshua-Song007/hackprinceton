@@ -5,6 +5,7 @@
 //   GET    /api/instances                                         -> 200 [{game_id, title?, lobby, version, players: [{id, name}], started_at, last_activity_at}]
 //   DELETE /api/instances/{game_id}/{lobby}                       -> 204 | 404 (closes the session; its sockets end)
 //   DELETE /api/instances/{game_id}/{lobby}/players/{player_id}   -> 204 | 404 (drops one player through the normal leave path)
+//   DELETE /api/instances/{game_id}/{lobby}/ghosts/{player_id}    -> 204 | 404 | 409 (game owner or developer; only a player silent for PEAR_GHOST_SECS, 15 by default; 409 = still alive)
 
 use axum::extract::{Path, State};
 use axum::http::{HeaderMap, StatusCode};
@@ -13,9 +14,9 @@ use axum::{Json, Router};
 use serde::Serialize;
 
 use crate::api::accounts::authenticate;
-use crate::api::games::valid_uuid;
+use crate::api::games::{require_editor, valid_uuid};
 use crate::db;
-use crate::game_server::session::{self, normalize_lobby};
+use crate::game_server::session::{self, normalize_lobby, GhostKick};
 use crate::AppState;
 
 async fn require_developer(headers: &HeaderMap) -> Result<(), StatusCode> {
@@ -77,9 +78,31 @@ async fn kick(headers: HeaderMap, Path((game_id, lobby, player)): Path<(String, 
     if session::kick(&game_id, &lobby, &player) { Ok(StatusCode::NO_CONTENT) } else { Err(StatusCode::NOT_FOUND) }
 }
 
+async fn kick_ghost(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path((game_id, lobby, player)): Path<(String, String, String)>,
+) -> Result<StatusCode, StatusCode> {
+    let account = authenticate(&headers).await.ok_or(StatusCode::UNAUTHORIZED)?;
+    let lobby = normalize_lobby(&lobby).ok_or(StatusCode::BAD_REQUEST)?;
+    if !account.is_developer() {
+        let pool = state.db.as_ref().ok_or(StatusCode::SERVICE_UNAVAILABLE)?;
+        if !valid_uuid(&game_id) {
+            return Err(StatusCode::NOT_FOUND);
+        }
+        require_editor(pool, &account, &game_id).await?;
+    }
+    match session::kick_ghost(&game_id, &lobby, &player) {
+        Ok(()) => Ok(StatusCode::NO_CONTENT),
+        Err(GhostKick::NotFound) => Err(StatusCode::NOT_FOUND),
+        Err(GhostKick::Alive) => Err(StatusCode::CONFLICT),
+    }
+}
+
 pub fn routes() -> Router<AppState> {
     Router::new()
         .route("/api/instances", get(list))
         .route("/api/instances/{game_id}/{lobby}", delete(close))
         .route("/api/instances/{game_id}/{lobby}/players/{player_id}", delete(kick))
+        .route("/api/instances/{game_id}/{lobby}/ghosts/{player_id}", delete(kick_ghost))
 }
