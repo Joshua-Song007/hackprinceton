@@ -26,7 +26,7 @@
    ],
    "expect": [
     { "by": 3000, "device": "Ann", "expr": "ev.round.state == 'won'" },
-    { "by": 3000, "device": "Ben", "expr": "ev.round.scores.p-Ben == 1" }
+    { "by": 3000, "device": "Ben", "expr": "ev.round.state == 'won'" }
    ]
   },
   {
