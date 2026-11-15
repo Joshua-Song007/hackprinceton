@@ -24,7 +24,8 @@
           "value": "Lobby {{me.lobby}}",
           "style": {
             "size": "s",
-            "align": "end"
+            "align": "end",
+            "mono": true
           },
           "if": "ev.state.phase == 'countdown' || ev.state.phase == 'arming' || ev.state.phase == 'fire' || ev.state.phase == 'roundOver' || ev.state.phase == 'matchOver'"
         },
@@ -44,7 +45,8 @@
                         "type": "text",
                         "value": "{{item.name}}",
                         "style": {
-                          "size": "l"
+                          "size": "l",
+                          "fit": true
                         }
                       },
                       {
@@ -61,7 +63,11 @@
                     ]
                   }
                 ],
-                "if": "item.role == 'phone'"
+                "if": "item.role == 'phone'",
+                "style": {
+                  "card": true,
+                  "pad": 2
+                }
               }
             }
           ],
@@ -74,7 +80,8 @@
               "type": "text",
               "value": "LOBBY CODE",
               "style": {
-                "size": "s"
+                "size": "l",
+                "caps": true
               }
             },
             {
@@ -82,12 +89,13 @@
               "value": "{{me.lobby}}",
               "style": {
                 "size": "huge",
-                "tone": "accent"
+                "tone": "accent",
+                "mono": true
               }
             },
             {
               "type": "text",
-              "value": "On your iPhone: open Pear > Quick Draw > Join > enter {{me.lobby}}",
+              "value": "On your iPhone: open Pear → Quick Draw → Join → enter {{me.lobby}}",
               "style": {
                 "size": "l",
                 "align": "center"
@@ -108,44 +116,53 @@
                 "type": "column",
                 "children": [
                   {
-                    "type": "row",
-                    "children": [
-                      {
-                        "type": "text",
-                        "value": "GUN",
-                        "style": {
-                          "size": "s"
-                        }
-                      },
-                      {
-                        "type": "text",
-                        "value": "{{item.name}}",
-                        "style": {
-                          "size": "xl"
-                        }
-                      },
-                      {
-                        "type": "spacer"
-                      },
-                      {
-                        "type": "text",
-                        "value": "Ready",
-                        "style": {
-                          "size": "l",
-                          "tone": "good"
-                        },
-                        "if": "item.ready"
-                      },
-                      {
-                        "type": "text",
-                        "value": "Not ready",
-                        "style": {
-                          "size": "l",
-                          "tone": "warn"
-                        },
-                        "if": "!item.ready"
-                      }
-                    ]
+                    "type": "text",
+                    "value": "GUN",
+                    "style": {
+                      "caps": true
+                    }
+                  },
+                  {
+                    "type": "text",
+                    "value": "{{item.name}}",
+                    "style": {
+                      "size": "xl",
+                      "fit": true
+                    }
+                  },
+                  {
+                    "type": "text",
+                    "value": "Ready ✓",
+                    "style": {
+                      "size": "l",
+                      "tone": "good"
+                    },
+                    "if": "item.ready"
+                  },
+                  {
+                    "type": "text",
+                    "value": "Not ready",
+                    "style": {
+                      "size": "l",
+                      "tone": "warn"
+                    },
+                    "if": "!item.ready"
+                  },
+                  {
+                    "type": "text",
+                    "value": "Connected",
+                    "style": {
+                      "size": "s"
+                    },
+                    "if": "item.ready"
+                  },
+                  {
+                    "type": "text",
+                    "value": "Connected · hold phone down, tap Ready",
+                    "style": {
+                      "size": "s"
+                    },
+                    "if": "!item.ready"
                   },
                   {
                     "type": "row",
@@ -166,14 +183,23 @@
                     "if": "item.idleKickAt"
                   }
                 ],
-                "if": "item.role == 'phone'"
+                "if": "item.role == 'phone'",
+                "style": {
+                  "card": true,
+                  "pad": 3,
+                  "align": "center"
+                }
               }
             },
             {
               "type": "text",
               "value": "Waiting for a phone...",
               "style": {
-                "size": "l"
+                "size": "l",
+                "tone": "neutral",
+                "dashed": true,
+                "pad": 3,
+                "align": "center"
               },
               "if": "ev.state.phones.length == 0"
             },
@@ -181,7 +207,11 @@
               "type": "text",
               "value": "Waiting for a phone...",
               "style": {
-                "size": "l"
+                "size": "l",
+                "tone": "neutral",
+                "dashed": true,
+                "pad": 3,
+                "align": "center"
               },
               "if": "ev.state.phones.length != 2"
             },
@@ -195,31 +225,62 @@
               "if": "ev.view.queueNames"
             },
             {
-              "type": "text",
-              "value": "HOW TO PLAY",
+              "type": "column",
               "style": {
-                "size": "s"
-              }
+                "card": true,
+                "pad": 3,
+                "align": "start"
+              },
+              "children": [
+                {
+                  "type": "text",
+                  "value": "HOW TO PLAY",
+                  "style": {
+                    "size": "s",
+                    "caps": true
+                  }
+                },
+                {
+                  "type": "text",
+                  "value": "1. Hold your phone down at your side",
+                  "style": {
+                    "size": "l",
+                    "align": "start"
+                  }
+                },
+                {
+                  "type": "text",
+                  "value": "2. Tap Ready to calibrate",
+                  "style": {
+                    "size": "l",
+                    "align": "start"
+                  }
+                },
+                {
+                  "type": "text",
+                  "value": "3. Wait for DRAW!",
+                  "style": {
+                    "size": "l",
+                    "align": "start"
+                  }
+                },
+                {
+                  "type": "text",
+                  "value": "4. Raise and aim: fastest wins, best of 3. Moving early is a foul.",
+                  "style": {
+                    "size": "l",
+                    "align": "start"
+                  }
+                }
+              ]
             },
             {
-              "type": "text",
-              "value": "1. Hold your phone down at your side"
-            },
-            {
-              "type": "text",
-              "value": "2. Tap Ready to calibrate"
-            },
-            {
-              "type": "text",
-              "value": "3. Wait for DRAW!"
-            },
-            {
-              "type": "text",
-              "value": "4. Raise and aim: fastest wins, best of 3. Moving early is a foul."
+              "type": "spacer"
             }
           ],
           "style": {
-            "align": "center"
+            "align": "center",
+            "grow": true
           },
           "if": "ev.state.phase == 'lobby' || !ev.state"
         },
@@ -227,10 +288,14 @@
           "type": "column",
           "children": [
             {
+              "type": "spacer"
+            },
+            {
               "type": "text",
               "value": "GET READY",
               "style": {
-                "size": "s"
+                "size": "l",
+                "caps": true
               }
             },
             {
@@ -245,12 +310,17 @@
               "type": "text",
               "value": "Round {{ev.state.matchRound}}: phones down at your sides",
               "style": {
-                "size": "l"
+                "size": "l",
+                "tone": "neutral"
               }
+            },
+            {
+              "type": "spacer"
             }
           ],
           "style": {
-            "align": "center"
+            "align": "center",
+            "grow": true
           },
           "if": "ev.state.phase == 'countdown'"
         },
@@ -258,10 +328,14 @@
           "type": "column",
           "children": [
             {
+              "type": "spacer"
+            },
+            {
               "type": "text",
               "value": "HOLD STILL...",
               "style": {
-                "size": "huge"
+                "size": "huge",
+                "tone": "neutral"
               }
             },
             {
@@ -274,7 +348,8 @@
                     "type": "text",
                     "value": "{{item.name}}",
                     "style": {
-                      "size": "xl"
+                      "size": "xl",
+                      "tone": "neutral"
                     }
                   }
                 ],
@@ -283,11 +358,18 @@
             },
             {
               "type": "text",
-              "value": "Do not move until you see DRAW"
+              "value": "Do not move until you see DRAW",
+              "style": {
+                "tone": "neutral"
+              }
+            },
+            {
+              "type": "spacer"
             }
           ],
           "style": {
-            "align": "center"
+            "align": "center",
+            "grow": true
           },
           "if": "ev.state.phase == 'arming'"
         },
@@ -295,16 +377,23 @@
           "type": "column",
           "children": [
             {
+              "type": "spacer"
+            },
+            {
               "type": "text",
               "value": "DRAW!",
               "style": {
                 "size": "huge",
                 "tone": "bad"
               }
+            },
+            {
+              "type": "spacer"
             }
           ],
           "style": {
-            "align": "center"
+            "align": "center",
+            "grow": true
           },
           "if": "ev.state.phase == 'fire'"
         },
@@ -312,10 +401,14 @@
           "type": "column",
           "children": [
             {
+              "type": "spacer"
+            },
+            {
               "type": "text",
               "value": "ROUND {{ev.view.last.matchRound}}",
               "style": {
-                "size": "s"
+                "size": "l",
+                "caps": true
               }
             },
             {
@@ -345,49 +438,64 @@
               "if": "ev.view.last.reason == 'fast'"
             },
             {
-              "type": "list",
-              "items": "ev.view.last.results",
-              "item": {
-                "type": "row",
-                "children": [
-                  {
-                    "type": "text",
-                    "value": "{{item.name}}",
+              "type": "column",
+              "style": {
+                "card": true,
+                "pad": 3
+              },
+              "children": [
+                {
+                  "type": "list",
+                  "items": "ev.view.last.results",
+                  "item": {
+                    "type": "row",
+                    "children": [
+                      {
+                        "type": "text",
+                        "value": "{{item.name}}",
+                        "style": {
+                          "size": "l",
+                          "fit": true
+                        }
+                      },
+                      {
+                        "type": "gauge",
+                        "value": "item.bar",
+                        "style": {
+                          "grow": true
+                        }
+                      },
+                      {
+                        "type": "text",
+                        "value": "{{item.tag}}",
+                        "style": {
+                          "size": "s",
+                          "tone": "warn"
+                        },
+                        "if": "item.tag"
+                      },
+                      {
+                        "type": "text",
+                        "value": "{{item.msText}}",
+                        "style": {
+                          "size": "l",
+                          "mono": true
+                        }
+                      }
+                    ],
                     "style": {
-                      "size": "l"
-                    }
-                  },
-                  {
-                    "type": "gauge",
-                    "value": "item.bar",
-                    "style": {
-                      "grow": true
-                    }
-                  },
-                  {
-                    "type": "text",
-                    "value": "{{item.tag}}",
-                    "style": {
-                      "size": "s",
-                      "tone": "warn"
-                    },
-                    "if": "item.tag"
-                  },
-                  {
-                    "type": "text",
-                    "value": "{{item.msText}}",
-                    "style": {
-                      "size": "l"
+                      "card": true
                     }
                   }
-                ]
-              }
+                }
+              ]
             },
             {
               "type": "text",
               "value": "Next round starts when both phones are lowered",
               "style": {
-                "size": "l"
+                "size": "l",
+                "tone": "neutral"
               }
             },
             {
@@ -407,16 +515,23 @@
                 ],
                 "if": "item.raised"
               }
+            },
+            {
+              "type": "spacer"
             }
           ],
           "style": {
-            "align": "center"
+            "align": "center",
+            "grow": true
           },
           "if": "ev.state.phase == 'roundOver'"
         },
         {
           "type": "column",
           "children": [
+            {
+              "type": "spacer"
+            },
             {
               "type": "text",
               "value": "{{ev.view.match.winnerName}} wins the match!",
@@ -437,7 +552,8 @@
               "type": "text",
               "value": "Tap Ready on both phones to play again",
               "style": {
-                "size": "l"
+                "size": "l",
+                "tone": "neutral"
               }
             },
             {
@@ -466,17 +582,22 @@
                 ],
                 "if": "item.role == 'phone'"
               }
+            },
+            {
+              "type": "spacer"
             }
           ],
           "style": {
-            "align": "center"
+            "align": "center",
+            "grow": true
           },
           "if": "ev.state.phase == 'matchOver'"
         }
       ],
       "style": {
         "align": "center",
-        "pad": 3
+        "pad": 1,
+        "grow": true
       }
     },
     "gun": {
@@ -516,17 +637,22 @@
           "value": "Lobby {{me.lobby}}",
           "style": {
             "size": "s",
-            "align": "end"
+            "align": "end",
+            "mono": true
           }
         },
         {
           "type": "column",
           "children": [
             {
+              "type": "spacer"
+            },
+            {
               "type": "text",
               "value": "LOBBY CODE",
               "style": {
-                "size": "s"
+                "size": "s",
+                "caps": true
               }
             },
             {
@@ -534,7 +660,8 @@
               "value": "{{me.lobby}}",
               "style": {
                 "size": "huge",
-                "tone": "accent"
+                "tone": "accent",
+                "mono": true
               }
             },
             {
@@ -548,9 +675,28 @@
                     "children": [
                       {
                         "type": "text",
+                        "value": "✓",
+                        "style": {
+                          "size": "l",
+                          "tone": "good"
+                        },
+                        "if": "item.ready"
+                      },
+                      {
+                        "type": "text",
+                        "value": "○",
+                        "style": {
+                          "size": "l",
+                          "tone": "neutral"
+                        },
+                        "if": "!item.ready"
+                      },
+                      {
+                        "type": "text",
                         "value": "{{item.name}} (You)",
                         "style": {
-                          "size": "l"
+                          "size": "l",
+                          "fit": true
                         },
                         "if": "item.id == me.id"
                       },
@@ -558,7 +704,8 @@
                         "type": "text",
                         "value": "{{item.name}}",
                         "style": {
-                          "size": "l"
+                          "size": "l",
+                          "fit": true
                         },
                         "if": "item.id != me.id"
                       },
@@ -569,7 +716,7 @@
                         "type": "text",
                         "value": "Ready",
                         "style": {
-                          "tone": "good"
+                          "size": "s"
                         },
                         "if": "item.ready"
                       },
@@ -584,24 +731,38 @@
                     ]
                   }
                 ],
-                "if": "item.role == 'phone'"
+                "if": "item.role == 'phone'",
+                "style": {
+                  "card": true
+                }
               }
             },
             {
               "type": "text",
               "value": "Waiting for a player...",
-              "if": "ev.state.phones.length == 0"
+              "if": "ev.state.phones.length == 0",
+              "style": {
+                "dashed": true,
+                "align": "start",
+                "tone": "neutral"
+              }
             },
             {
               "type": "text",
               "value": "Waiting for a player...",
-              "if": "ev.state.phones.length != 2"
+              "if": "ev.state.phones.length != 2",
+              "style": {
+                "dashed": true,
+                "align": "start",
+                "tone": "neutral"
+              }
             },
             {
               "type": "text",
               "value": "{{ev.state.needs}}",
               "style": {
-                "align": "center"
+                "align": "center",
+                "tone": "neutral"
               }
             },
             {
@@ -678,10 +839,48 @@
                 ],
                 "if": "item.id == me.id"
               }
+            },
+            {
+              "type": "spacer"
+            },
+            {
+              "type": "list",
+              "items": "ev.view.players",
+              "item": {
+                "type": "column",
+                "if": "item.id == me.id",
+                "children": [
+                  {
+                    "type": "column",
+                    "if": "item.role == 'phone'",
+                    "children": [
+                      {
+                        "type": "text",
+                        "value": "Hold your phone down at your side and tap Ready",
+                        "if": "!item.ready",
+                        "style": {
+                          "size": "l",
+                          "align": "center"
+                        }
+                      },
+                      {
+                        "type": "text",
+                        "value": "Ready. Waiting for the other player",
+                        "if": "item.ready",
+                        "style": {
+                          "size": "l",
+                          "align": "center"
+                        }
+                      }
+                    ]
+                  }
+                ]
+              }
             }
           ],
           "style": {
-            "align": "center"
+            "align": "center",
+            "grow": true
           },
           "if": "ev.state.phase == 'lobby' || !ev.state"
         },
@@ -689,10 +888,14 @@
           "type": "column",
           "children": [
             {
+              "type": "spacer"
+            },
+            {
               "type": "text",
               "value": "GET READY",
               "style": {
-                "size": "s"
+                "size": "s",
+                "caps": true
               }
             },
             {
@@ -737,6 +940,9 @@
               }
             },
             {
+              "type": "spacer"
+            },
+            {
               "type": "text",
               "value": "Get ready. Phone down at your side.",
               "style": {
@@ -746,7 +952,8 @@
             }
           ],
           "style": {
-            "align": "center"
+            "align": "center",
+            "grow": true
           },
           "if": "ev.state.phase == 'countdown'"
         },
@@ -754,33 +961,48 @@
           "type": "column",
           "children": [
             {
+              "type": "spacer"
+            },
+            {
               "type": "text",
               "value": "HOLD STILL",
               "style": {
                 "size": "huge",
-                "align": "center"
+                "align": "center",
+                "tone": "neutral"
               }
             },
             {
               "type": "text",
-              "value": "Do not move until you see DRAW"
+              "value": "Do not move until you see DRAW",
+              "style": {
+                "tone": "neutral"
+              }
+            },
+            {
+              "type": "spacer"
             },
             {
               "type": "text",
               "value": "Hold still...",
               "style": {
-                "size": "l"
+                "size": "l",
+                "align": "center"
               }
             }
           ],
           "style": {
-            "align": "center"
+            "align": "center",
+            "grow": true
           },
           "if": "ev.state.phase == 'arming'"
         },
         {
           "type": "column",
           "children": [
+            {
+              "type": "spacer"
+            },
             {
               "type": "text",
               "value": "DRAW!",
@@ -791,15 +1013,20 @@
               }
             },
             {
+              "type": "spacer"
+            },
+            {
               "type": "text",
               "value": "Raise your phone now",
               "style": {
-                "size": "l"
+                "size": "l",
+                "align": "center"
               }
             }
           ],
           "style": {
-            "align": "center"
+            "align": "center",
+            "grow": true
           },
           "if": "ev.state.phase == 'fire'"
         },
@@ -807,10 +1034,14 @@
           "type": "column",
           "children": [
             {
+              "type": "spacer"
+            },
+            {
               "type": "text",
               "value": "ROUND {{ev.view.last.matchRound}}",
               "style": {
-                "size": "s"
+                "size": "s",
+                "caps": true
               }
             },
             {
@@ -890,7 +1121,8 @@
                     "type": "text",
                     "value": "{{item.name}}",
                     "style": {
-                      "size": "l"
+                      "size": "l",
+                      "fit": true
                     }
                   },
                   {
@@ -918,10 +1150,14 @@
                     "type": "text",
                     "value": "{{item.msText}}",
                     "style": {
-                      "size": "l"
+                      "size": "l",
+                      "mono": true
                     }
                   }
-                ]
+                ],
+                "style": {
+                  "card": true
+                }
               }
             },
             {
@@ -958,6 +1194,9 @@
               }
             },
             {
+              "type": "spacer"
+            },
+            {
               "type": "list",
               "items": "ev.view.players",
               "item": {
@@ -967,7 +1206,8 @@
                     "type": "text",
                     "value": "Lower your phone for the next round",
                     "style": {
-                      "size": "l"
+                      "size": "l",
+                      "align": "center"
                     },
                     "if": "item.raised"
                   },
@@ -975,7 +1215,8 @@
                     "type": "text",
                     "value": "Waiting for the other phone to lower",
                     "style": {
-                      "size": "l"
+                      "size": "l",
+                      "align": "center"
                     },
                     "if": "!item.raised"
                   }
@@ -985,13 +1226,17 @@
             }
           ],
           "style": {
-            "align": "center"
+            "align": "center",
+            "grow": true
           },
           "if": "ev.state.phase == 'roundOver'"
         },
         {
           "type": "column",
           "children": [
+            {
+              "type": "spacer"
+            },
             {
               "type": "text",
               "value": "YOU WON THE MATCH",
@@ -1045,10 +1290,6 @@
               }
             },
             {
-              "type": "text",
-              "value": "Tap Play again when you are both ready"
-            },
-            {
               "type": "list",
               "items": "ev.view.players",
               "item": {
@@ -1085,17 +1326,30 @@
                 ],
                 "if": "item.id == me.id"
               }
+            },
+            {
+              "type": "spacer"
+            },
+            {
+              "type": "text",
+              "value": "Tap Play again when you are both ready",
+              "style": {
+                "size": "l",
+                "align": "center"
+              }
             }
           ],
           "style": {
-            "align": "center"
+            "align": "center",
+            "grow": true
           },
           "if": "ev.state.phase == 'matchOver'"
         }
       ],
       "style": {
         "align": "center",
-        "pad": 3
+        "pad": 1,
+        "grow": true
       }
     }
   }

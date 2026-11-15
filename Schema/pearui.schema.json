@@ -29,7 +29,12 @@
         "size": { "enum": ["s", "m", "l", "xl", "huge"] },
         "align": { "enum": ["start", "center", "end"] },
         "pad": { "type": "number", "minimum": 0, "maximum": 4 },
-        "grow": { "type": "boolean" }
+        "grow": { "type": "boolean" },
+        "card": { "type": "boolean", "description": "Rounded panel background, full width, min height 52." },
+        "dashed": { "type": "boolean", "description": "Dashed rounded outline (empty slot), full width, min height 52." },
+        "mono": { "type": "boolean", "description": "Monospace bold (codes, readings)." },
+        "caps": { "type": "boolean", "description": "Section label: semibold, letter-spaced, secondary ink." },
+        "fit": { "type": "boolean", "description": "One line that shrinks instead of wrapping (huge text always does)." }
       }
     },
     "action": {

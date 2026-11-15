@@ -24,7 +24,11 @@ const CSS = `
 .pui-a-end{align-items:flex-end;text-align:right}
 .pui-text{margin:0;line-height:1.2}.pui-s{font-size:13px;color:#a1a1a6}.pui-m{font-size:17px}.pui-l{font-size:24px;font-weight:600}
 .pui-xl{font-size:36px;font-weight:700}.pui-huge{font-size:72px;font-weight:800;letter-spacing:-.02em}
-.pui-btn{font:inherit;font-size:17px;font-weight:600;border:0;border-radius:14px;padding:14px 20px;background:#2c2c2e;color:#f5f5f7;cursor:pointer;min-height:50px}
+.pui-btn{font:inherit;font-size:24px;font-weight:700;border:0;border-radius:12px;padding:14px 20px;background:#2c2c2e;color:#f5f5f7;cursor:pointer;min-height:72px;width:100%}
+.pui-btn.t-neutral{background:transparent;border:1px solid #3a4a43}
+.pui-card,.pui-dashed{width:100%;min-height:52px;padding:0 16px;border-radius:12px;justify-content:center}.pui-card{background:#131b17}.pui-dashed{border:1px dashed #1f2a25}
+.pui-mono{font-family:ui-monospace,"Geist Mono",Menlo,monospace;font-weight:700}.pui-caps{font-size:14px;font-weight:600;letter-spacing:1.6px;color:#a1a1a6}
+.pui-fit{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .pui-btn:active{opacity:.7}
 .t-accent{color:#0a84ff}.t-good{color:#30d158}.t-bad{color:#ff453a}.t-warn{color:#ffd60a}
 .pui-btn.t-accent{background:#0a84ff;color:#fff}.pui-btn.t-good{background:#30d158;color:#000}.pui-btn.t-bad{background:#ff453a;color:#fff}.pui-btn.t-warn{background:#ffd60a;color:#000}
@@ -70,7 +74,8 @@ export function mount(
 
   function cls(n: Node, base: string): string {
     const s = n.style ?? {};
-    return [base, s.size ? `pui-${s.size}` : '', s.tone && s.tone !== 'neutral' ? `t-${s.tone}` : '', s.grow ? 'pui-grow' : '', s.align ? `pui-a-${s.align}` : '']
+    const flags = (['card', 'dashed', 'mono', 'caps', 'fit'] as const).filter((k) => s[k]).map((k) => `pui-${k}`);
+    return [base, s.size ? `pui-${s.size}` : '', s.tone && (s.tone !== 'neutral' || base === 'pui-btn') ? `t-${s.tone}` : '', s.grow ? 'pui-grow' : '', s.align ? `pui-a-${s.align}` : '', ...flags]
       .filter(Boolean).join(' ');
   }
 

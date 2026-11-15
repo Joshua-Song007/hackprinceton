@@ -174,6 +174,7 @@ struct PearUIView: View {
                 PearUINode(node: screen, state: state, session: session)
                     .padding(PearTheme.Space.s4)
                     .padding(.top, 44) // below the shared game menu (GameChrome)
+                    .frame(maxWidth: 1200, maxHeight: .infinity, alignment: .top) // top-aligned like the native screens
             }
         }
         .foregroundStyle(PearTheme.text)
@@ -215,10 +216,15 @@ struct PearUINode: View {
         case "stack":
             ZStack(alignment: Alignment(horizontal: hAlign, vertical: .center)) { kids(children) }
         case "text":
-            Text(str("value")).font(font).foregroundStyle(tone ?? PearTheme.text).multilineTextAlignment(textAlign)
+            fitted(Text(str("value")).font(font).tracking(caps ? PearTheme.headerTracking : 0)
+                .foregroundStyle(tone ?? (caps || style["size"]?.string == "s" ? PearTheme.textSecondary : PearTheme.text))
+                .multilineTextAlignment(textAlign))
         case "button":
-            Button(str("label")) { session.perform(node["action"], state) }
-                .buttonStyle(PearPrimaryButtonStyle())
+            // Full-width and tall like the native Ready button; tone `neutral` is the outlined secondary button.
+            let button = Button { session.perform(node["action"], state) } label: {
+                Text(str("label")).font(PearTheme.sans(24, .bold)).frame(maxWidth: .infinity, minHeight: 72)
+            }
+            if style["tone"]?.string == "neutral" { button.buttonStyle(PearSecondaryButtonStyle()) } else { button.buttonStyle(PearPrimaryButtonStyle()) }
         case "image":
             if let data = session.assets[str("src")], let image = UIImage(data: data) {
                 Image(uiImage: image).resizable().scaledToFit()
@@ -227,8 +233,8 @@ struct PearUINode: View {
             if let until = value("until").number {
                 TimelineView(.periodic(from: .now, by: 0.1)) { ctx in
                     let left = max(0, until / 1000 - ctx.date.timeIntervalSince1970)
-                    Text(left >= 10 ? String(Int(left.rounded(.up))) : String(format: "%.1f", left))
-                        .font(font).monospacedDigit().foregroundStyle(tone ?? PearTheme.text)
+                    fitted(Text(left >= 10 ? String(Int(left.rounded(.up))) : String(format: "%.1f", left))
+                        .font(font).monospacedDigit().foregroundStyle(tone ?? PearTheme.text))
                 }
             }
         case "list":
@@ -301,11 +307,28 @@ struct PearUINode: View {
     private func styled(_ view: some View) -> some View {
         let pad = CGFloat(style["pad"]?.number ?? 0) * PearTheme.Space.s2
         let grow = style["grow"] == .bool(true)
+        let card = style["card"] == .bool(true), dashed = style["dashed"] == .bool(true), boxed = card || dashed
+        let shape = RoundedRectangle(cornerRadius: PearTheme.radiusControl)
         return view
             .padding(pad)
-            .frame(maxWidth: grow || style["align"] != nil ? .infinity : nil,
+            .padding(.horizontal, boxed && pad == 0 ? PearTheme.Space.s4 : 0)
+            .frame(maxWidth: grow || boxed || style["align"] != nil ? .infinity : nil,
+                   minHeight: boxed ? 52 : nil,
                    maxHeight: grow ? .infinity : nil,
-                   alignment: Alignment(horizontal: hAlign, vertical: .center))
+                   alignment: Alignment(horizontal: boxed && style["align"] == nil ? .leading : hAlign, vertical: .center))
+            .background(card ? PearTheme.bgPanel : .clear, in: shape)
+            .overlay(dashed ? shape.strokeBorder(PearTheme.line, style: StrokeStyle(lineWidth: 1, dash: [4, 3])) : nil)
+    }
+
+    private var caps: Bool { style["caps"] == .bool(true) }
+
+    /// `fit`, and every `huge`: one line that shrinks instead of wrapping (names, codes, countdowns).
+    @ViewBuilder private func fitted(_ text: some View) -> some View {
+        if style["fit"] == .bool(true) || style["size"]?.string == "huge" {
+            text.lineLimit(1).minimumScaleFactor(0.3).layoutPriority(1)
+        } else {
+            text
+        }
     }
 
     private var hAlign: HorizontalAlignment {
@@ -336,11 +359,22 @@ struct PearUINode: View {
     }
 
     private var font: Font {
-        switch style["size"]?.string {
+        if style["mono"] == .bool(true) {
+            let size: CGFloat = switch style["size"]?.string {
+            case "s": 13
+            case "l": 24
+            case "xl": 36
+            case "huge": session.kind == "ipad" ? 150 : 56
+            default: 17
+            }
+            return PearTheme.mono(size, relativeTo: .largeTitle).weight(size >= 36 ? .bold : .regular)
+        }
+        if caps { return PearTheme.header(style["size"]?.string == "l" ? 20 : 14) }
+        return switch style["size"]?.string {
         case "s": PearTheme.sans(13, relativeTo: .caption)
         case "l": PearTheme.sans(24, .semibold, relativeTo: .title2)
         case "xl": PearTheme.sans(36, .bold, relativeTo: .largeTitle)
-        case "huge": PearTheme.sans(96, .heavy, relativeTo: .largeTitle)
+        case "huge": PearTheme.sans(session.kind == "ipad" ? 300 : 140, .heavy, relativeTo: .largeTitle)
         default: PearTheme.sans(17, relativeTo: .body)
         }
     }
