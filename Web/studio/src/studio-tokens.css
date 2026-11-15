@@ -4,22 +4,23 @@
   --bg-panel: #2a2b2f; /* Sidebars, inspector, debug area. Panels are split by `line`, never floated as cards. */
   --bg-field: #1d1e21; /* Text and number fields, the packet log, code. */
   --bg-hover: #34353a; /* Hover fill for rows and borderless buttons. */
-  --bg-selected: #1f3a63; /* Selected row while its list does not have focus. Text stays `text`. */
+  --bg-selected: #24402f; /* Selected row while its list does not have focus. Text stays `text`. */
   --viewport: #3d3e43; /* The 3D viewport ground. Mid-grey, as in Blender and Unity, so lit geometry and dark geometry both read. */
   --viewport-grid: #4c4d53; /* Floor grid lines in the viewport. */
   --line: #3a3b40; /* Hairlines between panels, sections and table rows. Decorative only. */
   --line-control: #7a7c84; /* Borders of fields, buttons and segmented controls. 3:1 on bg-panel and bg-field. */
   --text: #e4e5e7; /* Primary text on bg-window, bg-panel, bg-field, bg-selected and viewport. */
   --text-secondary: #a4a6ad; /* Labels, units, secondary lines, column headers. 4.5:1 on bg-window, bg-panel and bg-field. */
-  --accent: #4b93f8; /* Controls and selection: the default button, focused selection, links, the viewport selection outline. As text, on bg-panel and bg-field. */
-  --on-accent: #0b1a2e; /* Text and icons on an accent fill. */
+  --accent: #c2efb3; /* Controls and selection: the default button, focused selection, links, the viewport selection outline. As text, on bg-panel and bg-field. */
+  --on-accent: #285943; /* Text and icons on an accent fill. */
+  --selection: #e5b181; /* Selected entity in the viewport (fill and edges): a warm hue, so it stands apart from the light unselected edges. */
   --focus: var(--accent); /* Keyboard focus ring: 2px solid, 1px offset. Alias of accent. */
   --live: #e8873a; /* Live mode only: the toolbar edge, the status bar fill and the Live segment while real hardware drives the scene. */
   --on-live: #1d1206; /* Text and icons on a live fill. */
   --axis-x: #f0716b; /* X axis: gizmo handle, the X letter of a Vector3 field, X components in JSON. As text, on bg-field. */
   --axis-y: #7cc96a; /* Y axis (up). */
   --axis-z: #6aa7f0; /* Z axis. */
-  --ok: #5cc27a; /* Streaming and healthy. Always beside a word or a number. */
+  --ok: #c2efb3; /* Streaming and healthy. Always beside a word or a number. */
   --warn: #e3b341; /* Warnings: unmet capability tier, seq gaps, latency over budget. Always with the warning icon. */
   --warn-soft: #3a3220; /* Ground of the issue banner. */
   --error: #f47a72; /* Schema errors, dropped packets, script exceptions. Always with the error icon or a count. */
@@ -29,22 +30,23 @@
   --bg-panel: #f4f4f6;
   --bg-field: #ffffff;
   --bg-hover: #e9e9ed;
-  --bg-selected: #d7e6fb;
+  --bg-selected: #d5e6d6;
   --viewport: #b9babf;
   --viewport-grid: #a7a8ad;
   --line: #d6d6db;
   --line-control: #7d7f87;
   --text: #1d1d1f;
   --text-secondary: #5c5e66;
-  --accent: #0a63d6;
-  --on-accent: #ffffff;
+  --accent: #285943;
+  --on-accent: #f4faef;
+  --selection: #764134;
   --focus: var(--accent);
   --live: #b4500e;
   --on-live: #ffffff;
   --axis-x: #c22f2a;
   --axis-y: #2e7d22;
   --axis-z: #1f63c4;
-  --ok: #227a3a;
+  --ok: #285943;
   --warn: #8a6100;
   --warn-soft: #fdf3d8;
   --error: #c42b23;

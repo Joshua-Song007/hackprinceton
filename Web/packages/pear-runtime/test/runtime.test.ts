@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { quat, type Quat, type Vec3 } from '@pear/core';
 import flagship from '../../../../Games/Flagship/scene.json';
-import { InputBus, SceneEvents, flattenScene, parseScene, parseInputs, SceneError, STALE_AFTER_MS } from '../src';
+import { InputBus, SceneEvents, flattenScene, parseScene, parseInputs, parsePeripherals, SceneError, STALE_AFTER_MS } from '../src';
 
 const scene = parseScene(flagship);
 
@@ -164,5 +164,22 @@ describe('parseInputs', () => {
   });
   it('rejects a non-object', () => {
     expect(() => parseInputs(null)).toThrow(SceneError);
+  });
+});
+
+describe('parsePeripherals', () => {
+  it('defaults to none', () => {
+    expect(parsePeripherals(undefined)).toEqual([]);
+    expect(parsePeripherals(null)).toEqual([]);
+    expect(parseScene({}).peripherals).toEqual([]);
+  });
+  it('keeps order and drops repeats', () => {
+    expect(parsePeripherals(['watch', 'phone', 'watch'])).toEqual(['watch', 'phone']);
+    expect(parseScene({ peripherals: ['airpods'] }).peripherals).toEqual(['airpods']);
+  });
+  it('rejects an unknown device and a non-list', () => {
+    expect(() => parsePeripherals(['tablet'])).toThrow("peripherals[0]: unknown peripheral 'tablet'");
+    expect(() => parsePeripherals('phone')).toThrow('peripherals: expected array');
+    expect(() => parseScene({ peripherals: [1] })).toThrow(SceneError);
   });
 });

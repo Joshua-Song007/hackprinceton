@@ -18,7 +18,9 @@ body { margin: 0; background: var(--bg-panel); color: var(--text); font-family: 
 .om-btn--borderless { background: transparent; border-color: transparent; color: var(--text-secondary); padding: 0 6px; }
 .om-btn--borderless:hover { background: var(--bg-hover); color: var(--text); }
 .om-btn--icon { width: 28px; padding: 0; }
-.om-btn:disabled { opacity: .4; pointer-events: none; }
+.om-btn:disabled { opacity: .55; pointer-events: none; }
+.om-btn--danger { color: var(--error); }
+.om-btn--danger:hover { border-color: var(--error); }
 .om-btn--small { height: 20px; font-size: 11px; padding: 0 8px; }
 
 /* Segmented control */
@@ -127,3 +129,19 @@ body { margin: 0; background: var(--bg-panel); color: var(--text); font-family: 
 @keyframes om-ring { from { transform: scale(.7); opacity: 1; } to { transform: scale(1.4); opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { .om-haptic.is-firing::after { animation: om-hold var(--om-dur, 120ms) linear 1; } }
 @keyframes om-hold { from, to { opacity: 1; transform: scale(1.2); } }
+
+/* Peripherals panel: one card per device, a row per signal. */
+.pp-bar { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); padding-right: var(--space-3); }
+.pp > .om-secondary { margin: var(--space-2) var(--space-3); }
+.pp > .om-btn { margin: 0 var(--space-3); align-self: flex-start; }
+.pp-card { margin: var(--space-2) var(--space-3); padding-bottom: var(--space-2); border: 1px solid var(--line); border-radius: var(--radius-window); background: var(--bg-panel); }
+.pp-card-head { display: grid; grid-template-columns: 18px minmax(0, 1fr) auto; align-items: center; gap: var(--space-2); padding: var(--space-2) var(--space-3); }
+.pp-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 2px var(--space-2); padding: 4px var(--space-3); }
+.pp-row [hidden] { display: none; }
+.pp-label { display: flex; align-items: center; gap: var(--space-2); font: var(--text-body); color: var(--text); }
+.pp-status { font: var(--text-small); color: var(--text-secondary); }
+.pp-hint { grid-column: 1 / -1; padding-left: 24px; }
+.pp-out { display: flex; align-items: baseline; gap: var(--space-2); padding: 4px var(--space-3); font: var(--text-small); color: var(--text-secondary); }
+.pp-card .om-section { margin: 0 var(--space-3); }
+.pp-notice { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin: var(--space-2) var(--space-3); padding: var(--space-2) var(--space-3); border: 1px solid var(--warn); border-radius: var(--radius-control); }
+.pp-notice p { flex: 1 1 100%; margin: 0; }

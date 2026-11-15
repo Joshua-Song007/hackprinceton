@@ -6,7 +6,7 @@ import type { SceneJson } from './project';
 export const THUMB_WIDTH = 480;
 export const THUMB_HEIGHT = 300;
 /** Bump when previews should look different (colors, framing): cached ones with another style are re-rendered. */
-export const THUMB_STYLE = 'pear-dark-1';
+export const THUMB_STYLE = 'pear-charcoal-1';
 export const thumbStamp = (stamp: string): string => `${stamp}#${THUMB_STYLE}`;
 
 let shared: Viewport | undefined;

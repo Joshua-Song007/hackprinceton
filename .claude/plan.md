@@ -376,7 +376,7 @@ Full text: planHistory/phase-10.md
 
 ## Phase 11: Web Studio projects screen follow-ups
 
-Not built from the Projects screen v2 work (see planHistory/phase-08.md, Later changes): sharing and publish state in the game list, Pear styling outside the gallery, small gallery polish. Order is free; the backend items go together.
+Not built from the Projects screen v2 work (see planHistory/phase-08.md, Later changes): sharing and publish state in the game list, Pear styling outside the gallery, small gallery polish. Order is free; the backend items go together. (Changed 2026-11-14: accent, selection and ok colors and the gallery palette are done, so the sheet and menu colors in the `theme.css` item are covered; the `studio-tokens.css` item stays open for the rest of the Pear restyle; see planHistory/phase-08.md.)
 
 - [ ] `Backend/src/db.rs` — `Game` (or the list query) carries owner name, share list and `published` / latest version for `GET /games`; Published stat and real Shared data need it.
 - [ ] `Backend/src/memstore.rs` — same fields in the in-memory store, so the dev server matches Postgres.

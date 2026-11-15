@@ -1,7 +1,7 @@
 // What a game needs from each player (scene `inputs`), what its scripts actually use, and which simulated devices
 // provide it. Pure, so the Test panel checklist and Play share one answer and tests cover it.
 import { GESTURE_TYPES, type GestureType } from '@pear/core';
-import type { CustomGesture, SceneInputs } from '@pear/runtime';
+import type { CustomGesture, PeripheralKind, SceneInputs } from '@pear/runtime';
 import type { SimDeviceKind } from '@pear/sim';
 
 /** Reads the client scripts: a quoted gesture name, `ctx.position`, heart rate and head handlers. Players stay 1 to 32. */
@@ -20,8 +20,8 @@ export function inferInputs(clientScripts: Record<string, string>): SceneInputs 
  * Devices that provide the inputs in the simulator. Head rides on the AirPods head device, position is a phone
  * GPS fix, gestures also on the phone, heart rate on the watch.
  */
-export function rigFor(inputs: SceneInputs | null | undefined, custom: Record<string, CustomGesture> = {}): SimDeviceKind[] {
-  const kinds = new Set<SimDeviceKind>();
+export function rigFor(inputs: SceneInputs | null | undefined, custom: Record<string, CustomGesture> = {}, peripherals: readonly PeripheralKind[] = []): SimDeviceKind[] {
+  const kinds = new Set<SimDeviceKind>(peripherals);
   if (inputs?.head) kinds.add('airpods');
   if (inputs?.gestures.length || inputs?.position) kinds.add('phone');
   if (inputs?.heartRate) kinds.add('watch');

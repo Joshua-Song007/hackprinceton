@@ -13,6 +13,7 @@ import { MARKETPLACE_PANEL_ID, marketplacePanel } from './marketplace/panel';
 import { RegistryClient } from './marketplace/registry';
 import { deepAgentPanel } from './panels/deep-agent';
 import { PreferenceStore, bindPreferences, inDesktopApp, openSettingsSheet } from './preferences';
+import { createPeripheralsPanel, openPeripheralPicker } from './peripheralsPanel';
 import { createTestPanel } from './testPanel';
 import { openNewGameSheet } from './newGame';
 import { walkEntities, Project, TEMPLATES, attachAutosave, templateSnapshot, type ProjectSnapshot } from './project';
@@ -69,7 +70,8 @@ const marketplace = new MarketplaceController({
 
 const panels: PanelSpec[] = [
   marketplacePanel(marketplace),
-  { id: 'explorer', title: 'Explorer', create: () => createExplorerPanel(project, selection, editor) },
+  { id: 'explorer', title: 'Explorer', create: () => createExplorerPanel(project, selection, editor, () => openPeripheralPicker(project, () => layout.show('peripherals'))) },
+  { id: 'peripherals', title: 'Peripherals', create: () => createPeripheralsPanel(project, selection, editor) },
   { id: 'viewport', title: 'Viewport', create: () => createViewportPanel(viewport, run) },
   { id: 'inspector', title: 'Inspector', create: () => createInspectorPanel(project, selection) },
   { id: 'editor', title: 'Script editor', create: () => createEditorPanel(project, editor) },

@@ -718,7 +718,7 @@ export class RunController {
       throw new Error('The scene is invalid, see Output.');
     }
     // A game that declares its inputs gets exactly the devices that provide them (not saved: the browser's own choice stays for games that do not).
-    if (scene.inputs || Object.keys(scene.gestures).length) this.rig = rigFor(scene.inputs, scene.gestures);
+    if (scene.inputs || Object.keys(scene.gestures).length || scene.peripherals.length) this.rig = rigFor(scene.inputs, scene.gestures, scene.peripherals);
     const sandbox = new ScriptSandbox({
       onLog: (entry) => {
         debug.addOutput(entry.level, entry.text, entry.script);

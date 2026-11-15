@@ -123,3 +123,49 @@ The Projects screen has a sticky full-width top bar (title, centered search and 
 - [x] `Web/studio/index.html` — plus icon.
 - [x] `Web/packages/pear-runtime/src/viewport.ts` — `guides` group hidden in `snapshot()`.
 - [x] `Web/packages/pear-runtime/src/orbit.ts` — `frameBox` margin.
+
+### 2026-11-14 — Studio colors
+Paths: `Web/studio/src/studio-tokens.css`, `Web/studio/src/studio-components.css`, `Web/studio/src/theme.css`, `Web/studio/src/ui.ts`, `Web/studio/src/explorer.ts`, `Web/studio/src/thumbnail.ts`, `Web/packages/pear-runtime/src/viewport.ts`, `Web/studio/test/tokens.test.ts`, `Web/packages/pear-runtime/test/viewport-colors.test.ts`
+
+The Studio keeps its charcoal neutrals and takes the Pear brand accents. Dark: accent Tea `#c2efb3`, text on it Emerald `#285943`, selected rows `#24402f`, ok Tea. Light: accent Emerald, text on it Paper, selected rows `#d5e6d6`, ok Emerald. A new `--selection` token (Sandy dark, Clay light) colors a selected entity in the viewport (`ViewportColors.selection`), because Tea against the unselected white edges is 1.02:1; the self-player pin stays on the accent. Warn, error, Live and the axis colors keep their hues (the kit's pale warn and error are 1.12:1 apart; Live orange must not blend into Sandy). The gallery and login no longer have their own green palette (this supersedes the dark Pear palette in "Projects screen v2"); they inherit the global tokens, so sheets and menus match over them. `THUMB_STYLE` is now `pear-charcoal-1`, so previews re-render once. Disabled controls are at .55 opacity (was .4). The script-row Delete button has coral text through a new `danger` option on `button()` (`om-btn--danger`). Differences from the staged plan: `danger` is a flag next to `variant` (rows use `variant: 'small'`), and the sheet's "Delete script" button was left alone (it is a filled default button, where coral text would fail). `readViewportColors()` needs `document`, so the runtime test covers the defaults only. A contrast test (`tokens.test.ts`) reads the real `studio-tokens.css`. Not seen in a browser: Publish button, tab underline, checkboxes, menu hover fill, selected entity, Live mode, light theme. Stale comments kept: `studio-tokens.css` header ("generated from tokens.json", no generator exists) and the `--accent` comment ("the viewport selection outline", now `--selection`); `viewport.ts` `DARK_VIEWPORT_COLORS` doc ("tokens.css").
+- [x] `Web/studio/src/studio-tokens.css` — accent, on-accent, selected row and ok values; `--selection`.
+- [x] `Web/studio/src/studio-components.css` — disabled opacity; `om-btn--danger`.
+- [x] `Web/studio/src/theme.css` — green gallery override removed; disabled menu opacity.
+- [x] `Web/studio/src/ui.ts` — `danger` option on `button()`.
+- [x] `Web/studio/src/explorer.ts` — script-row Delete uses `danger`.
+- [x] `Web/studio/src/thumbnail.ts` — `THUMB_STYLE` `pear-charcoal-1`.
+- [x] `Web/packages/pear-runtime/src/viewport.ts` — `selection` color, used for the selected entity.
+- [x] `Web/studio/test/tokens.test.ts` — contrast checks on the real tokens.
+- [x] `Web/packages/pear-runtime/test/viewport-colors.test.ts` — selection default differs from accent and text.
+
+### 2026-11-14 — Peripherals panel
+Paths: `Web/packages/pear-runtime/src/scene.ts`, `Web/studio/src/needs.ts`, `Web/studio/src/run.ts`, `Web/studio/src/peripherals.ts`, `Web/studio/src/peripheralsPanel.ts`, `Web/studio/src/project.ts`, `Web/studio/src/inspector.ts`, `Web/studio/src/explorer.ts`, `Web/studio/src/main.ts`, `Web/studio/src/layout.ts`, `Web/studio/src/testPanel.ts`, `Web/studio/src/studio-components.css`
+
+Devices now have a home in the editor. A Peripherals panel (a tab beside Explorer, also opened from the Explorer's Add menu as "Peripheral...") lists the devices a game uses as cards: iPhone, Apple Watch, AirPods, with an iPad "Coming soon" entry in the picker. Each card shows the signals the device gives (Position and gestures, Heart rate, Head direction) as checkboxes with an "In use" / "No script yet" status, and an "Add handler" button that creates a stubbed client script and attaches it to the selected entity (or to a new empty entity named after the device; the head signal needs a selected entity because `onLookAt` reaches only the entity being looked at). Motion gestures moved from the Inspector under their device. A notice offers to add devices when scripts use signals nothing provides. The scene gains `peripherals: ['phone' | 'watch' | 'airpods']` (default none) listing the devices; signals stay in `inputs` and `gestures`, devices shown are the listed ones plus those the signals imply, and the first declaration of `inputs` is seeded from what the scripts already use. The simulator rig (`rigFor`) takes the listed devices too. The Swift scene decoder ignores the new key, as it already ignores `inputs` and `gestures`.
+
+Deviations from the staged plan:
+- the panel refreshes on typing with a debounced full render (400 ms, skipped while focus is inside the panel) instead of a status-only refresh, so the missing-signals notice updates too
+- `addHandlerScript` notifies `scene` when it creates an entity (the viewport listens only to that) and `scripts` otherwise
+- the Inspector's `section` and `prop` helpers are exported for the panel
+- Remove on a motion gesture and on a device returns focus to the Add peripheral button
+
+Not verified in a browser: the picker sheet, card layout and spacing, focus after changes, the disabled Add handler state, the Explorer menu item, the Peripherals tab in the three layout presets.
+
+Open: which devices receive `ctx.haptic` (the panel lists Haptic under iPhone only); built-in gestures sit under iPhone because the simulator emits them on the phone, though overview.md puts squeeze and pinch on the Watch; iPad, Apple Pencil and audio outputs are not built.
+
+Stale comments flagged, not edited: `Web/packages/pear-runtime/src/scene.ts` line 1 ("Same shape ... as SceneDescription.swift"; `inputs`, `gestures` and `peripherals` are not in Swift), the doc above `rigFor` in `Web/studio/src/needs.ts`, the comment above the rig line in `Web/studio/src/run.ts` ("A game that declares its inputs ..."), the key list in the doc above `setSceneSetting` in `Web/studio/src/project.ts`.
+- [x] `Web/packages/pear-runtime/src/scene.ts` — `PERIPHERAL_KINDS`, `parsePeripherals`, `SceneDescription.peripherals`.
+- [x] `Web/studio/src/needs.ts` — `rigFor` takes the listed peripherals.
+- [x] `Web/studio/src/run.ts` — rig from `scene.peripherals` too.
+- [x] `Web/studio/src/peripherals.ts` — catalog and pure edits.
+- [x] `Web/studio/src/peripheralsPanel.ts` — panel and picker.
+- [x] `Web/studio/src/project.ts` — `applyPeripheralChange`, `addHandlerScript`, `peripherals` setting.
+- [x] `Web/studio/src/inspector.ts` — Players section replaces Inputs and Motion gestures.
+- [x] `Web/studio/src/explorer.ts` — `Peripheral...` in the top-level Add menu.
+- [x] `Web/studio/src/main.ts` — panel registered, picker wired.
+- [x] `Web/studio/src/layout.ts` — Peripherals tab in all presets.
+- [x] `Web/studio/src/testPanel.ts` — note under the device list.
+- [x] `Web/studio/src/studio-components.css` — panel styles.
+- [x] `Web/studio/test/peripherals.test.ts` — catalog, edits, stubs in the real sandbox.
+- [x] `Web/packages/pear-runtime/test/runtime.test.ts` — `parsePeripherals`.
+- [x] `Web/studio/test/authoring.test.ts` — `applyPeripheralChange`, `addHandlerScript`.

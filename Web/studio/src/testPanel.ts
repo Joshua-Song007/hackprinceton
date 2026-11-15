@@ -329,6 +329,7 @@ export function createTestPanel(project: Project, run: RunController): PanelView
         button('Remove', () => run.setRig(rig.filter((x) => x !== k)), { variant: 'small', ariaLabel: `Remove ${SIM_DEVICE_NAMES[k]}` }),
       ])) : [el('li', { class: 'om-sub' }, ['No devices: the game receives no input.'])]),
       el('div', { style: 'padding:4px 12px' }, [addBtn]),
+      el('p', { class: 'om-sub', style: 'padding:0 12px' }, ['A game that lists peripherals gets exactly those; otherwise this list is remembered in this browser.']),
       ...(warning ? [el('p', { class: 'pn-empty', role: 'status' }, [warning])] : []),
     ];
   };

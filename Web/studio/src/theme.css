@@ -150,7 +150,7 @@ dialog.sheet .sheet-error { color: var(--error); font-size: 12px; margin: var(--
 .menu button { all: unset; display: flex; align-items: center; gap: 8px; width: 100%; box-sizing: border-box; min-height: var(--row-height); padding: 0 10px; border-radius: var(--radius-control); font-size: 12px; cursor: default; }
 .menu button:hover, .menu button:focus-visible { background: var(--accent); color: var(--on-accent); }
 .menu button:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
-.menu button[disabled] { opacity: .4; }
+.menu button[disabled] { opacity: .55; }
 .menu .menu-check { width: 14px; }
 .menu .menu-shortcut { margin-left: auto; padding-left: 24px; font-size: 11px; opacity: .7; }
 .om-menubar { display: flex; gap: 2px; padding: 2px 6px; background: var(--bg-panel); border-bottom: 1px solid var(--line); }
@@ -168,12 +168,6 @@ dialog.sheet .sheet-error { color: var(--error); font-size: 12px; margin: var(--
 .om-tree-row .om-secondary { text-align: right; }
 
 /* Full-window screens (login, projects) laid over the always-mounted editor */
-/* Darker Pear tone for these screens (Emerald and Tea pulled down in value); the editor keeps the Studio tokens. */
-:root:not([data-theme="light"]) .scr {
-  --bg-window: #0e1a13; --bg-panel: #14251b; --bg-field: #0a140f; --bg-hover: #1b3226; --bg-selected: #1b3226;
-  --viewport: #1e3328; --viewport-grid: #2c4636; --line: #223a2c; --line-control: #6f8c79;
-  --text: #dce9d8; --text-secondary: #9db0a3; --accent: #a5cb98; --on-accent: #0a140f;
-}
 .scr { position: fixed; inset: 0; z-index: 40; overflow: auto; background: var(--bg-window); color: var(--text); display: flex; justify-content: center; }
 .scr[hidden] { display: none; }
 .scr-card { width: min(720px, 100%); box-sizing: border-box; padding: 40px 16px; }

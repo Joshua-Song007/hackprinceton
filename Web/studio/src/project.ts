@@ -1,7 +1,7 @@
 // Project model: scene JSON + client/server script sources + cloud link, dirty tracking and IndexedDB autosave.
 // The Flagship template is imported from Games/Flagship through Vite (never copied into the Studio).
 import type { GameVersion, NewGameVersion } from '@pear/cloud';
-import { parseGestures, parseInputs, parseScene, type SceneDescription } from '@pear/runtime';
+import { parseGestures, parseInputs, parsePeripherals, parseScene, type CustomGesture, type PeripheralKind, type SceneDescription, type SceneInputs } from '@pear/runtime';
 import flagshipScene from '../../../Games/Flagship/scene.json';
 import hotPotatoScene from '../../../Games/HotPotato/scene.json';
 import { blankClientScripts, blankScene, blankServerScripts } from './templates/blank';
@@ -318,14 +318,19 @@ export class Project {
 
   /** Adds an entity under `parentId` (null = scene root); returns its id, or null when the parent no longer exists. */
   addEntity(parentId: string | null, kind: 'box' | 'sphere' | 'trigger' | 'empty', at: [number, number, number] = [0, 0, 0]): string | null {
+    const id = this.pushEntity(parentId, kind, at);
+    if (id !== null) this.touch('scene');
+    return id;
+  }
+
+  /** `addEntity` without the change notice, so a caller can finish its own edit first. `label` replaces the kind's default name. */
+  private pushEntity(parentId: string | null, kind: 'box' | 'sphere' | 'trigger' | 'empty', at: [number, number, number], label?: string): string | null {
     const siblings = this.siblingsOf(parentId);
     if (!siblings) return null;
-    const label = { box: 'Box', sphere: 'Sphere', trigger: 'Trigger', empty: 'Empty' }[kind];
-    const name = this.uniqueName(siblings, label);
+    const name = this.uniqueName(siblings, label ?? { box: 'Box', sphere: 'Sphere', trigger: 'Trigger', empty: 'Empty' }[kind]);
     // shortcut: an empty is a small box (scene format has no mesh-less entity), upgrade when the format gains one.
     const e: RawEntity = { name, shape: kind === 'sphere' || kind === 'trigger' ? 'sphere' : 'box', position: [...at], scale: kind === 'empty' ? [0.2, 0.2, 0.2] : [1, 1, 1], components: kind === 'trigger' ? [defaultComponent('trigger', this)] : [] };
     siblings.push(e);
-    this.touch('scene');
     return (parentId === null ? '' : `${parentId}/`) + name;
   }
 
@@ -399,6 +404,16 @@ export class Project {
         else this.scene.inputs = structuredClone(value);
         this.touch('scene');
         return undefined;
+      case 'peripherals':
+        try {
+          parsePeripherals(value);
+        } catch (e) {
+          return e instanceof Error ? e.message : String(e);
+        }
+        if (Array.isArray(value) && value.length) this.scene.peripherals = structuredClone(value);
+        else delete this.scene.peripherals;
+        this.touch('scene');
+        return undefined;
       case 'gestures':
         try {
           parseGestures(value);
@@ -415,6 +430,54 @@ export class Project {
     this.scene[key] = value;
     this.touch('scene');
     return undefined;
+  }
+
+  /**
+   * Changes the device fields together as one undo step: the listed `peripherals`, the declared `inputs`
+   * (null removes them), the custom `gestures`, and `location` (only ever turns the permission on).
+   * Returns an error sentence and changes nothing when any field is invalid.
+   */
+  applyPeripheralChange(change: { peripherals?: PeripheralKind[]; inputs?: SceneInputs | null; gestures?: Record<string, CustomGesture>; location?: boolean }): string | undefined {
+    try {
+      if (change.peripherals !== undefined) parsePeripherals(change.peripherals);
+      if (change.inputs) parseInputs(change.inputs);
+      if (change.gestures !== undefined) parseGestures(change.gestures);
+    } catch (e) {
+      return e instanceof Error ? e.message : String(e);
+    }
+    if (change.peripherals !== undefined) {
+      if (change.peripherals.length) this.scene.peripherals = structuredClone(change.peripherals);
+      else delete this.scene.peripherals;
+    }
+    if (change.inputs !== undefined) {
+      if (change.inputs === null) delete this.scene.inputs;
+      else this.scene.inputs = structuredClone(change.inputs);
+    }
+    if (change.gestures !== undefined) {
+      if (Object.keys(change.gestures).length) this.scene.gestures = structuredClone(change.gestures);
+      else delete this.scene.gestures;
+    }
+    if (change.location) this.scene.permissions = { ...(this.scene.permissions as object | undefined), location: true };
+    this.touch('scene');
+    return undefined;
+  }
+
+  /**
+   * Adds a client script with `source` and attaches it to `entityId`, or to a new empty entity named `entityName`
+   * when that is null, as one undo step. Changes nothing on an error.
+   */
+  addHandlerScript(entityId: string | null, entityName: string, name: string, source: string): { error: string } | { entityId: string } {
+    const bad = this.checkName('client', name);
+    if (bad) return { error: bad };
+    if (entityId !== null && !this.entity(entityId)) return { error: 'That entity no longer exists.' };
+    const id = entityId ?? this.pushEntity(null, 'empty', [0, 0, 0], entityName);
+    const e = id === null ? undefined : this.entity(id);
+    if (id === null || !e) return { error: 'That entity no longer exists.' };
+    this.clientScripts[name] = source;
+    (e.components ??= []).push({ type: 'script', name });
+    this.syncNames();
+    this.touch(entityId === null ? 'scene' : 'scripts');
+    return { entityId: id };
   }
 
   /** Adds a client script stub and attaches it to the entity as one undo step. Returns an error sentence, or undefined. */

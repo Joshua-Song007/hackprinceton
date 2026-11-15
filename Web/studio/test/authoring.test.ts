@@ -100,3 +100,90 @@ describe('authoring', () => {
     expect(Math.hypot(...q)).toBeCloseTo(1, 9);
   });
 });
+
+describe('peripheral authoring', () => {
+  const inputs = { head: true, position: true, heartRate: false, gestures: ['tap'], players: [1, 32] } as const;
+
+  it('changes the device fields as one undo step', () => {
+    const p = fresh();
+    const before = structuredClone(p.scene);
+    expect(p.applyPeripheralChange({ peripherals: ['phone', 'watch'], inputs: { ...inputs, gestures: ['tap'], players: [1, 32] }, gestures: { swing: { slot: 'rightWrist', axis: [0, 0, -1], threshold: 20, cooldownMs: 400 } }, location: true })).toBeUndefined();
+    expect(p.scene.peripherals).toEqual(['phone', 'watch']);
+    expect((p.scene.inputs as { head: boolean }).head).toBe(true);
+    expect(Object.keys(p.scene.gestures as object)).toEqual(['swing']);
+    expect((p.scene.permissions as { location: boolean }).location).toBe(true);
+    parses(p);
+    p.undo();
+    expect(p.scene).toEqual(before);
+  });
+
+  it('removes keys when the lists are empty, and inputs when null', () => {
+    const p = fresh();
+    p.applyPeripheralChange({ peripherals: ['phone'], inputs: { ...inputs, gestures: ['tap'], players: [1, 32] } });
+    expect(p.applyPeripheralChange({ peripherals: [], inputs: null, gestures: {} })).toBeUndefined();
+    expect(p.scene).not.toHaveProperty('peripherals');
+    expect(p.scene).not.toHaveProperty('inputs');
+    expect(p.scene).not.toHaveProperty('gestures');
+  });
+
+  it('rejects bad input and changes nothing', () => {
+    const p = fresh();
+    const before = structuredClone(p.scene);
+    expect(p.applyPeripheralChange({ peripherals: ['tablet' as never] })).toMatch(/unknown peripheral 'tablet'/);
+    expect(p.applyPeripheralChange({ peripherals: ['phone'], inputs: { ...inputs, gestures: ['wave'] as never, players: [1, 32] } })).toMatch(/unknown gesture/);
+    expect(p.applyPeripheralChange({ gestures: { 'bad name': { slot: 'hand', axis: [0, 0, -1], threshold: 20, cooldownMs: 400 } } })).toBeTruthy();
+    expect(p.scene).toEqual(before);
+    expect(p.canUndo).toBe(false);
+  });
+
+  it('only ever turns the location permission on', () => {
+    const p = fresh();
+    p.applyPeripheralChange({ peripherals: ['phone'], location: true });
+    p.applyPeripheralChange({ peripherals: ['phone'], location: false });
+    expect((p.scene.permissions as { location: boolean }).location).toBe(true);
+  });
+
+  it('lists a device through setSceneSetting too', () => {
+    const p = fresh();
+    expect(p.setSceneSetting('peripherals', ['watch'])).toBeUndefined();
+    expect(p.scene.peripherals).toEqual(['watch']);
+    expect(p.setSceneSetting('peripherals', ['pencil'])).toMatch(/unknown peripheral/);
+    expect(p.setSceneSetting('peripherals', [])).toBeUndefined();
+    expect(p.scene).not.toHaveProperty('peripherals');
+  });
+
+  it('adds a handler script on the given entity as one undo step', () => {
+    const p = fresh();
+    const cube = 'Cube';
+    const r = p.addHandlerScript(cube, 'Apple Watch', 'heartRate', 'export default script({ onHeartRate(self, ctx, bpm) {} });\n');
+    expect(r).toEqual({ entityId: cube });
+    expect(p.clientScripts.heartRate).toContain('onHeartRate');
+    expect(p.entity(cube)!.components).toContainEqual({ type: 'script', name: 'heartRate' });
+    expect(p.scene.clientScripts).toContain('heartRate');
+    p.undo();
+    expect(p.clientScripts.heartRate).toBeUndefined();
+    expect(p.entity(cube)!.components).not.toContainEqual({ type: 'script', name: 'heartRate' });
+  });
+
+  it('adds a handler on a new empty entity, entity and script undone together', () => {
+    const p = fresh();
+    const r = p.addHandlerScript(null, 'Apple Watch', 'heartRate', 'export default script({ onHeartRate(self, ctx, bpm) {} });\n');
+    expect(r).toEqual({ entityId: 'Apple Watch' });
+    expect(p.entity('Apple Watch')!.components).toContainEqual({ type: 'script', name: 'heartRate' });
+    parses(p);
+    p.undo();
+    expect(p.entity('Apple Watch')).toBeUndefined();
+    expect(p.clientScripts.heartRate).toBeUndefined();
+  });
+
+  it('adds nothing when the script name or the entity is bad', () => {
+    const p = fresh();
+    const before = structuredClone(p.scene);
+    expect(p.addHandlerScript(null, 'Apple Watch', 'cube', 'x')).toHaveProperty('error');
+    expect(p.addHandlerScript(null, 'Apple Watch', '1bad', 'x')).toHaveProperty('error');
+    expect(p.addHandlerScript('Gone', 'Apple Watch', 'heartRate', 'x')).toHaveProperty('error');
+    expect(p.scene).toEqual(before);
+    expect(p.clientScripts.heartRate).toBeUndefined();
+    expect(p.canUndo).toBe(false);
+  });
+});

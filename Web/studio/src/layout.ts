@@ -119,6 +119,7 @@ export class LayoutManager {
     if (preset === 'script-focus') {
       b('editor');
       b('explorer', { referencePanel: 'editor', direction: 'left' });
+      b('peripherals', { referencePanel: 'explorer', direction: 'within' }, {}, true);
       b('test', { referencePanel: 'explorer', direction: 'within' }, {}, true);
       b('viewport', { referencePanel: 'editor', direction: 'right' });
       b('inspector', { referencePanel: 'viewport', direction: 'below' });
@@ -128,6 +129,7 @@ export class LayoutManager {
       b('viewport');
       b('editor', { referencePanel: 'viewport', direction: 'within' }, {}, true);
       b('explorer', { referencePanel: 'viewport', direction: 'left' });
+      b('peripherals', { referencePanel: 'explorer', direction: 'within' }, {}, true);
       b('test', { referencePanel: 'explorer', direction: 'within' }, {}, true);
       b('inspector', { referencePanel: 'viewport', direction: 'right' });
       b('console', { direction: 'below' } as never);
@@ -137,6 +139,7 @@ export class LayoutManager {
       b('viewport');
       b('editor', { referencePanel: 'viewport', direction: 'within' }, {}, true);
       b('explorer', { referencePanel: 'viewport', direction: 'left' });
+      b('peripherals', { referencePanel: 'explorer', direction: 'within' }, {}, true);
       b('test', { referencePanel: 'explorer', direction: 'within' }, {}, true);
       b('inspector', { referencePanel: 'viewport', direction: 'right' });
       b('console', { direction: 'below' } as never);

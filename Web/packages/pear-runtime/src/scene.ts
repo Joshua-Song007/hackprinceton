@@ -38,12 +38,18 @@ export interface SceneDescription {
   permissions: { location: boolean };
   /** What each player must provide, declared by the creator; null when the scene does not say (Studio then infers it from the scripts). */
   inputs: SceneInputs | null;
+  /** Devices the game uses, as the creator listed them; devices that `inputs` and `gestures` imply are not repeated here. */
+  peripherals: PeripheralKind[];
   /** Creator-defined motion gestures, recognized by the runtime from `accel` and delivered as `onGesture({ type: name })`. */
   gestures: Record<string, CustomGesture>;
   clientScripts: string[];
   serverScripts: string[];
   entities: EntityDescription[];
 }
+
+/** Devices a game can list. The iPad joins when the simulator and runtime can handle touch and pencil input. */
+export const PERIPHERAL_KINDS = ['phone', 'watch', 'airpods'] as const;
+export type PeripheralKind = (typeof PERIPHERAL_KINDS)[number];
 
 /** A game's input needs: Studio builds every simulated player's devices from it and starts Play with `players[0]` players. */
 export interface SceneInputs {
@@ -176,6 +182,17 @@ export function parseInputs(raw: unknown): SceneInputs {
   };
 }
 
+/** Validates a scene's `peripherals` list. Missing means none; repeats are dropped, order is kept. */
+export function parsePeripherals(raw: unknown): PeripheralKind[] {
+  if (raw === undefined || raw === null) return [];
+  if (!Array.isArray(raw)) throw new SceneError('peripherals: expected array');
+  const kinds = raw.map((k, i) => {
+    if (!(PERIPHERAL_KINDS as readonly unknown[]).includes(k)) throw new SceneError(`peripherals[${i}]: unknown peripheral '${String(k)}'`);
+    return k as PeripheralKind;
+  });
+  return [...new Set(kinds)];
+}
+
 /** Validates a scene's `gestures` block (custom motion gestures). Names must not shadow a built-in gesture. */
 export function parseGestures(raw: unknown): Record<string, CustomGesture> {
   const out: Record<string, CustomGesture> = {};
@@ -214,6 +231,7 @@ export function parseScene(input: unknown): SceneDescription {
     runMode,
     permissions: { location: bool(obj(s.permissions ?? {}, 'permissions').location, 'permissions.location', false) },
     inputs: s.inputs === undefined || s.inputs === null ? null : parseInputs(s.inputs),
+    peripherals: parsePeripherals(s.peripherals),
     gestures: parseGestures(s.gestures),
     clientScripts: names(s.clientScripts, 'clientScripts'),
     serverScripts: names(s.serverScripts, 'serverScripts'),

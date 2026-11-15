@@ -2,9 +2,7 @@
 // Every edit goes through `project.updateEntity`, so the scene JSON is the single source of truth.
 import type { PanelView } from './layout';
 import type { Selection } from './explorer';
-import { GESTURE_TYPES, SLOTS } from '@pear/core';
-import { parseGestures, parseInputs, type CustomGesture, type SceneInputs } from '@pear/runtime';
-import { inferInputs } from './needs';
+import { parseInputs, type SceneInputs } from '@pear/runtime';
 import { eulerToQuat, quatToEuler, type Project, type RawEntity } from './project';
 import { announce, button, el, icon, openMenu, promptSheet } from './ui';
 
@@ -65,7 +63,7 @@ export function vector3Field(label: string, unit: string, value: readonly number
   ]);
 }
 
-function section(title: string, trail: string, content: HTMLElement[]): HTMLElement {
+export function section(title: string, trail: string, content: HTMLElement[]): HTMLElement {
   const chev = icon('chev');
   chev.classList.add('om-chev');
   const header = el('button', { type: 'button', 'aria-expanded': 'true' }, [chev, title, ...(trail ? [el('span', { class: 'om-trail' }, [trail])] : [])]);
@@ -78,7 +76,7 @@ function section(title: string, trail: string, content: HTMLElement[]): HTMLElem
   return el('div', { class: 'om-section' }, [header, body]);
 }
 
-const prop = (label: string, control: Node) => el('div', { class: 'om-prop' }, [el('span', {}, [label]), control]);
+export const prop = (label: string, control: Node) => el('div', { class: 'om-prop' }, [el('span', {}, [label]), control]);
 const readout = (text: string) => el('span', { style: 'color:var(--text)' }, [text]);
 
 export function createInspectorPanel(project: Project, selection: Selection): PanelView {
@@ -184,76 +182,21 @@ export function createInspectorPanel(project: Project, selection: Selection): Pa
     const origin = vector3Field('Player origin', 'm', (s.playerOrigin as number[]) ?? [0, 0, 0], 0.01, 0, (v) => !project.setSceneSetting('playerOrigin', v));
     const location = el('input', { type: 'checkbox', 'aria-label': 'Location permission', 'aria-describedby': 'scene-location-help', checked: (s.permissions as { location?: boolean } | undefined)?.location === true });
     location.addEventListener('change', () => setting('permissions.location', location.checked));
-    const inputsGroup = (): HTMLElement[] => {
-      let current: SceneInputs | null = null;
+    const playersGroup = (): HTMLElement[] => {
+      let declared: SceneInputs | null = null;
       try {
-        current = s.inputs ? parseInputs(s.inputs) : null;
+        declared = s.inputs ? parseInputs(s.inputs) : null;
       } catch {
-        current = null;
+        declared = null;
       }
-      if (!current) {
-        return [
-          el('p', { class: 'om-secondary' }, ['This scene does not declare inputs. Studio reads them from the scripts.']),
-          button('Declare from scripts', () => setting('inputs', inferInputs(project.clientScripts)), { variant: 'small' }),
-        ];
-      }
-      const now = current;
-      const apply = (next: SceneInputs) => setting('inputs', next);
-      const check = (label: string, on: boolean, next: (on: boolean) => SceneInputs) => {
-        const box = el('input', { type: 'checkbox', 'aria-label': label, checked: on });
-        box.addEventListener('change', () => apply(next(box.checked)));
-        return prop(label, box);
-      };
+      if (!declared) return [el('p', { class: 'om-secondary' }, ['Add a peripheral to set the player count.'])];
+      const now = declared;
       const players = (label: string, i: 0 | 1) => {
         const input = el('input', { type: 'number', min: 1, max: 32, step: 1, value: String(now.players[i]), 'aria-label': label });
-        input.addEventListener('change', () => apply({ ...now, players: i === 0 ? [Number(input.value), now.players[1]] : [now.players[0], Number(input.value)] }));
+        input.addEventListener('change', () => setting('inputs', { ...now, players: i === 0 ? [Number(input.value), now.players[1]] : [now.players[0], Number(input.value)] }));
         return prop(label, el('div', { class: 'om-field' }, [input]));
       };
-      const gestureLabel = { tap: 'Tap', doubleTap: 'Double tap', flick: 'Flick', squeeze: 'Squeeze', pinch: 'Pinch' } as const;
-      return [
-        check('Head', now.head, (on) => ({ ...now, head: on })),
-        check('Position', now.position, (on) => ({ ...now, position: on })),
-        check('Heart rate', now.heartRate, (on) => ({ ...now, heartRate: on })),
-        ...GESTURE_TYPES.map((g) => check(gestureLabel[g], now.gestures.includes(g), (on) => ({ ...now, gestures: GESTURE_TYPES.filter((x) => (x === g ? on : now.gestures.includes(x))) }))),
-        players('Min players', 0),
-        players('Max players', 1),
-      ];
-    };
-    const motionGroup = (): HTMLElement[] => {
-      let defs: Record<string, CustomGesture> = {};
-      try {
-        defs = parseGestures(s.gestures);
-      } catch {
-        defs = {};
-      }
-      const AXES: Record<string, CustomGesture['axis']> = { x: [1, 0, 0], y: [0, 1, 0], z: [0, 0, 1], '-z': [0, 0, -1] };
-      const axisName = (a: CustomGesture['axis']) => Object.entries(AXES).find(([, v]) => v.every((n, i) => n === a[i]))?.[0] ?? 'x';
-      const rows = Object.entries(defs).map(([name, d]) => {
-        const change = (patch: Partial<CustomGesture>) => setting('gestures', { ...defs, [name]: { ...d, ...patch } });
-        const num = (label: string, value: number, key: 'threshold' | 'cooldownMs') => {
-          const input = el('input', { type: 'number', min: 0, step: 1, value: String(value), 'aria-label': `${name} ${label}` });
-          input.addEventListener('change', () => change({ [key]: Number(input.value) }));
-          return prop(label, el('div', { class: 'om-field' }, [input]));
-        };
-        return section(name, '', [
-          prop('Slot', select(`${name} slot`, [...SLOTS], d.slot, (v) => change({ slot: v as CustomGesture['slot'] }))),
-          prop('Axis', select(`${name} axis`, Object.keys(AXES), axisName(d.axis), (v) => change({ axis: AXES[v]! }))),
-          num('Threshold (m/s²)', d.threshold, 'threshold'),
-          num('Cooldown (ms)', d.cooldownMs, 'cooldownMs'),
-          button('Remove', () => {
-            const { [name]: _gone, ...rest } = defs;
-            setting('gestures', rest);
-          }, { variant: 'small', ariaLabel: `Remove motion gesture ${name}` }),
-        ]);
-      });
-      return [
-        ...rows,
-        button('Add motion gesture', () => {
-          let n = 1;
-          while (`gesture${n}` in defs) n++;
-          setting('gestures', { ...defs, [`gesture${n}`]: { slot: 'hand', axis: [0, 0, -1], threshold: 20, cooldownMs: 400 } });
-        }, { variant: 'small' }),
-      ];
+      return [players('Min players', 0), players('Max players', 1)];
     };
     return [
       el('div', { class: 'pn-title' }, [icon('cube'), el('span', {}, ['Scene settings'])]),
@@ -265,8 +208,7 @@ export function createInspectorPanel(project: Project, selection: Selection): Pa
         prop('Location permission', location),
         el('p', { id: 'scene-location-help', class: 'om-secondary' }, ['Lets scripts read this player’s own position and send it as a game event.']),
       ]),
-      section('Inputs', '', inputsGroup()),
-      section('Motion gestures', '', motionGroup()),
+      section('Players', '', playersGroup()),
     ];
   };
 

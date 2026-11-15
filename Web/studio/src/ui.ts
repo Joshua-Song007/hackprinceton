@@ -26,10 +26,10 @@ export function icon(name: string): SVGSVGElement {
 }
 
 /** A button with an optional icon; `variant` picks a brand-kit class. */
-export function button(label: string, onClick: () => void, options: { icon?: string; variant?: 'default' | 'borderless' | 'small'; ariaLabel?: string } = {}): HTMLButtonElement {
+export function button(label: string, onClick: () => void, options: { icon?: string; variant?: 'default' | 'borderless' | 'small'; danger?: boolean; ariaLabel?: string } = {}): HTMLButtonElement {
   const b = el('button', {
     type: 'button',
-    class: `om-btn${options.variant ? ` om-btn--${options.variant}` : ''}`,
+    class: `om-btn${options.variant ? ` om-btn--${options.variant}` : ''}${options.danger ? ' om-btn--danger' : ''}`,
     'aria-label': options.ariaLabel,
   });
   if (options.icon) b.append(icon(options.icon));

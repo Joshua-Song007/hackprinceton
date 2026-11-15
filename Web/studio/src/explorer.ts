@@ -27,7 +27,7 @@ export class Selection {
 
 type Item = { kind: 'entity'; id: string } | { kind: 'script'; script: ScriptKind; name: string };
 
-export function createExplorerPanel(project: Project, selection: Selection, editor: EditorBus): PanelView {
+export function createExplorerPanel(project: Project, selection: Selection, editor: EditorBus, addPeripheral: () => void): PanelView {
   const root = el('div', { class: 'pn', role: 'region', 'aria-label': 'Explorer' });
   let focusKey: string | null = null;
   const keyOf = (i: Item) => (i.kind === 'entity' ? `e:${i.id}` : `s:${i.script}:${i.name}`);
@@ -85,7 +85,7 @@ export function createExplorerPanel(project: Project, selection: Selection, edit
     { label: 'Sphere', run: () => addEntity(parent, 'sphere') },
     { label: 'Trigger zone', run: () => addEntity(parent, 'trigger') },
     { label: 'Empty', run: () => addEntity(parent, 'empty') },
-    ...(withChild ? [{ separator: true }, { label: 'Child of selection (box)', disabled: !selection.entityId, run: () => addEntity(selection.entityId, 'box') }] : []),
+    ...(withChild ? [{ separator: true }, { label: 'Child of selection (box)', disabled: !selection.entityId, run: () => addEntity(selection.entityId, 'box') }, { separator: true }, { label: 'Peripheral...', run: addPeripheral }] : []),
   ];
   const entityMenu = (anchor: HTMLElement, id: string) =>
     openMenu(anchor, [
@@ -177,7 +177,7 @@ export function createExplorerPanel(project: Project, selection: Selection, edit
         li.addEventListener('dblclick', () => editor.open({ kind: item.script, name: item.name }));
         // tabindex -1: F2 and Delete cover the keyboard, so the row stays one tab stop
         const rn = button('Rename', () => rename(item.script, item.name), { variant: 'small', ariaLabel: `Rename ${item.name}` });
-        const dl = button('Delete', () => remove(item.script, item.name), { variant: 'small', ariaLabel: `Delete ${item.name}` });
+        const dl = button('Delete', () => remove(item.script, item.name), { variant: 'small', danger: true, ariaLabel: `Delete ${item.name}` });
         rn.tabIndex = dl.tabIndex = -1;
         li.append(rn, dl);
         li.style.gridTemplateColumns = '18px minmax(0, 1fr) auto auto auto';

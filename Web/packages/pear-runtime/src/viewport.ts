@@ -9,6 +9,7 @@ export interface ViewportColors {
   viewport: string;
   grid: string;
   accent: string;
+  selection: string;
   text: string;
   axisX: string;
   axisY: string;
@@ -17,7 +18,7 @@ export interface ViewportColors {
 
 /** Dark theme values of tokens.css, used when the page has not loaded the tokens. */
 export const DARK_VIEWPORT_COLORS: ViewportColors = {
-  viewport: '#3d3e43', grid: '#4c4d53', accent: '#4b93f8', text: '#e4e5e7',
+  viewport: '#3d3e43', grid: '#4c4d53', accent: '#c2efb3', selection: '#e5b181', text: '#e4e5e7',
   axisX: '#f0716b', axisY: '#7cc96a', axisZ: '#6aa7f0',
 };
 
@@ -34,7 +35,7 @@ function labelTexture(text: string, color: string): THREE.CanvasTexture {
 }
 
 const TOKENS: Record<keyof ViewportColors, string> = {
-  viewport: '--viewport', grid: '--viewport-grid', accent: '--accent', text: '--text',
+  viewport: '--viewport', grid: '--viewport-grid', accent: '--accent', selection: '--selection', text: '--text',
   axisX: '--axis-x', axisY: '--axis-y', axisZ: '--axis-z',
 };
 
@@ -287,7 +288,7 @@ export class Viewport {
     const edgesOf = { box: new THREE.EdgesGeometry(cube), sphere: new THREE.EdgesGeometry(ball, 40) };
     for (const e of this.entities) {
       const isSelected = e.id === this.selected;
-      const color = isSelected ? c.accent : (e.color ?? c.text);
+      const color = isSelected ? c.selection : (e.color ?? c.text);
       const body = e.shape === 'sphere' ? ball : cube;
       const edges = edgesOf[e.shape === 'sphere' ? 'sphere' : 'box'];
       const group = new THREE.Group();
