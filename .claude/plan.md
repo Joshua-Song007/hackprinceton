@@ -185,9 +185,9 @@ Scope (2026-11-15): trimmed to what a creator needs to build, check and publish 
 
 ### 13.6 Agent tools and knowledge
 
-- [ ] `Plugins/langchain-deepagents/runtime/tools.py` — `validate_game`, `simulate_game` (calls `pear-check`), bounded, structured failures with tested or untested status, no shell.
-- [ ] `Plugins/langchain-deepagents/tests/test_tools.py` — scripted model: validate, fix, re-run; stale write rejected; out-of-scope write denied.
-- [ ] `Plugins/langchain-deepagents/pear-plugin.json` — version bump; `pyproject.toml` and `uv.lock` kept equal.
+- [x] `Plugins/langchain-deepagents/runtime/tools.py` — (Built 2026-11-15 by Tien, PR #201; simulate via the headless runner, pear-check later) `validate_game`, `simulate_game` (calls `pear-check`), bounded, structured failures with tested or untested status, no shell.
+- [x] `Plugins/langchain-deepagents/tests/test_tools.py` — scripted model: validate, fix, re-run; stale write rejected; out-of-scope write denied.
+- [x] `Plugins/langchain-deepagents/pear-plugin.json` — version bump; `pyproject.toml` and `uv.lock` kept equal.
 
 ### 13.7 Publish and launch page
 
@@ -243,14 +243,14 @@ Not needed for the first publishable game; none of it is built. Original section
 #### 13.6 Agent tools and knowledge (rest)
 
 - [ ] `Plugins/langchain-deepagents/runtime/server.py` — expected-revision hashes on writes (stale writes rejected); declared scopes enforced; publish action with explicit approval and a receipt.
-- [ ] `Plugins/langchain-deepagents/runtime/translate.py` — forward controller, cues and assets, not only scripts and scene.
+- [x] `Plugins/langchain-deepagents/runtime/translate.py` — forward controller, cues and assets, not only scripts and scene.
 - [ ] `Tools/pear-check/gen-skill.mjs` — generates `SKILL.md` and the API summary from `scripting-api.md` and the manifest schema (one source).
 - [ ] `Plugins/langchain-deepagents/skills/pear-scripting/SKILL.md` — generated output, plus scaffolds from Quick Draw and Hot Potato.
 - [ ] `Plugins/langchain-deepagents/evals/cases.json` — five prompt-to-game cases scored by `pear-check` (opt-in, live model; not in default tests).
 
 #### 13.7 Publish and launch page (rest)
 
-- [ ] `Web/studio/src/lobbiesPanel.ts` — live lobbies per game, players, kick.
+- [x] `Web/studio/src/lobbiesPanel.ts` — live lobbies per game, players, kick. (Built 2026-11-15 by Tien, PR #199)
 - [ ] `Packages/PearLibrary/Sources/PearLibrary/Playability.swift` — playability from the manifest's capabilities, not scene guesses.
 - [ ] `Apps/PearPlayer/PearPlayer/Library/GameDetailView.swift` — instructions, live lobbies to join, device readiness.
 
