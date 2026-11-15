@@ -392,6 +392,10 @@ Not planned: multiple developer roles or audit log (one developer role for the h
 ### 14.9 Game-building tools for agents (built 2026-11-15 `0dd04b8`)
 - [x] `Tools/pear-mcp/src/devtools.js` — `list_templates`/`get_template` (curated `Games/<name>`, name-whitelisted, read-only), `validate_game` (scene + script list, `node --check` syntax only, ui.json via `Web/packages/pear-ui/bin/validate.ts`, scenario shape), `geo_path` (GPS walk steps at speed), `geo_measure`; `Tools/pear-mcp/test-devtools.mjs`
 - [x] `Plugins/langchain-deepagents/runtime/server.py` — GAME_PROMPT: outdoor-first (A0), template → validate → save → run_scenario loop, script layout `scripts/server|client/<name>.js`, geo tools for paths
+### 14.10 Manhunt reference game (acceptance test 2, part 1)
+- [x] `Games/Manhunt/` — `scene.json`, `pear-game.json`, `scripts/game.js`, `scripts/player.js`, `ui.json`, `scenario.json` (Built 2026-11-15, merged `af683c8`: roles by join order (1 hunter per 3), location events, haversine, TAG_M 15 m, hot/warm/cold hints, 30 s hunter pings, 300 s rounds; headless scenario passes on hosted (test game `b9530566-abb7-46eb-808d-51d242ca809e`); `validate_game` clean; iPhone Simulator shows lobby with GPS fix via the PearUI location sensor. Gaps: no per-player send in the script API (`fireAll` only), so roles/hints ride in a shared `view` event and hiding is cosmetic; red `fill` alarm is global; manifest `sensors: ["location"]` rejected by the backend (400), left empty. Open: vibe-code run of a new outdoor game through Deep Agents (#190, Tien); per-player `ctx.remote.fire(player, …)` belongs in #194)
+- [x] `Tools/pear-mcp/src/kit.js` — location-game example (PR #198, Jacob)
+
 ### 14.8 Later (not scheduled tonight)
 - [ ] thumbnails + gameplay image carousel; developer web About edit; marketplace map plugin with iOS look; iOS Simulator stream check
 
