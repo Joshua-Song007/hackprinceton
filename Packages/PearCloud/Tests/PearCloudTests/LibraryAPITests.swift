@@ -211,6 +211,23 @@ extension LibraryAPITests {
         #expect(LibraryStub.seen[1].url?.path == "/api/friends")
     }
 
+    @Test func friendsDecodeLobbyWhenPresent() async throws {
+        let body = Data(#"[{"id":"a","name":"Ann","playing":{"gameId":"g1","title":"QD","lobby":"K7QM2"}}]"#.utf8)
+        let client = try await signedInClient { _ in (200, body) }
+        let friends = try await client.listFriends()
+        #expect(friends[0].playing == PlayingGame(gameId: "g1", title: "QD", lobby: "K7QM2"))
+    }
+
+    @Test func lobbiesDecode() async throws {
+        let body = Data(#"[{"code":"K7QM2","players":[{"id":"a","name":"Ann"}]},{"code":"OPEN","players":[]}]"#.utf8)
+        let client = try await signedInClient { _ in (200, body) }
+        let lobbies = try await client.listLobbies(gameId: "g1")
+        #expect(lobbies == [
+            LobbyInfo(code: "K7QM2", players: [.init(id: "a", name: "Ann")]), LobbyInfo(code: "OPEN", players: []),
+        ])
+        #expect(LibraryStub.seen.last?.url?.path == "/api/games/g1/lobbies")
+    }
+
     @Test func requestsDecodeAndMeCarriesTheCode() async throws {
         let client = try await signedInClient { req in
             switch req.url!.path {

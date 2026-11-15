@@ -110,9 +110,31 @@ public struct FriendEntry: Codable, Sendable, Equatable, Identifiable {
 public struct PlayingGame: Codable, Sendable, Equatable {
     public var gameId: String
     public var title: String
-    public init(gameId: String, title: String) {
+    /// The friend's lobby code in a lobby-based game; nil on older servers or games without lobbies.
+    public var lobby: String?
+    public init(gameId: String, title: String, lobby: String? = nil) {
         self.gameId = gameId
         self.title = title
+        self.lobby = lobby
+    }
+}
+
+/// One open lobby of a lobby-based game (`GET /api/games/{id}/lobbies`).
+public struct LobbyInfo: Codable, Sendable, Equatable, Identifiable {
+    public struct Member: Codable, Sendable, Equatable {
+        public var id: String
+        public var name: String
+        public init(id: String, name: String) {
+            self.id = id
+            self.name = name
+        }
+    }
+    public var code: String
+    public var players: [Member]
+    public var id: String { code }
+    public init(code: String, players: [Member]) {
+        self.code = code
+        self.players = players
     }
 }
 
@@ -375,6 +397,11 @@ public actor CloudClient {
     /// Accepted friends and the game each is in right now (`GET /api/friends`).
     public func listFriends() async throws -> [FriendEntry] {
         try await send("GET", ["api", "friends"], body: Optional<GameBundle>.none)
+    }
+
+    /// Open lobbies of a lobby-based game (`GET /api/games/{id}/lobbies`).
+    public func listLobbies(gameId: String) async throws -> [LobbyInfo] {
+        try await send("GET", ["api", "games", gameId, "lobbies"], body: Optional<GameBundle>.none)
     }
 
     /// Pending requests in both directions (`GET /api/friends/requests`).

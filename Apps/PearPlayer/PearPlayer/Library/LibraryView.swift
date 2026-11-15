@@ -2,7 +2,6 @@ import PearCloud
 import PearLibrary
 import SwiftUI
 #if os(iOS)
-import SafariServices
 #endif
 
 struct LibraryView: View {
@@ -24,7 +23,7 @@ struct LibraryView: View {
             dashboard
                 .background(PearTheme.bgWindow.ignoresSafeArea())
                 .navigationDestination(for: CatalogEntry.self) { GameDetailView(entry: $0, model: model) }
-                .navigationDestination(for: PlayRequest.self) { GameDetailView(entry: $0.entry, model: model, autoplay: true) }
+                .navigationDestination(for: PlayRequest.self) { GameDetailView(entry: $0.entry, model: model, autoplay: true, lobby: $0.lobby) }
                 #if os(iOS)
                 .toolbar(.hidden, for: .navigationBar)
                 #else
@@ -232,7 +231,7 @@ struct LibraryView: View {
         FriendsPanel(model: model) { friend in
             if let id = friend.playing?.gameId,
                let entry = model.library.entries.first(where: { $0.id == id }) {
-                path.append(PlayRequest(entry: entry))
+                path.append(PlayRequest(entry: entry, lobby: friend.playing?.lobby))
             }
         }
     }
@@ -363,6 +362,8 @@ struct LibraryView: View {
 /// A shelf route that opens the game page and starts Play at once.
 struct PlayRequest: Hashable {
     let entry: CatalogEntry
+    /// A friend's lobby to join; with none, a phone-only game opens its lobby choices instead of starting.
+    var lobby: String?
 }
 
 /// A sidebar row: selected rows take the dark-green fill, others stay flat.
@@ -637,31 +638,19 @@ private struct PlaySurface: ViewModifier {
         Binding(get: { model.activeSession }, set: { if $0 == nil { model.leaveGame() } })
     }
 
-    private var phonePage: Binding<PhonePage?> {
-        Binding(get: { model.phonePage.map(PhonePage.init) }, set: { if $0 == nil { model.leaveGame() } })
+    #if os(iOS)
+    private var quickDraw: Binding<QuickDrawSession?> {
+        Binding(get: { model.quickDraw }, set: { if $0 == nil { model.leaveGame() } })
     }
+    #endif
 
     func body(content: Content) -> some View {
         #if os(iOS)
         content
             .fullScreenCover(item: session) { PlayView(session: $0, onLeave: model.leaveGame) }
-            .fullScreenCover(item: phonePage) { SafariPage(url: $0.url).ignoresSafeArea() }
+            .fullScreenCover(item: quickDraw) { QuickDrawView(session: $0, onLeave: model.leaveGame) }
         #else
         content.sheet(item: session) { PlayView(session: $0, onLeave: model.leaveGame) }
         #endif
     }
 }
-
-private struct PhonePage: Identifiable {
-    let url: URL
-    var id: URL { url }
-}
-
-#if os(iOS)
-/// Safari's in-app view: the phone page needs Safari's motion-permission prompt and Web Audio, and its Done button leaves the game.
-private struct SafariPage: UIViewControllerRepresentable {
-    let url: URL
-    func makeUIViewController(context: Context) -> SFSafariViewController { SFSafariViewController(url: url) }
-    func updateUIViewController(_ controller: SFSafariViewController, context: Context) {}
-}
-#endif
