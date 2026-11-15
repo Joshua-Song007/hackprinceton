@@ -111,9 +111,8 @@ describe('publish to Vultr: progress and verify', () => {
     expect(await s.account.publishVerified(s.project)).toMatchObject({ ok: false, step: 'signIn' }); // now signed out locally
   });
 
-  it('builds the iPad and phone links for the game', () => {
+  it('builds the two phone links for the game', () => {
     expect(publishLinks(`${SERVER}/`, 'g1').map((l) => l.url)).toEqual([
-      `${SERVER}/qd-ref.html?game=g1&name=Referee`,
       `${SERVER}/qd-phone.html?game=g1&name=Player1`,
       `${SERVER}/qd-phone.html?game=g1&name=Player2`,
     ]);

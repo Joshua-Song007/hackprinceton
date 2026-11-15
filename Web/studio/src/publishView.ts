@@ -4,12 +4,11 @@ import { defaultServerUrl, type PreferenceStore } from './preferences';
 import type { Project } from './project';
 import { announce, button, el, openSheet } from './ui';
 
-/** The iPad referee and the two phone links for a published game. */
+/** The two phone links for a published game (Quick Draw is two phones, no referee: #175). */
 export function publishLinks(serverUrl: string, gameId: string): { label: string; url: string }[] {
   const base = (serverUrl || globalThis.location?.origin || '').replace(/\/+$/, '');
   const game = encodeURIComponent(gameId);
   return [
-    { label: 'iPad (referee)', url: `${base}/qd-ref.html?game=${game}&name=Referee` },
     { label: 'Phone 1', url: `${base}/qd-phone.html?game=${game}&name=Player1` },
     { label: 'Phone 2', url: `${base}/qd-phone.html?game=${game}&name=Player2` },
   ];
