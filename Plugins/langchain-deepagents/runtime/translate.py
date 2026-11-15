@@ -7,9 +7,13 @@ INSTRUCTIONS_TOOL = "submit_instructions"
 GAME_FILES = ("scene.json", "ui.json", "controller.json", "cues.json", "instructions.json")
 
 
-def new_state() -> dict:
-    """Per-prompt bookkeeping: task/write calls awaiting their ToolMessage, and the last reply text."""
-    return {"tasks": {}, "writes": {}, "running": {}, "summary": ""}
+# Deep Agents' own tools: game mode streams every other tool call (the Pear MCP tools) as tool_call / tool_result.
+BUILTIN_TOOLS = {"write_todos", "task", "write_file", "edit_file", "read_file", "ls", "glob", "grep"}
+
+
+def new_state(stream_tools: bool = False) -> dict:
+    """Per-prompt bookkeeping: task/write calls awaiting their ToolMessage, and the last reply text. `stream_tools` (game mode) adds tool_call / tool_result events."""
+    return {"tasks": {}, "writes": {}, "running": {}, "summary": "", "stream_tools": stream_tools, "calls": {}}
 
 
 def _text(content) -> str:
@@ -61,6 +65,9 @@ def _message_events(namespace, message, project_dir: Path, state: dict) -> list[
     if kind == "ai":
         for call in message.tool_calls or []:
             args = call.get("args") or {}
+            if state["stream_tools"] and call["name"] not in BUILTIN_TOOLS:
+                state["calls"][call["id"]] = call["name"]
+                events.append({"type": "tool_call", "name": call["name"], "args": args})
             if call["name"] == "write_todos":
                 events.append({"type": "todos", "items": [
                     {"content": t["content"], "status": t["status"]} for t in args.get("todos", [])]})
@@ -76,6 +83,9 @@ def _message_events(namespace, message, project_dir: Path, state: dict) -> list[
             state["summary"] = _text(message.content)
     elif kind == "tool":
         failed = getattr(message, "status", None) == "error" or _text(message.content).startswith("Error")
+        tool_name = state["calls"].pop(message.tool_call_id, None)
+        if tool_name:
+            events.append({"type": "tool_result", "name": tool_name, "ok": not failed, "text": _text(message.content)[:4000]})
         task_name = state["tasks"].get(message.tool_call_id)
         if task_name is not None:
             events.append(_status(task_name, "error" if failed else "done", _text(message.content)[:200]))
