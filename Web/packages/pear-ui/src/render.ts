@@ -34,9 +34,17 @@ const CSS = `
 .pui-btn.t-accent{background:#0a84ff;color:#fff}.pui-btn.t-good{background:#30d158;color:#000}.pui-btn.t-bad{background:#ff453a;color:#fff}.pui-btn.t-warn{background:#ffd60a;color:#000}
 .pui-gauge{height:10px;border-radius:5px;background:#2c2c2e;overflow:hidden;width:100%}.pui-gauge>div{height:100%;background:#0a84ff}
 .pui-list{display:flex;flex-direction:column;gap:8px;list-style:none;margin:0;padding:0}
+.pui-list-row{flex-direction:row;gap:12px;width:100%}.pui-list-row>li{flex:1 1 0;min-width:0}
 .pui-map{border-radius:14px;background:#1c1c1e;padding:10px;font-size:13px;min-height:120px}
 .pui-img{max-width:100%;border-radius:12px}
 `;
+
+/** Screen-root `style.fill` (tone or `{{expr}}`): the whole screen's background, edge to edge. */
+export const FILL: Record<string, string> = { bad: '#eb1a1a', black: '#000', accent: '#c8f58a', neutral: '#090d0b' };
+export function screenFill(screen: Node | undefined, state: ViewState): string | undefined {
+  const f = screen?.style?.fill;
+  return f === undefined ? undefined : FILL[str(interpolate(state, f))];
+}
 
 let cssInjected = false;
 function injectCss(doc: Document) {
@@ -125,7 +133,7 @@ export function mount(
         return e;
       }
       case 'list': {
-        const e = box('ul', 'pui-list');
+        const e = box('ul', n.direction === 'row' ? 'pui-list pui-list-row' : 'pui-list');
         const items = interpolate(scope, n.items ? `{{${n.items}}}` : undefined);
         if (Array.isArray(items) && n.item) {
           items.forEach((it, i) => {
@@ -175,6 +183,7 @@ export function mount(
     const id = pickScreen(ui, current);
     const screen = id ? ui.screens[id] : undefined;
     const seen = new Set<string>();
+    root.style.background = screenFill(screen, current) ?? '';
     if (screen) { const e = build(screen, current, id!, seen); if (e) { e.classList.add('pui-grow'); root.appendChild(e); } }
     for (const [k, stop] of sensors) if (!seen.has(k)) { stop(); sensors.delete(k); }
   }

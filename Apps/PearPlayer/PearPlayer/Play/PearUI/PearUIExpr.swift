@@ -2,7 +2,7 @@ import Foundation
 import PearCloud
 
 /// C1 expressions over the view state `{ev, me, local, device, item?}`: dotted path, optional `==`/`!=` literal,
-/// `!` prefix, `a || b` fallback (first truthy). No arbitrary code. Same rules as the web renderer.
+/// `!` prefix, `a && b` (first falsy, else last; binds tighter), `a || b` fallback (first truthy). No arbitrary code. Same rules as the web renderer.
 enum PearUIExpr {
     static func eval(_ raw: String, _ state: JSONValue) -> JSONValue {
         var expr = raw.trimmingCharacters(in: .whitespaces)
@@ -10,8 +10,17 @@ enum PearUIExpr {
         let parts = expr.components(separatedBy: "||")
         var last = JSONValue.null
         for part in parts {
-            last = term(part, state)
+            last = conj(part, state)
             if truthy(last) { return last }
+        }
+        return last
+    }
+
+    private static func conj(_ raw: String, _ state: JSONValue) -> JSONValue {
+        var last = JSONValue.null
+        for part in raw.components(separatedBy: "&&") {
+            last = term(part, state)
+            if !truthy(last) { return last }
         }
         return last
     }
@@ -97,6 +106,9 @@ enum PearUIExpr {
         assert(truthy(eval("!ev.missing", s)))
         assert(eval("ev.missing || 'Waiting'", s) == .string("Waiting"))
         assert(eval("ev.state.players.length", s) == .number(1))
+        assert(eval("ev.state.phase == 'fire' && me.id == 'a'", s) == .bool(true))
+        assert(eval("ev.state.phase == 'lobby' && 'x' || ev.state.phase == 'fire' && 'bad'", s) == .string("bad"))
+        assert(!truthy(eval("me.id == 'a' && ev.missing", s)))
         assert(interpolate("Phase {{ev.state.phase}}!", s) == "Phase fire!")
         assert(resolve(.string("{{ev.state.players}}"), s).array?.count == 1)
     }

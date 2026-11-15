@@ -1,4 +1,5 @@
-// C1 expressions: `a.b.c`, `a == 'x'`, `a != 3`, `!a`, `a || 'fallback'`. No eval: unknown syntax is a path.
+// C1 expressions: `a.b.c`, `a == 'x'`, `a != 3`, `!a`, `a && b`, `a || 'fallback'`. No eval: unknown syntax is a path.
+// `&&` binds tighter than `||` and yields its last term when all are truthy, so `x == 1 && 'red' || 'blue'` picks a value.
 
 const LIT = /^(-?\d+(\.\d+)?|'[^']*'|"[^"]*"|true|false|null)$/;
 
@@ -37,12 +38,18 @@ function term(scope: unknown, raw: string): unknown {
 
 const operand = (scope: unknown, s: string): unknown => (LIT.test(s.trim()) ? literal(s.trim()) : lookup(scope, s.trim()));
 
+function conj(scope: unknown, expr: string): unknown {
+  let v: unknown;
+  for (const p of expr.split('&&')) { v = term(scope, p); if (!truthy(v)) return v; }
+  return v;
+}
+
 /** Evaluates one expression against a view state (or any object). */
 export function evalExpr(scope: unknown, expr: string): unknown {
   const parts = expr.split('||');
   let v: unknown;
   for (const p of parts) {
-    v = term(scope, p);
+    v = conj(scope, p);
     if (v !== undefined && v !== null && v !== false && v !== '') return v;
   }
   return v;
