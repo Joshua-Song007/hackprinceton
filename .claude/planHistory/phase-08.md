@@ -247,3 +247,11 @@ The Test panel's Finish playtest asks each agent player to look back once (the p
 - [x] `Web/studio/src/run.ts` — `report`, `finishPlaytest`, retired agents.
 - [x] `Web/studio/src/panels/deep-agent.ts`, `Web/studio/src/main.ts`, `Web/studio/src/testPanel.ts`
 - [x] `Web/studio/test/playtestReport.test.ts`, `Web/studio/test/agentPlayers.test.ts`, `Web/studio/test/agentRun.test.ts`, `Web/studio/test/deep-agent.test.ts`
+
+### 2026-11-15 — Instructions panel (Phase 12.5)
+Paths: `Web/studio/src/instructionsPanel.ts`, `Web/studio/src/main.ts`, `Web/studio/test/instructions.test.ts`
+
+A new Instructions panel (View > Game instructions, or Window) edits a game's written instructions directly, one undo step per field, cleaned by `parseInstructions`; shows the scene check (what `scene.json` disagrees with, the scene being the side out of sync); shows an agent's proposal as a list of changes with Accept and Reject; and shows the playtest report with Send to chat. It is not in the layout presets. A new proposal is announced, not shown automatically.
+- [x] `Web/studio/src/instructionsPanel.ts`
+- [x] `Web/studio/src/main.ts` — panel spec, menu item, announcement.
+- [x] `Web/studio/test/instructions.test.ts` — helper cases.

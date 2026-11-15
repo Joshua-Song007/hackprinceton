@@ -16,6 +16,7 @@ import { PreferenceStore, bindPreferences, inDesktopApp, openSettingsSheet } fro
 import { createPeripheralsPanel, openPeripheralPicker } from './peripheralsPanel';
 import { deviceMenuItems } from './deviceMenu';
 import { placeDevice, previewRig, readPeripheralState } from './peripherals';
+import { createInstructionsPanel } from './instructionsPanel';
 import { createTestPanel } from './testPanel';
 import { openPhoneSheet } from './phonePlay';
 import { openNewGameSheet } from './newGame';
@@ -87,6 +88,7 @@ const panels: PanelSpec[] = [
   { id: 'editor', title: 'Script editor', create: () => createEditorPanel(project, editor) },
   { id: 'console', title: 'Console', create: () => createConsolePanel(debug) },
   { id: 'test', title: 'Test', create: () => createTestPanel(project, run, sendToChat) },
+  { id: 'instructions', title: 'Instructions', create: () => createInstructionsPanel(project, run, sendToChat) },
 ];
 // Desktop: a dockview popout window (window.open, same JS context) keeps the panel live with the main window's state.
 layout = new LayoutManager(document.getElementById('dock')!, panels, inDesktopApp() ? {
@@ -109,6 +111,7 @@ const refreshScene = () => {
   }
 };
 project.onChange((c) => {
+  if (c === 'proposal' && project.proposal) announce('Instructions proposal ready: open Game instructions');
   if (c === 'open') selection.set(null);
   if (c === 'open' || c === 'scene') refreshScene();
 });
@@ -394,6 +397,7 @@ mountMenuBar(document.getElementById('menubar')!, [
     items: () => [
       { label: 'Frame selected', shortcut: 'F', run: frame },
       { label: 'Reset camera', run: () => viewport.resetCamera() },
+      { label: 'Game instructions', run: () => layout.show('instructions') },
       { separator: true },
       layoutLabel('default', 'Layout: default'),
       layoutLabel('script-focus', 'Layout: script focus'),

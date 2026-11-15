@@ -448,9 +448,9 @@ Not in overview.md; added at user request 2026-11-14 (overview.md stays unchange
 
 ### 12.5 Panel
 
-- [ ] `Web/studio/src/instructionsPanel.ts` — edit fields, lint list, proposal diff with Accept and Reject, playtest report; direct edits stay the creator's.
-- [ ] `Web/studio/src/main.ts` — register the panel and its menu entry.
-- [ ] `Web/studio/test/instructions.test.ts` — panel cases added to the existing file: lint shown, proposal diff accept and reject, report shown.
+- [x] `Web/studio/src/instructionsPanel.ts` — the Instructions panel: edit form (title, summary, space, players, setup, gestures, device modes, roles, phases with steps, win; each commit one undo step through `parseInstructions`), scene check (lint messages; the scene is the side flagged), proposal diff with Accept and Reject, playtest report with Send to chat; pure helpers for the tests (`editInstructions`, add and remove roles and phases, steps text, `instructionsDiff`, `lintMessages`). Not in the layout presets: opened from View > Game instructions or Window.
+- [x] `Web/studio/src/main.ts` — registers the panel, View menu item, announces a new proposal.
+- [x] `Web/studio/test/instructions.test.ts` — helper cases added to the existing file: edits cleaned by the parse, add and remove with limits, steps text round trip, diff of each kind of change, lint messages. The panel's DOM is not unit-tested (node environment, no DOM).
 
 Not planned: server or join agent runners; a how-to-play screen in the Player app; published games carrying instructions beyond `metadata` (Phase 11 backend items).
 
