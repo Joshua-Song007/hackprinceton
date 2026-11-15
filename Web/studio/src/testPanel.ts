@@ -79,8 +79,10 @@ export function createTestPanel(project: Project, run: RunController): PanelView
         if (err) msg.textContent = err;
       }, { variant: 'small', ariaLabel: `${f.label}: ${c.label}` })];
     };
+    const published = checks.find((c) => c.ok && c.label.startsWith('Last published: '));
     const items = [
       ...(needs ? [el('li', {}, [needs.label])] : []),
+      ...(published ? [el('li', {}, [published.label])] : []),
       ...todo.map((c) => el('li', { style: 'display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px' }, [
         `To do: ${c.label}`, ...(c.hint ? [el('span', { class: 'om-sub' }, [c.hint])] : []), ...fix(c),
       ])),

@@ -2,6 +2,7 @@
 import { parseInputs, type SceneInputs } from '@pear/runtime';
 import type { SceneJson } from './project';
 import { walkEntities } from './project';
+import { readLastPublished } from './account';
 import { describeInputs, inferInputs, missingInputs } from './needs';
 
 /** `fix` is a one-click repair: `Project.setSceneSetting(setting, value)`. */
@@ -37,7 +38,7 @@ function inputChecks(scene: SceneJson, clientScripts: Record<string, string>): C
   return checks;
 }
 
-export function checkGame(p: { scene: SceneJson; clientScripts: Record<string, string>; serverScripts: Record<string, string>; version: number | null }, runText: string): { checks: Check[]; attached: { entity: string; script: string }[] } {
+export function checkGame(p: { scene: SceneJson; clientScripts: Record<string, string>; serverScripts: Record<string, string>; version: number | null; gameId?: string | null }, runText: string, lastPublishedAt: number | null = readLastPublished(p.gameId)): { checks: Check[]; attached: { entity: string; script: string }[] } {
   const attached: { entity: string; script: string }[] = [];
   let entities = 0;
   walkEntities(p.scene, (e, id) => {
@@ -55,6 +56,7 @@ export function checkGame(p: { scene: SceneJson; clientScripts: Record<string, s
     ...inputChecks(p.scene, p.clientScripts),
     { ok: /^Playing|^Running/.test(runText), label: `Last run: ${runText}`, hint: 'Press F5 to Play' },
     { ok: p.version !== null, label: p.version === null ? 'Not published' : `Published as version ${p.version}`, hint: 'File > Publish' },
+    ...(lastPublishedAt === null ? [] : [{ ok: true, label: `Last published: ${new Date(lastPublishedAt).toLocaleString()}` }]),
   ];
   return { checks, attached };
 }

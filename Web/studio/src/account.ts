@@ -3,10 +3,44 @@
 import { ApiError, CloudClient, type Account, type Game, type GameVersion } from '@pear/cloud';
 import type { PreferenceStore } from './preferences';
 import { Project, type ProjectSnapshot } from './project';
+import { openPublishSheet } from './publishView';
 import { button, el, openSheet } from './ui';
 
 const SESSION_KEY = 'pear.studio.session';
 const GAME_KEY = 'pear.studio.game';
+const PUBLISHED_KEY = 'pear.studio.lastPublished';
+type KeyValueStore = Pick<Storage, 'getItem' | 'setItem'>;
+const browserStorage = (): KeyValueStore | null => (typeof localStorage === 'undefined' ? null : localStorage);
+
+/** The Vultr box set up by Deploy/vultr-bootstrap.sh. The publish sheet offers it when the server URL setting is still the default. */
+export const VULTR_SERVER_URL = 'https://155-138-208-146.sslip.io';
+
+/** Epoch ms of the last verified publish of this game, persisted per game in localStorage; null when never. */
+export function readLastPublished(gameId: string | null | undefined, storage: KeyValueStore | null = browserStorage()): number | null {
+  if (!gameId) return null;
+  try {
+    const at = (JSON.parse(storage?.getItem(PUBLISHED_KEY) ?? '{}') as Record<string, { at?: unknown }>)[gameId]?.at;
+    return typeof at === 'number' ? at : null;
+  } catch {
+    return null;
+  }
+}
+
+export type PublishStepId = 'signIn' | 'server' | 'upload' | 'verify';
+export const PUBLISH_STEPS: { id: PublishStepId; label: string }[] = [
+  { id: 'signIn', label: 'Sign in' },
+  { id: 'server', label: 'Check the server' },
+  { id: 'upload', label: 'Upload the version' },
+  { id: 'verify', label: 'Verify the published version' },
+];
+export type PublishStepState = 'running' | 'done' | 'error';
+
+/** What the server confirmed after the verify step. */
+export interface PublishConfirmation { gameId: string; version: number; runMode: string; serverUrl: string; publishedAt: number }
+export type PublishOutcome = { ok: true; confirmation: PublishConfirmation } | { ok: false; step: PublishStepId; reason: string };
+
+/** JSON with object keys sorted, so a server that reorders keys (Postgres jsonb) still compares equal. */
+const canonical = (v: unknown): string => JSON.stringify(v, (_k, x) => (x && typeof x === 'object' && !Array.isArray(x) ? Object.fromEntries(Object.entries(x).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))) : x));
 
 /** One sentence naming what happened and the fix, for any failure of a cloud call. */
 export function describeError(e: unknown, serverUrl: string): string {
@@ -154,6 +188,59 @@ export class AccountController {
     return { version: (await this.publish(project)).version, published: true };
   }
 
+  /**
+   * Publish, then prove it: re-fetch the version the server stored and compare its number and scene with what was sent.
+   * Never throws; the failing step and a plain-language reason come back in the outcome.
+   */
+  async publishVerified(project: Project, onStep: (step: PublishStepId, state: PublishStepState) => void = () => {}): Promise<PublishOutcome> {
+    let step: PublishStepId = 'signIn';
+    const run = async <T>(id: PublishStepId, work: () => Promise<T>): Promise<T> => {
+      step = id;
+      onStep(id, 'running');
+      const result = await work();
+      onStep(id, 'done');
+      return result;
+    };
+    try {
+      await run('signIn', async () => {
+        if (!this.account) throw new Error('You are not signed in. Close this and sign in from Account and publishing.');
+      });
+      await run('server', async () => {
+        await this.client.me();
+        await this.refreshGames();
+        if (!this.gameId) throw new Error('Pick or create a game first.');
+      });
+      const gameId = this.gameId!;
+      const sentScene = project.toVersion().scene;
+      const published = await run('upload', () => this.publish(project));
+      const stored = await run('verify', async () => {
+        const v = await this.client.fetchVersion(gameId, published.version);
+        if (v.version !== published.version) throw new Error(`Verification failed: the server returned version ${v.version}, not ${published.version}.`);
+        if (canonical(v.scene) !== canonical(sentScene)) throw new Error(`Verification failed: version ${v.version} on the server has a different scene than the one sent.`);
+        return v;
+      });
+      const publishedAt = Date.now();
+      this.recordPublished(gameId, publishedAt, stored.version);
+      return { ok: true, confirmation: { gameId, version: stored.version, runMode: stored.run_mode, serverUrl: this.serverUrl, publishedAt } };
+    } catch (e) {
+      if (e instanceof ApiError && e.kind === 'unauthorized') step = 'signIn'; // a rejected session is a sign-in problem, wherever it surfaced
+      onStep(step, 'error');
+      return { ok: false, step, reason: describeError(e, this.serverUrl) };
+    }
+  }
+
+  private recordPublished(gameId: string, at: number, version: number): void {
+    if (!this.persist || !this.storage) return;
+    let all: Record<string, unknown> = {};
+    try {
+      all = JSON.parse(this.storage.getItem(PUBLISHED_KEY) ?? '{}');
+    } catch {
+      all = {};
+    }
+    this.storage.setItem(PUBLISHED_KEY, JSON.stringify({ ...all, [gameId]: { at, version } }));
+    this.emit();
+  }
+
   async openLatest(gameId: string): Promise<ProjectSnapshot> {
     return Project.snapshotOfVersion(await this.client.fetchVersion(gameId, 'latest'));
   }
@@ -222,10 +309,7 @@ export function openAccountSheet(account: AccountController, prefs: PreferenceSt
           el('div', { class: 'sheet-actions' }, [
             button('Sign out', guarded(() => account.signOut())),
             button('Close', close),
-            button('Publish', guarded(async () => {
-              const v = await account.publish(hooks.project);
-              status.textContent = `Published version ${v.version}.`;
-            }), { variant: 'default' }),
+            button('Publish to Vultr', () => openPublishSheet(account, prefs, hooks.project), { variant: 'default' }),
           ]),
         );
       }
