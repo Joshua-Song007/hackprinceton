@@ -25,9 +25,10 @@ html, body { height: 100%; overflow: hidden; }
 .om-toolbar { flex-wrap: nowrap; overflow-x: auto; }
 .om-toolbar .om-sep { width: 1px; align-self: stretch; margin: 10px 2px; background: var(--line); }
 .om-toolbar > :not(.om-activity) { flex-shrink: 0; }
-.om-toolbar .om-activity { min-width: 0; }
+.om-toolbar .om-activity { min-width: 0; background: transparent; border-color: transparent; }
 .om-toolbar .om-activity span { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.om-btn[aria-pressed="true"] { background: var(--bg-selected); }
+.om-btn[aria-pressed="true"], .pn-bar .om-btn[aria-checked="true"] { background: var(--bg-selected); box-shadow: inset 0 0 0 1px var(--accent); color: var(--text); }
+.pn-bar [role="radiogroup"] + .om-btn { margin-left: var(--space-2); }
 /* Bundle sizes small buttons and the filter at 20px; controls are 24px. */
 .om-btn--small, .om-filter, .om-tabs .om-filter { height: var(--control-height); }
 
@@ -59,7 +60,8 @@ html, body { height: 100%; overflow: hidden; }
   font-size: 11px;
 }
 .dockview-theme-pear .dv-sash:focus-visible { outline: 2px solid var(--focus); outline-offset: -1px; background: var(--accent); }
-.dockview-theme-pear .dv-groupview.dv-active-group > .dv-tabs-and-actions-container { box-shadow: inset 0 -2px var(--accent); }
+.dockview-theme-pear .dv-groupview.dv-active-group > .dv-tabs-and-actions-container .dv-tab.dv-active-tab { box-shadow: inset 0 -2px var(--accent); }
+.dockview-theme-pear .dv-groupview.dv-inactive-group > .dv-tabs-and-actions-container .dv-tab.dv-active-tab { box-shadow: inset 0 -2px var(--line-control); }
 
 /* Panel bodies */
 .pn { height: 100%; min-height: 0; overflow: auto; box-sizing: border-box; background: var(--bg-panel); color: var(--text); }
@@ -81,6 +83,8 @@ html, body { height: 100%; overflow: hidden; }
 .tv-rows { list-style: none; margin: 6px 0 0; padding: 0; }
 .tv-row { display: grid; grid-template-columns: 14px minmax(0, 1fr) auto; align-items: start; gap: 4px 8px; padding: 4px 0; }
 .tv-label { display: flex; flex-direction: column; min-width: 0; }
+.pn-foot { padding: 12px; }
+.pp-card-head .om-sub { display: block; font-size: 11px; line-height: 13px; color: var(--text-secondary); }
 .pn-title { padding: 12px; border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 8px; }
 .pn-title input { font: var(--text-title); background: transparent; border: 1px solid transparent; color: var(--text); border-radius: var(--radius-control); min-width: 0; flex: 1; padding: 0 4px; height: var(--control-height); }
 .pn-title input:hover { border-color: var(--line); }

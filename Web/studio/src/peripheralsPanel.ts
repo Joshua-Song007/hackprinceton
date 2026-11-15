@@ -147,7 +147,7 @@ export function createPeripheralsPanel(project: Project, selection: Selection, e
       announce(`Removed ${def.label}. Undo brings it back.`);
     }, { variant: 'small', danger: true, ariaLabel: `Remove ${def.label}` });
     return el('section', { class: 'pp-card', role: 'group', 'aria-label': def.label }, [
-      el('div', { class: 'pp-card-head' }, [icon(def.icon), el('span', { class: 'om-name' }, [def.label, el('span', { class: 'om-sub' }, [def.blurb])]), remove]),
+      el('div', { class: 'pp-card-head' }, [icon(def.icon), el('span', { class: 'om-name' }, [def.label, el('span', { class: 'om-sub' }, [`Gives you ${def.blurb}`])]), remove]),
       heldBy(kind, state),
       ...def.signals.map((sig) => signalRow(kind, sig, state, signalOn(used, sig.id))),
       ...motionRows(kind, state),

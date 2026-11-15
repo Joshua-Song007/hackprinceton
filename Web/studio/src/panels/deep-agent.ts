@@ -84,7 +84,17 @@ function createView({ url, project, openScript, chat, WebSocketImpl }: DeepAgent
   let runMode: Mode = 'scripts';
   let pendingFile: FileLink | null = null;
 
-  const unreachable = `Cannot reach the Deep Agent runtime at ${url}.`;
+  /** Only the host is shown: the address carries the sign-in token and the project in its query string. */
+  const host = (() => {
+    try {
+      return new URL(url).host || 'the configured address';
+    } catch {
+      return 'the configured address';
+    }
+  })();
+  const unreachable = `Cannot reach the Deep Agent runtime at ${host}.`;
+  let connected = false;
+  let waiting = false;
   const promptId = 'deep-agent-prompt';
   const input = el('textarea', { id: promptId, rows: 4, placeholder: PLACEHOLDER.scripts });
   const modeId = 'deep-agent-mode';
@@ -97,23 +107,34 @@ function createView({ url, project, openScript, chat, WebSocketImpl }: DeepAgent
   send.classList.add('om-btn--default');
   send.setAttribute('aria-keyshortcuts', 'Control+Enter Meta+Enter');
   const status = el('p', { class: 'da-status', role: 'status', 'aria-live': 'polite' });
+  const hint = el('p', { class: 'da-hint' }, ['Start the Deep Agent runtime, then retry.']);
+  const retry = button('Retry now', () => {
+    clearTimeout(retryTimer);
+    retries = 0;
+    connect();
+  }, { variant: 'small' });
+  const todosHead = el('h3', {}, ['Todos']);
+  const agentsHead = el('h3', {}, ['Subagents']);
+  const filesHead = el('h3', {}, ['Files']);
   const alerts = el('div', { class: 'da-errors', role: 'alert' });
   const todoList = el('ul', { class: 'da-list', 'aria-label': 'Todos' });
   const agentList = el('ul', { class: 'da-list', 'aria-label': 'Subagents' });
   const fileList = el('ul', { class: 'da-list', 'aria-label': 'Files' });
   const element = el('div', { class: 'deep-agent' }, [
     status,
+    hint,
+    retry,
     alerts,
     el('label', { for: modeId }, ['Mode']),
     modeSelect,
     el('label', { for: promptId }, ['Prompt']),
     input,
     send,
-    el('h3', {}, ['Todos']),
+    todosHead,
     todoList,
-    el('h3', {}, ['Subagents']),
+    agentsHead,
     agentList,
-    el('h3', {}, ['Files']),
+    filesHead,
     fileList,
   ]);
 
@@ -128,6 +149,12 @@ function createView({ url, project, openScript, chat, WebSocketImpl }: DeepAgent
   const render = () => {
     status.textContent = run ? `${connection}. ${run}` : connection;
     alerts.replaceChildren(...errors.map((e) => el('p', {}, [`Error: ${e}`])));
+    send.disabled = !connected;
+    hint.hidden = connected || !waiting;
+    retry.hidden = connected || !waiting;
+    todosHead.hidden = todos.length === 0;
+    agentsHead.hidden = agents.size === 0;
+    filesHead.hidden = files.length === 0;
     todoList.replaceChildren(...todos.map((t) => el('li', { 'data-status': t.status }, [`${STATUS_LABEL[t.status] ?? t.status}: ${t.content}`])));
     agentList.replaceChildren(...[...agents].map(([name, a]) => el('li', { 'data-state': a.state }, [`${name}: ${a.state}${a.detail ? ` (${a.detail})` : ''}`])));
     fileList.replaceChildren(
@@ -144,22 +171,29 @@ function createView({ url, project, openScript, chat, WebSocketImpl }: DeepAgent
   const connect = () => {
     if (disposed) return;
     connection = 'Connecting';
+    waiting = false;
+    connected = false;
     render();
     const ws = new Socket(url);
     socket = ws;
     ws.onopen = () => {
       retries = 0;
+      connected = true;
+      waiting = false;
       errors = errors.filter((e) => e !== unreachable);
       connection = 'Connected';
       render();
     };
     ws.onmessage = (e) => handle(String(e.data));
     ws.onerror = () => {
+      connected = false;
       if (!errors.includes(unreachable)) errors.push(unreachable);
       render();
     };
     ws.onclose = () => {
       if (disposed || socket !== ws) return;
+      connected = false;
+      waiting = true;
       const delay = Math.min(RETRY_MIN_MS * 2 ** retries++, RETRY_MAX_MS);
       connection = `Disconnected, retrying in ${Math.round(delay / 1000)} s`;
       render();

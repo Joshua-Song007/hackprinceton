@@ -74,3 +74,10 @@ Known, not changed: a `prompt` in flight delays reading `decide`; a run that sto
 - [x] `Plugins/langchain-deepagents/tests/test_instructions.py`, `Plugins/langchain-deepagents/tests/test_players.py`, `Plugins/langchain-deepagents/tests/test_translate.py`.
 - [x] `Plugins/langchain-deepagents/pear-plugin.json`, `Plugins/langchain-deepagents/pyproject.toml`, `Plugins/langchain-deepagents/uv.lock`.
 - [x] `Web/studio/src/panels/deep-agent.ts`, `Web/studio/test/deep-agent.test.ts`.
+
+### 2026-11-15 — Deep Agent panel: no address leak, clear offline state
+Paths: `Web/studio/src/panels/deep-agent.ts`, `Web/studio/src/panels/deep-agent.css`, `Web/studio/test/deep-agent.test.ts`
+
+The connection error shows only the runtime host; the address (which carries the sign-in token and project) is never rendered. While the runtime is not connected, Send is disabled, a hint says to start the runtime, and "Retry now" reconnects at once with the backoff reset. The Todos, Subagents and Files headings are hidden until they have something to list, and the panel is capped at 720px wide.
+- [x] `Web/studio/src/panels/deep-agent.ts`, `Web/studio/src/panels/deep-agent.css`
+- [x] `Web/studio/test/deep-agent.test.ts`

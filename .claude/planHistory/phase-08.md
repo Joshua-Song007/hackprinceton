@@ -274,3 +274,11 @@ The Test panel opens with a header: the run state, one Play / Stop button, "Play
 - [x] `Web/studio/src/testStatus.ts`, `Web/studio/test/testStatus.test.ts`
 - [x] `Web/studio/src/gamePanel.ts`, `Web/studio/src/testPanel.ts`
 - [x] `Web/studio/src/main.ts`, `Web/studio/src/theme.css`
+
+### 2026-11-15 — Studio UX fixes from a screenshot critique
+Paths: `Web/studio/src/peripheralsPanel.ts`, `Web/studio/src/theme.css`, `Web/studio/src/layout.ts`, `Web/studio/src/editor.ts`, `Web/studio/src/explorer.ts`, `Web/studio/src/inspector.ts`
+
+The active tab, not the whole tab strip, carries the accent underline (a neutral one in groups without focus). The peripheral card reads "Gives you position and gestures" on its own line instead of running into the name. Console filters (All, Client, Server, Errors) now show which one is selected, like the State toggle. Explorer section headers use the heavier header style, the "Editing ..." status in the toolbar no longer looks like an input, "Add component" has padding, and the empty script editor says where to find a script. The default Console height is 160 (saved layouts keep their size; the comment at layout.ts about "debug area 200" is now stale and left for the user to update).
+- [x] `Web/studio/src/peripheralsPanel.ts`, `Web/studio/src/explorer.ts`
+- [x] `Web/studio/src/inspector.ts`, `Web/studio/src/editor.ts`
+- [x] `Web/studio/src/layout.ts`, `Web/studio/src/theme.css`

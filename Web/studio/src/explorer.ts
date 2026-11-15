@@ -126,7 +126,7 @@ export function createExplorerPanel(project: Project, selection: Selection, edit
           : title === 'Peripherals'
             ? button('Add', addPeripheral, { variant: 'small', ariaLabel: 'Add peripheral' })
             : null;
-      return el('div', { class: 'pn-group' }, [title, ...(addBtn ? [addBtn] : [])]);
+      return el('div', { class: 'pn-group pn-group--h' }, [title, ...(addBtn ? [addBtn] : [])]);
     };
     const deviceList = el('ul', { class: 'om-list', role: 'listbox', 'aria-label': 'Peripherals' });
     const devices = devicesOf(readPeripheralState(project.scene));

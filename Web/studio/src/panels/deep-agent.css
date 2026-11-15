@@ -8,6 +8,9 @@
 .deep-agent h3 { margin: var(--space-2) 0 0; font: 500 11px/1.2 var(--font-sans); text-transform: uppercase; color: var(--text-secondary); }
 .deep-agent p { margin: 0; }
 .da-status { color: var(--text-secondary); }
+.da-hint { color: var(--text-secondary); }
+.deep-agent { max-width: 720px; }
+.deep-agent [hidden] { display: none; }
 .da-errors p { color: var(--error); }
 .da-list { margin: 0; padding: 0; list-style: none; }
 .da-list li { display: flex; gap: var(--space-2); align-items: baseline; padding: var(--space-1) 0; }

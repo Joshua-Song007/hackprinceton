@@ -60,7 +60,7 @@ Full text: planHistory/phase-05.md
 
 ## Phase 8: Pear Web Studio & Live Hosting (compressed)
 
-Built: backend live integration (CORS, static Studio, /debug, memstore, migrations); Web SDK packages (pear-core / runtime / script / sim / cloud); Web Studio app (dockview layout, editor, explorer, inspector, run, debug panel, account); Tauri 2 desktop shell + release workflow; Vultr deploy files; blank template and demo script. (Changed 2026-11-15: the Test panel gained a status header with Play and Playtest, a readable readiness summary and plain device captions; see planHistory/phase-08.md.)
+Built: backend live integration (CORS, static Studio, /debug, memstore, migrations); Web SDK packages (pear-core / runtime / script / sim / cloud); Web Studio app (dockview layout, editor, explorer, inspector, run, debug panel, account); Tauri 2 desktop shell + release workflow; Vultr deploy files; blank template and demo script. (Changed 2026-11-15: the Test panel gained a status header with Play and Playtest, a readable readiness summary and plain device captions; see planHistory/phase-08.md.) (Changed 2026-11-15: Studio UX fixes from a screenshot critique: active tab underline, peripheral card text, console filter state, explorer headers, editor empty text; see planHistory/phase-08.md.)
 
 Still open: demo run on the Vultr box from the desktop executable; two people in one server session; brand-kit UI review; Vite watch ignore for src-tauri; macOS desktop untested. Web Studio is now acknowledged in overview.md (no longer a mismatch).
 
@@ -80,7 +80,7 @@ Full text: planHistory/phase-09.md
 
 ## Phase 10: Marketplace / plugins cloud follow-ups (compressed)
 
-Built: 10.1 to 10.7 (hosted registry, S3 bundles with signatures, authenticated publish, install telemetry, per-account sync, hosted agent runtime, per-account model keys) and the 10.9 fixes.
+Built: 10.1 to 10.7 (hosted registry, S3 bundles with signatures, authenticated publish, install telemetry, per-account sync, hosted agent runtime, per-account model keys) and the 10.9 fixes. (Changed 2026-11-15: the Deep Agent panel no longer shows the runtime address or token, disables Send while offline and offers Retry now; see planHistory/phase-10.md.)
 
 Still open: Vultr redeploy and bucket (human); live model run for OpenAI and Google (Anthropic passed); Google default model id unverified. Plugin system is now in overview.md.
 

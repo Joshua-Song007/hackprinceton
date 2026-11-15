@@ -181,7 +181,7 @@ export class LayoutManager {
       b('test', { referencePanel: 'explorer', direction: 'within' }, {}, true);
       b('inspector', { referencePanel: 'viewport', direction: 'right' });
       b('console', { direction: 'below' } as never);
-      sizes = { explorer: { width: 240 }, inspector: { width: 280 }, console: { height: 200 } };
+      sizes = { explorer: { width: 240 }, inspector: { width: 280 }, console: { height: 160 } };
     }
     // The panel that holds the rest keeps its size; sidebars, inspector and debug area get theirs.
     for (const [id, size] of Object.entries(sizes)) this.api.getPanel(id)?.api.setSize(size);

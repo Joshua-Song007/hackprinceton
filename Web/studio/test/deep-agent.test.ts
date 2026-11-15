@@ -10,6 +10,8 @@ class FakeNode {
   listeners: Record<string, ((e: unknown) => void)[]> = {};
   classList = { add: (c: string) => this.setAttribute('class', `${this.attrs.class ?? ''} ${c}`.trim()) };
   value = '';
+  hidden = false;
+  disabled = false;
   private text: string | null = null;
   constructor(readonly tag: string) {}
   setAttribute(k: string, v: string) { this.attrs[k] = v; }
@@ -233,6 +235,58 @@ describe('deep-agent.ts', () => {
     third.drop();
     vi.advanceTimersByTime(60_000);
     expect(MockSocket.instances).toHaveLength(3);
+  });
+  describe('offline state', () => {
+    const secretUrl = 'wss://runtime.example.test/agent/ws?token=SECRET123&project=local';
+    const open = () => {
+      const project = new Project(templateSnapshot('blank'));
+      const view = deepAgentPanel({ url: secretUrl, project, openScript: () => {}, WebSocketImpl: MockSocket as unknown as typeof WebSocket }).create();
+      const root = view.element as unknown as FakeNode;
+      const send = () => root.buttons().find((b) => b.textContent === 'Send')!;
+      const retry = () => root.buttons().find((b) => b.textContent === 'Retry now')!;
+      return { root, ws: MockSocket.instances.at(-1)!, send, retry };
+    };
+
+    it('shows the host and never the token or the path', () => {
+      const { root, ws } = open();
+      ws.onerror?.();
+      const text = root.find((n) => n.attrs.role === 'alert')[0]!.textContent;
+      expect(text).toContain('runtime.example.test');
+      expect(text).not.toContain('token');
+      expect(text).not.toContain('SECRET123');
+      expect(text).not.toContain('/agent/ws');
+    });
+
+    it('disables Send until the runtime is open and again once it drops', () => {
+      vi.useFakeTimers();
+      const { ws, send } = open();
+      expect(send().disabled).toBe(true);
+      ws.open();
+      expect(send().disabled).toBe(false);
+      ws.drop();
+      expect(send().disabled).toBe(true);
+    });
+
+    it('offers Retry now only while waiting, and retrying connects at once with the backoff reset', () => {
+      vi.useFakeTimers();
+      const { root, ws, retry } = open();
+      expect(retry().hidden).toBe(true);
+      ws.drop();
+      expect(retry().hidden).toBe(false);
+      expect(root.find((n) => n.attrs.class === 'da-hint')[0]!.hidden).toBe(false);
+      retry().fire('click');
+      expect(MockSocket.instances).toHaveLength(2);
+      expect(retry().hidden).toBe(true);
+      MockSocket.instances[1]!.open();
+      expect(retry().hidden).toBe(true);
+    });
+
+    it('hides the Todos, Subagents and Files headings until they have something to list', () => {
+      const { root } = open();
+      const heads = root.find((n) => n.tag === 'h3');
+      expect(heads.map((h) => h.textContent)).toEqual(['Todos', 'Subagents', 'Files']);
+      expect(heads.every((h) => h.hidden === true)).toBe(true);
+    });
   });
   describe('instructions mode', () => {
     const instructions = { title: 'Quick Draw', players: { min: 3, max: 3 }, roles: [{ id: 'ref', kind: 'ref' }], phases: [{ id: 'draw', steps: [] }] };

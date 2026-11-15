@@ -246,7 +246,7 @@ export function createInspectorPanel(project: Project, selection: Selection): Pa
     const components = (entity.components ?? []).map((c, i) => withRemove(componentSection(c, i), i, String(c.type)));
     const addBtn = button('Add component', () =>
       openMenu(addBtn, (['script', 'trigger', 'audioEmitter'] as const).map((t) => ({ label: t === 'audioEmitter' ? 'Audio emitter' : t[0]!.toUpperCase() + t.slice(1), run: () => project.addComponent(id, t) }))), { variant: 'small' });
-    root.replaceChildren(el('div', { class: 'pn-title' }, [icon('cube'), name]), look, transform, ...components, addBtn);
+    root.replaceChildren(el('div', { class: 'pn-title' }, [icon('cube'), name]), look, transform, ...components, el('div', { class: 'pn-foot' }, [addBtn]));
   };
 
   const offs = [

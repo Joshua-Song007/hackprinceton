@@ -172,7 +172,7 @@ export function createEditorPanel(project: Project, bus: EditorBus): PanelView {
   const root = el('div', { class: 'pn pn-flex', role: 'region', 'aria-label': 'Script editor', tabindex: -1 });
   const tabBar = el('div', { class: 'ed-tabs', role: 'tablist', 'aria-label': 'Open scripts' });
   const body = el('div', { class: 'ed-body', id: 'ed-panel', role: 'tabpanel' });
-  const empty = el('div', { class: 'pn-empty' }, ['Open a script from the Explorer to edit it.']);
+  const empty = el('div', { class: 'pn-empty' }, ['No script is open. Open the Explorer tab and choose a script, or add one with its Add button.']);
   root.append(tabBar, body);
 
   const states = new Map<string, EditorState>();
