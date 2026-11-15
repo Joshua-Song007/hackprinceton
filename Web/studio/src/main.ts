@@ -22,7 +22,7 @@ import { installShortcuts, mod, mountMenuBar } from './menubar';
 import { renderLoginScreen } from './loginScreen';
 import { renderProjectsScreen } from './projectsScreen';
 import { nextScreen, type Screen } from './screens';
-import { rememberRecent } from './recent';
+import { markOpened, rememberRecent } from './recent';
 import { openProjectFile, safeFileName, saveProjectFile, type SavedFile } from './projectFile';
 
 const params = new URLSearchParams(location.search);
@@ -193,6 +193,7 @@ const openFile = guard(async () => {
   project.load(opened.snapshot);
   projectFile = { name: opened.name, handle: opened.handle };
   void rememberRecent(opened.name, opened.snapshot);
+  void markOpened('local', opened.name);
   status(`Opened ${opened.name}`);
 });
 

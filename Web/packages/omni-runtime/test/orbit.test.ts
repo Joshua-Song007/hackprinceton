@@ -1,5 +1,29 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_ORBIT, MAX_DISTANCE, MIN_DISTANCE, frameBox, moveBy, orbitBy, orbitPosition, panBy, zoomBy } from '../src/orbit';
+import { DEFAULT_ORBIT, MAX_DISTANCE, MIN_DISTANCE, contentBounds, frameBox, moveBy, orbitBy, orbitPosition, panBy, zoomBy } from '../src/orbit';
+
+describe('contentBounds', () => {
+  const floor = { position: [0, 0, 0] as const, scale: [40, 0.1, 40] as const };
+  const cube = { position: [2, 1, -3] as const, scale: [1, 2, 1] as const };
+
+  it('frames the content, not the floor under it', () => {
+    expect(contentBounds([floor, cube])).toEqual({ center: [2, 1, -3], size: [1, 2, 1] });
+  });
+
+  it('unions several entities', () => {
+    const other = { position: [-2, 1, -3] as const, scale: [1, 2, 1] as const };
+    expect(contentBounds([cube, other])).toEqual({ center: [0, 1, -3], size: [5, 2, 1] });
+  });
+
+  it('falls back to the floor when it is all there is, and to null when empty', () => {
+    expect(contentBounds([floor])).toEqual({ center: [0, 0, 0], size: [40, 0.1, 40] });
+    expect(contentBounds([])).toBeNull();
+  });
+
+  it('a thin but small entity (a rug) is content, not floor', () => {
+    const rug = { position: [0, 0, 0] as const, scale: [4, 0.05, 4] as const };
+    expect(contentBounds([rug, cube])!.size[0]).toBeGreaterThan(1);
+  });
+});
 
 describe('editor camera', () => {
   it('default view sits above and behind the target on +Z', () => {

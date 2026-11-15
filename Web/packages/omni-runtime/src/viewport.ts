@@ -3,7 +3,7 @@
 import * as THREE from 'three';
 import type { Pose } from '@omni/core';
 import type { WorldEntity } from './scene';
-import { DEFAULT_ORBIT, frameBox, moveBy, orbitBy, orbitPosition, panBy, rayPlaneY, zoomBy, type OrbitState } from './orbit';
+import { DEFAULT_ORBIT, contentBounds, frameBox, moveBy, orbitBy, orbitPosition, panBy, rayPlaneY, zoomBy, type OrbitState } from './orbit';
 
 export interface ViewportColors {
   viewport: string;
@@ -182,6 +182,19 @@ export class Viewport {
   render(): void {
     this.renderer.render(this.scene, this.camera);
     this.renderGizmo();
+  }
+
+  /**
+   * A preview of the current scene as a JPEG data URL (projects screen): resizes the canvas, frames the content from
+   * a three-quarter view, draws without the axis gizmo and reads the canvas in the same task as the render, so no
+   * preserveDrawingBuffer is needed. Meant for a Viewport of its own, not the editor's.
+   */
+  snapshot(width: number, height: number): string {
+    this.resize(width, height);
+    const box = contentBounds(this.entities);
+    this.setOrbit(box ? frameBox({ ...DEFAULT_ORBIT, yaw: 0.6 }, box.center, box.size) : { ...DEFAULT_ORBIT, yaw: 0.6 });
+    this.renderer.render(this.scene, this.camera);
+    return this.renderer.domElement.toDataURL('image/jpeg', 0.8);
   }
 
   /** Axis cube in the top-right corner: the world axes seen from the current camera orientation. */

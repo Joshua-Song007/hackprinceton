@@ -172,11 +172,22 @@ dialog.sheet .sheet-error { color: var(--error); font-size: 12px; margin: var(--
 .scr[hidden] { display: none; }
 .scr-card { width: min(720px, 100%); box-sizing: border-box; padding: 40px 16px; }
 .scr-login { width: min(420px, 100%); align-self: center; }
+.scr-card.scr-wide { width: min(1080px, 100%); }
 .scr h1 { font: var(--text-title); font-size: 20px; margin: 0 0 8px; }
 .scr h2 { font: var(--text-title); font-size: 13px; margin: 24px 0 8px; color: var(--text-secondary); }
 .scr-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .scr-head h1 { margin: 0; flex: 1; }
-.scr-list { list-style: none; margin: 0 0 8px; padding: 0; border: 1px solid var(--line); border-radius: var(--radius-control); }
-.scr-row { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--line); }
-.scr-row:last-child { border-bottom: 0; }
-.scr-row .om-name { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+/* Projects gallery: two columns of tiles, a preview left and the details right; one column on narrow windows. */
+.scr-grid { list-style: none; margin: 0 0 8px; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.scr-grid > .scr-empty { grid-column: 1 / -1; }
+.scr-tile { display: grid; grid-template-columns: minmax(140px, 45%) minmax(0, 1fr); gap: 12px; padding: 12px; border: 1px solid var(--line); border-radius: var(--radius-control); background: var(--bg-panel); cursor: pointer; }
+.scr-tile:hover { background: var(--bg-hover); }
+.scr-tile:focus-within { outline: 2px solid var(--focus); outline-offset: 1px; }
+.scr-thumb { aspect-ratio: 16 / 10; border-radius: var(--radius-control); background: var(--viewport); overflow: hidden; display: flex; align-items: center; justify-content: center; align-self: start; }
+.scr-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.scr-thumb-none { color: var(--text-secondary); font-size: 11px; }
+.scr-info { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.scr-name { font: var(--text-title); font-size: 13px; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow-wrap: anywhere; }
+.scr-meta { font-size: 11px; line-height: 13px; color: var(--text-secondary); }
+.scr-actions { display: flex; gap: 8px; margin-top: auto; padding-top: 8px; }
+@media (max-width: 640px) { .scr-grid { grid-template-columns: minmax(0, 1fr); } }

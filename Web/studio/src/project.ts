@@ -469,8 +469,11 @@ export async function withStore<T>(mode: IDBTransactionMode, run: (store: IDBObj
   }).finally(() => db.close());
 }
 
-export const saveDraft = (s: ProjectSnapshot): Promise<unknown> => withStore('readwrite', (st) => st.put(s, 'current'));
+// The time is written after the snapshot and its failure is swallowed, so it can never raise the autosave-failed report.
+export const saveDraft = (s: ProjectSnapshot): Promise<unknown> => withStore('readwrite', (st) => st.put(s, 'current')).then(() => withStore('readwrite', (st) => st.put(Date.now(), 'current-at')).catch(() => undefined));
 export const loadDraft = (): Promise<ProjectSnapshot | undefined> => withStore('readonly', (st) => st.get('current') as IDBRequest<ProjectSnapshot | undefined>);
+/** ms since epoch of the last draft save; undefined for a draft saved before this was recorded. */
+export const loadDraftAt = (): Promise<number | undefined> => withStore('readonly', (st) => st.get('current-at') as IDBRequest<number | undefined>);
 
 /** Saves the draft 800 ms after the last edit. Failures (private mode, no IndexedDB) are reported once through `onError`. */
 export function attachAutosave(project: Project, onError: (message: string) => void, delayMs = 800): () => void {

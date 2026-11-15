@@ -91,3 +91,23 @@ Rules for every Phase 8 item:
 - [x] `Deploy/demo.sh` — scripted check of the hosted or local stack: health, dev sign-in, create game, publish Flagship, open `/play` as 2 players + `/debug`, play a round (`banish` x3), print the event log and final `ctx.state`; exit non-zero on any mismatch. (Node `fetch`/`WebSocket` after a curl `/health`; `OMNI_INSECURE=1` for a self-signed IP box; passes locally against the in-memory backend with Flagship scripts unmodified.)
 
 Not file-bound: demo run on the Vultr box from the desktop executable; two people on two machines in one server session; first-pass UI review against the brand kit, then iterate the frontend from what humans see.
+
+## Later changes
+
+### 2026-11-14 — Projects gallery
+Paths: `Web/studio/src/projectsScreen.ts`, `Web/studio/src/recent.ts`, `Web/studio/src/thumbnail.ts`, `Web/studio/src/project.ts`, `Web/studio/src/theme.css`, `Web/studio/src/main.ts`, `Web/packages/omni-runtime/src/viewport.ts`, `Web/packages/omni-runtime/src/orbit.ts`
+
+The Projects screen is a gallery of tiles in two columns (one under 640 px): a rendered preview on the left; name, location, last opened, last edited and Open on the right. Previews are rendered in the browser from the scene JSON by one shared offscreen `Viewport` (`Viewport.snapshot`, framed by `contentBounds`, which ignores floors), queued one at a time, started when a tile scrolls into view, cached in IndexedDB by a content stamp (cloud `updated_at`, local `savedAt`, draft time). "Last opened" is recorded per browser when Open is pressed (no backend field); "Last edited" is the cloud `updated_at`, the local save time or the draft autosave time. Rows sort by the later of the two. Not seen in a browser: tile look, framing, IntersectionObserver in the fixed screen scroller. Stale comments kept: `recent.ts` `ProjectRow.time` ("the draft") and the `mergeProjects` doc, `projectsScreen.ts` header ("one list of ..."). Not changed: the gallery "Open file..." path does not call `rememberRecent` (as before).
+- [x] `Web/studio/src/thumbnail.ts` — shared offscreen preview renderer and render queue.
+- [x] `Web/studio/src/projectsScreen.ts` — tiled gallery.
+- [x] `Web/studio/src/recent.ts` — opened times, `formatWhen`, thumbnail cache, activity sort.
+- [x] `Web/studio/src/project.ts` — draft autosave time (`current-at`).
+- [x] `Web/studio/src/theme.css` — gallery grid and tile styles; old row styles removed.
+- [x] `Web/studio/src/main.ts` — File > Open records the open time.
+- [x] `Web/packages/omni-runtime/src/viewport.ts` — `snapshot()`.
+- [x] `Web/packages/omni-runtime/src/orbit.ts` — `contentBounds()`.
+
+### 2026-11-14 — Projects gallery comments updated
+Paths: `Web/studio/src/recent.ts`, `Web/studio/src/projectsScreen.ts`
+
+The three comments the gallery entry above lists as stale (`ProjectRow.time`, the `mergeProjects` doc, the `projectsScreen.ts` header) were rewritten on request; no code changed.

@@ -78,6 +78,31 @@ export function frameBox(s: OrbitState, center: Xyz, size: Xyz): OrbitState {
   return { ...s, target: center, distance: clamp(radius * 2.5, MIN_DISTANCE, MAX_DISTANCE) };
 }
 
+/**
+ * Box around what a scene is about, for framing a preview: the union of each entity's position +/- half its scale,
+ * ignoring floor-like entities (thin, wider than 10 m) so a big floor does not shrink the real content to a speck.
+ * Falls back to every entity when only floors exist; null for an empty scene.
+ */
+export function contentBounds(entities: readonly { position: Xyz; scale: Xyz }[]): { center: Xyz; size: Xyz } | null {
+  const floorLike = (e: { scale: Xyz }) => Math.abs(e.scale[1]) <= 0.2 && Math.max(Math.abs(e.scale[0]), Math.abs(e.scale[2])) > 10;
+  const content = entities.filter((e) => !floorLike(e));
+  const used = content.length ? content : entities;
+  if (!used.length) return null;
+  const lo: [number, number, number] = [Infinity, Infinity, Infinity];
+  const hi: [number, number, number] = [-Infinity, -Infinity, -Infinity];
+  for (const e of used) {
+    for (let i = 0; i < 3; i++) {
+      const half = Math.abs(e.scale[i]!) / 2;
+      lo[i] = Math.min(lo[i]!, e.position[i]! - half);
+      hi[i] = Math.max(hi[i]!, e.position[i]! + half);
+    }
+  }
+  return {
+    center: [(lo[0] + hi[0]) / 2, (lo[1] + hi[1]) / 2, (lo[2] + hi[2]) / 2],
+    size: [hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]],
+  };
+}
+
 /** Where a ray meets the horizontal plane y = `planeY`; null when it is parallel or points away. */
 export function rayPlaneY(origin: Xyz, dir: Xyz, planeY: number): Xyz | null {
   if (Math.abs(dir[1]) < 1e-6) return null;
