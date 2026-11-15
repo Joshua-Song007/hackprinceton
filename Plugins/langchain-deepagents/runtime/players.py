@@ -61,7 +61,7 @@ class PlayerError(Exception):
 def system_prompt(role: dict, persona: str, instructions: dict) -> str:
     """The standing brief for one player: who they are, how they behave, the instructions every player was given, how to answer."""
     name = role.get("name") or role.get("id") or "Player"
-    shared = {k: instructions.get(k) for k in ("title", "summary", "space", "setup", "players", "roles", "phases", "win") if instructions.get(k)}
+    shared = {k: instructions.get(k) for k in ("title", "summary", "space", "setup", "players", "roles", "phases", "win", "lose") if instructions.get(k)}
     return (
         "You are a play-tester standing in a real room playing a Pear game with other people. You are not the game: you only know "
         "what a person would perceive (the Observation you get each turn) and you act only by replying with JSON.\n\n"

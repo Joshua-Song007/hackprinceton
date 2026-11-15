@@ -1,7 +1,7 @@
 // Projects screen: a sticky top bar (search, sort, New project), a profile and statistics column, and Solo and Shared sections of tiles (preview, name, last opened, last edited, Open) for cloud games, projects saved on this computer and the autosaved draft; New project starts from a template.
 import { announce, button, el, openSheet } from './ui';
 import { describeError, type AccountController } from './account';
-import { TEMPLATES, deleteDraft, loadDraft, loadDraftAt, templateSnapshot, type ProjectSnapshot } from './project';
+import { TEMPLATES, deleteDraft, loadDraft, loadDraftAt, type ProjectSnapshot, type TemplateId } from './project';
 import { SORT_KEYS, SORT_LABELS, dropThumb, filterProjects, forgetOpened, forgetRecent, formatWhen, loadOpened, loadRecent, loadSort, loadThumbs, markOpened, mergeProjects, projectStats, rowAction, saveSort, saveThumb, sortProjects, thumbHit, type ProjectRow, type RecentEntry, type SortKey, type Thumb } from './recent';
 import { openProjectFile, type SavedFile } from './projectFile';
 import { renderThumbnail, thumbStamp, ThumbnailQueue } from './thumbnail';
@@ -9,6 +9,8 @@ import { renderThumbnail, thumbStamp, ThumbnailQueue } from './thumbnail';
 export interface ProjectsHooks {
   account: AccountController;
   open(snapshot: ProjectSnapshot, file?: SavedFile): void;
+  /** Starts the New game form (the instructions come first), optionally with a template chosen. */
+  newGame(template?: TemplateId): void;
   signOut(): void;
   /** Set when an editor session already exists, so the screen can offer a way back. */
   back?: (() => void) | undefined;
@@ -155,7 +157,7 @@ export function renderProjectsScreen(root: HTMLElement, h: ProjectsHooks): void 
     for (const t of TEMPLATES) {
       body.append(el('div', { style: 'padding:6px 0' }, [
         el('strong', {}, [t.label]), el('p', { class: 'om-sub', style: 'margin:2px 0 4px' }, [t.blurb]),
-        button(`Create ${t.label}`, () => { close(); h.open(templateSnapshot(t.id)); }, { variant: 'small' }),
+        button(`New game from ${t.label}`, () => { close(); h.newGame(t.id); }, { variant: 'small' }),
       ]));
     }
     const title = el('input', { type: 'text', 'aria-label': 'Cloud game title', placeholder: 'Optional title' });

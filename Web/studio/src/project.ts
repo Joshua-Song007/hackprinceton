@@ -32,6 +32,19 @@ export const TEMPLATES = [
   { id: 'hotpotato', label: 'Hot potato', blurb: 'Multiplayer tag: the holder is eliminated when a timer runs out. Teaches server timers, positions and remote events.' },
   { id: 'flagship', label: 'Flagship (Hollow Choir)', blurb: 'Audio and heart-rate horror game using head tracking, gestures and a server-run round.' },
 ] as const;
+/** How many players the game takes and where that number comes from: the instructions when there are any, else the scene's declared inputs, else the default. */
+export interface PlayerLimits {
+  min: number;
+  max: number;
+  from: 'instructions' | 'scene' | 'default';
+}
+
+/** "2 to 4", or "3" when the minimum is the maximum. */
+export const limitsText = (l: { min: number; max: number }): string => (l.min === l.max ? String(l.min) : `${l.min} to ${l.max}`);
+
+/** The one sentence every place uses for a player count against the limits. */
+export const playersText = (count: number, l: { min: number; max: number }): string => `${count} player${count === 1 ? '' : 's'} (the game allows ${limitsText(l)})`;
+
 export type TemplateId = (typeof TEMPLATES)[number]['id'];
 
 export function templateSnapshot(id: TemplateId): ProjectSnapshot {
@@ -202,7 +215,47 @@ export class Project {
   setInstructions(next: Instructions | null): void {
     if (JSON.stringify(next) === JSON.stringify(this.instructions)) return;
     this.instructions = next === null ? null : structuredClone(next);
+    const inputsBefore = JSON.stringify(this.scene.inputs);
+    this.alignPlayers();
     this.touch('instructions');
+    if (JSON.stringify(this.scene.inputs) !== inputsBefore) this.emit('scene');
+  }
+
+  /** The player limits every part of Studio shows and Play starts from. */
+  playerLimits(): PlayerLimits {
+    if (this.instructions) return { ...this.instructions.players, from: 'instructions' };
+    try {
+      if (this.scene.inputs) {
+        const [min, max] = parseInputs(this.scene.inputs).players;
+        return { min, max, from: 'scene' };
+      }
+    } catch {
+      // inputs that do not parse give the default
+    }
+    return { min: 1, max: 32, from: 'default' };
+  }
+
+  /** With instructions, the scene's declared player count is theirs: every route that writes either one ends up here, so the two never differ. */
+  private alignPlayers(): void {
+    const i = this.instructions;
+    const inputs = this.scene.inputs;
+    if (i && typeof inputs === 'object' && inputs !== null) this.scene.inputs = { ...inputs, players: [i.players.min, i.players.max] };
+  }
+
+  /** Sets the player limits in the instructions and the scene's declared inputs together, as one undo step. Returns a sentence when it cannot. */
+  setPlayers(min: number, max: number): string | undefined {
+    if (!Number.isInteger(min) || !Number.isInteger(max) || min < 1 || max > 32 || min > max) return 'Players must be whole numbers from 1 to 32, and the fewest cannot be more than the most.';
+    const inputs = this.scene.inputs;
+    const declared = typeof inputs === 'object' && inputs !== null;
+    if (!this.instructions && !declared) return 'Write the instructions or add a peripheral first: nothing holds a player count yet.';
+    const now = this.playerLimits();
+    const sceneNow = declared ? (inputs as { players?: unknown }).players : undefined;
+    if (now.from !== 'default' && now.min === min && now.max === max && (!declared || JSON.stringify(sceneNow) === JSON.stringify([min, max]))) return undefined;
+    if (this.instructions) this.instructions = { ...this.instructions, players: { min, max } };
+    if (declared) this.scene.inputs = { ...(inputs as object), players: [min, max] };
+    this.touch(this.instructions ? 'instructions' : 'scene');
+    if (this.instructions && declared) this.emit('scene');
+    return undefined;
   }
 
   /** Holds an agent's suggestion until it is accepted or rejected. Returns an error sentence, and keeps what it had, when the value is not an object. */
@@ -270,6 +323,7 @@ export class Project {
       return e instanceof Error ? e.message : String(e);
     }
     this.scene = next;
+    this.alignPlayers();
     this.touch('scene');
   }
 
@@ -443,6 +497,7 @@ export class Project {
         }
         if (value === null) delete this.scene.inputs;
         else this.scene.inputs = structuredClone(value);
+        this.alignPlayers();
         this.touch('scene');
         return undefined;
       case 'peripherals':
@@ -518,6 +573,7 @@ export class Project {
       else delete this.scene.gestures;
     }
     if (change.location) this.scene.permissions = { ...(this.scene.permissions as object | undefined), location: true };
+    this.alignPlayers();
     this.touch('scene');
     return undefined;
   }

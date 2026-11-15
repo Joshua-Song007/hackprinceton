@@ -255,3 +255,14 @@ A new Instructions panel (View > Game instructions, or Window) edits a game's wr
 - [x] `Web/studio/src/instructionsPanel.ts`
 - [x] `Web/studio/src/main.ts` — panel spec, menu item, announcement.
 - [x] `Web/studio/test/instructions.test.ts` — helper cases.
+
+### 2026-11-15 — Instructions first (Phase 12.6)
+Paths: `Web/packages/pear-runtime/src/instructions.ts`, `Web/studio/src/newGame.ts`, `Web/studio/src/project.ts`, `Web/studio/src/instructionsPanel.ts`, `Web/studio/src/inspector.ts`, `Web/studio/src/run.ts`, `Web/studio/src/testPanel.ts`, `Web/studio/src/main.ts`, `Plugins/langchain-deepagents/runtime/instructions.py`
+
+Instructions gain a lose condition (a missing win or lose is a lint warning). A new game starts from the New game form: title, summary, players, win, lose, roles. The player limit has one source (the instructions, else the scene's declared inputs) and every route that writes either keeps both equal; the Test panel, status bar, Inspector and Instructions panel show it the same way. Local Play starts with that many players and nobody driven (Drive and Stop driving are buttons); Seat agents fills every undriven player with an agent, optionally at Play start (off by default). The plugin is 0.7.43 because the older check refuses `lose`.
+- [x] `Web/packages/pear-runtime/src/instructions.ts`, `Web/packages/pear-runtime/test/instructions.test.ts`
+- [x] `Plugins/langchain-deepagents/runtime/instructions.py`, `Plugins/langchain-deepagents/runtime/players.py`, `Plugins/langchain-deepagents/pear-plugin.json`
+- [x] `Web/studio/src/newGame.ts`, `Web/studio/src/projectsScreen.ts`, `Web/studio/src/main.ts`
+- [x] `Web/studio/src/project.ts`, `Web/studio/src/inspector.ts`, `Web/studio/src/instructionsPanel.ts`
+- [x] `Web/studio/src/run.ts`, `Web/studio/src/testPanel.ts`
+- [x] `Web/studio/test/instructions.test.ts`, `Web/studio/test/newGame.test.ts`, `Web/studio/test/agentRun.test.ts`

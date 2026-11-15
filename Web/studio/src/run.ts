@@ -10,7 +10,7 @@ import {
 import { LocalServer, ScriptSandbox, type ScriptOutput } from '@pear/script';
 import prelude from '../../../Packages/PearScript/Sources/PearScript/Resources/prelude.js?raw';
 import { SIM_DEVICE_KINDS, SimDevices, UsisPlayer, attachGestureKeys, attachMouseLook, type SimDeviceKind, type SimDevicesOptions } from '@pear/sim';
-import { AgentDriver, type AgentNoteRecord, type AgentSeat } from './agentPlayers';
+import { AgentDriver, type AgentNoteRecord, type AgentSeat, type Persona } from './agentPlayers';
 import { socketTransport, type AgentTransport, type DecideRequest } from './agentTransport';
 import { buildPlaytestReport, type PlaytestReport } from './playtestReport';
 import type { AccountController } from './account';
@@ -319,7 +319,8 @@ export class ViewportHost {
   private observer: ResizeObserver | null = null;
   private entities: WorldEntity[] = [];
   private selected: string | null = null;
-  private running: { devices: SimDevices } | null = null;
+  /** Set while a run is on; `devices` are the driven player's, null while nobody is driven (the room is shown, no input reaches a player). */
+  private running: { devices: SimDevices | null } | null = null;
   /** `overview`: the editor camera stays on while running and the players are drawn; `player`: first person from the driven head. */
   cameraMode: 'overview' | 'player' = 'overview';
   private frameOnNextFrame = false;
@@ -378,7 +379,8 @@ export class ViewportHost {
       const dt = Math.min(0.1, (now - last) / 1000); // cap so a stalled tab does not teleport the camera
       this.flyStep(dt);
       last = now;
-      if (this.running) {
+      if (this.running && !this.running.devices) this.viewport.setHeadPose(null);
+      else if (this.running?.devices) {
         const { devices } = this.running;
         const { yaw, pitch } = devices.headLook;
         // keys are only tracked while the canvas has focus (onkeyup/onblur clear them)
@@ -411,7 +413,7 @@ export class ViewportHost {
    */
   private bindCamera(canvas: HTMLCanvasElement): void {
     let drag: { mode: 'pan' | 'rotate' | 'none'; moved: number; button: number; move?: { id: string; y: number }; place?: true; device?: { kind: RigDevice; y: number } } | null = null;
-    const firstPerson = () => this.running !== null && this.cameraMode === 'player';
+    const firstPerson = () => !!this.running?.devices && this.cameraMode === 'player';
     const ndc = (e: PointerEvent): [number, number] => { const r = canvas.getBoundingClientRect(); return [((e.clientX - r.left) / r.width) * 2 - 1, 1 - ((e.clientY - r.top) / r.height) * 2]; };
     const CLICK_SLOP_PX = 4;
     canvas.onpointerdown = (e) => {
@@ -555,20 +557,23 @@ export class ViewportHost {
   }
 
   /** While running, the canvas takes key input; in Player view the camera follows the driven player's virtual AirPods and the canvas takes mouse-look, in Overview it frames the room. `origin` places that player and starts in Overview; omitted, it stays where it is (switching drivers). */
-  setRunning(devices: SimDevices | null, origin?: readonly [number, number, number]): void {
-    this.running = devices ? { devices } : null;
-    if (devices && origin) {
-      devices.setPosition(origin[0], origin[1], origin[2]);
+  setRunning(devices: SimDevices | null, origin?: readonly [number, number, number], active = devices !== null): void {
+    this.running = devices || active ? { devices } : null;
+    if (this.running && origin) {
+      devices?.setPosition(origin[0], origin[1], origin[2]);
       this.cameraMode = 'overview'; // a new run starts looking at the room, with everyone in frame
       this.frameOnNextFrame = true;
-    } else if (!devices) this.viewport?.setHeadPose(null);
+    } else if (!devices) {
+      this.viewport?.setHeadPose(null);
+      this.cameraMode = 'overview'; // nobody driven: no head to follow
+    }
     this.flyKeys.clear();
     this.bindInput();
   }
 
   /** Overview (the room, every player) or Player view (first person from the driven head). */
   setCameraMode(mode: 'overview' | 'player'): void {
-    if (this.cameraMode === mode) return;
+    if (this.cameraMode === mode || (mode === 'player' && !this.running?.devices)) return;
     this.cameraMode = mode;
     if (mode === 'overview') this.frameOnNextFrame = true;
     this.bindInput();
@@ -586,14 +591,16 @@ export class ViewportHost {
     const run = this.running;
     if (!canvas || !run) return;
     canvas.setAttribute('data-running', 'true');
+    if (!run.devices) return;
+    const devices = run.devices;
     const step = (5 * Math.PI) / 180;
     const onKey = (e: KeyboardEvent) => {
-      const { yaw, pitch } = run.devices.headLook;
+      const { yaw, pitch } = devices.headLook;
       const delta: Record<string, [number, number]> = { ArrowLeft: [step, 0], ArrowRight: [-step, 0], ArrowUp: [0, step], ArrowDown: [0, -step] };
       const d = delta[e.key];
       if (!d) return;
       e.preventDefault();
-      run.devices.setHeadLook(yaw + d[0], pitch + d[1]);
+      devices.setHeadLook(yaw + d[0], pitch + d[1]);
     };
     canvas.addEventListener('keydown', onKey);
     const onRaiseKey = (e: KeyboardEvent) => {
@@ -603,7 +610,7 @@ export class ViewportHost {
     };
     window.addEventListener('keydown', onRaiseKey);
     this.detachInput = [
-      ...(this.cameraMode === 'player' ? [attachMouseLook(canvas, run.devices)] : []), attachGestureKeys(window, run.devices), () => canvas.removeEventListener('keydown', onKey),
+      ...(this.cameraMode === 'player' ? [attachMouseLook(canvas, devices)] : []), attachGestureKeys(window, devices), () => canvas.removeEventListener('keydown', onKey),
       () => window.removeEventListener('keydown', onRaiseKey),
     ];
   }
@@ -668,6 +675,8 @@ export interface RunDeps {
   reveal?(panelId: string): void;
   /** The Deep Agent runtime's WebSocket URL for agent players, or null when the plugin is not installed. */
   agentUrl?(): string | null;
+  /** Whether Play fills every player with an agent right away (a browser setting, off unless the creator turned it on). */
+  seatAgentsAtPlay?(): boolean;
   /** Play on a phone-only game (Quick Draw) ends here: the links of the two real phones, no simulated players, no viewport. */
   onPhones?(links: PhoneLink[]): void;
 }
@@ -679,6 +688,15 @@ const loadRig = (): SimDeviceKind[] => {
     if (Array.isArray(saved)) return SIM_DEVICE_KINDS.filter((k) => saved.includes(k));
   } catch { /* no storage: default rig */ }
   return [...SIM_DEVICE_KINDS];
+};
+
+const SEAT_AGENTS_KEY = 'pear.studio.seatAgents';
+/** The browser setting "Seat agents when Play starts" (off until the creator turns it on: every agent call costs model usage). */
+export const loadSeatAgents = (): boolean => {
+  try { return localStorage.getItem(SEAT_AGENTS_KEY) === 'true'; } catch { return false; }
+};
+export const saveSeatAgents = (on: boolean): void => {
+  try { localStorage.setItem(SEAT_AGENTS_KEY, String(on)); } catch { /* not persisted */ }
 };
 
 /** Capability hint: what the game's tier needs from the simulated rig, or null when it is met. */
@@ -765,8 +783,14 @@ export class RunController {
     host.onPlaceDevice = (kind, x, z) => this.placeRoomDevice(kind, x, z);
   }
 
-  /** Sends keyboard, mouse and Test panel input to this player; the camera follows its head. */
-  drive(id: string): void {
+  /** Sends keyboard, mouse and Test panel input to this player; the camera follows its head. With null nobody is driven: the room stays on screen and no input reaches a player. */
+  drive(id: string | null): void {
+    if (id === null) {
+      this.driven = null;
+      this.deps.viewport.setRunning(null, undefined, true);
+      for (const l of this.listeners) l();
+      return;
+    }
     const p = this.players.find((x) => x.id === id);
     if (!p) return;
     this.dropAgent(p); // a person takes over
@@ -1053,7 +1077,7 @@ export class RunController {
     for (const [kind, holder] of this.holders) if (holder === id) this.holders.set(kind, this.players[0]!.id);
     if (this.clients.delete(id)) (this.server?.leave(id), this.deps.debug.handleDebugEvent({ kind: 'leave', t: Date.now(), player: id }));
     p!.agent?.dispose();
-    if (this.driven === id) this.drive(this.players[0]!.id);
+    if (this.driven === id) this.drive(this.status.kind === 'local' ? null : this.players[0]!.id);
     this.out('log', `Removed ${id}.`);
     this.refresh();
   }
@@ -1193,9 +1217,12 @@ export class RunController {
     if (this.local !== run) return; // stopped while scripts were loading
     this.playerCount = 1;
     this.players = [{ id: 'player-1', name: account.account?.display_name || 'player-1', run, wander: false, ...playerDefaults(), lastEvent: null, hapticAt: 0 }];
-    this.driven = 'player-1';
+    this.driven = kind === 'local' ? null : 'player-1'; // local Play starts with nobody driven; on a server the creator is the player who joined
     this.buildRooms(shared, scene.ownership);
-    viewport.setRunning(run.devices, scene.playerOrigin);
+    if (kind === 'local') {
+      run.devices.setPosition(scene.playerOrigin[0], scene.playerOrigin[1], scene.playerOrigin[2]);
+      viewport.setRunning(null, scene.playerOrigin, true);
+    } else viewport.setRunning(run.devices, scene.playerOrigin);
     this.deps.reveal?.('viewport');
     this.deps.reveal?.('test');
     run.start();
@@ -1226,9 +1253,27 @@ export class RunController {
     this.statusTimer = setInterval(() => this.refresh(), 500);
     this.refresh(kind);
     // Play starts with the game's minimum players. Not on the server: added players there still share the creator's account (P8).
-    const min = kind === 'local' ? scene.inputs?.players[0] ?? 1 : 1;
+    const min = kind === 'local' ? this.deps.project.playerLimits().min : 1;
     this.applyScale();
     for (let i = 1; i < min && this.local === run; i++) await this.addPlayer();
+    if (kind === 'local' && this.local === run && this.deps.seatAgentsAtPlay?.()) {
+      const problem = this.seatAgents();
+      if (problem) this.out('warn', `Agents were not seated: ${problem}`);
+    }
+  }
+
+  /** Gives every player nobody drives an agent: the persona, and the instructions' roles in turn (none when the game has no roles). Returns the first sentence that stopped a seat, or undefined. */
+  seatAgents(persona: Persona = 'follows'): string | undefined {
+    const roles = this.deps.project.instructions?.roles ?? [];
+    let first: string | undefined;
+    let n = 0;
+    for (const p of this.players) {
+      if (p.id === this.driven) continue;
+      const role = roles.length ? roles[n % roles.length]!.id : '';
+      n++;
+      first ??= this.setAgent(p.id, { persona, role });
+    }
+    return first;
   }
 
   /** Play: server scripts run in this page; the server's debug output goes to the same DebugStore rows /debug feeds. */
@@ -1271,6 +1316,8 @@ export class RunController {
     const { project } = this.deps;
     const sess = this.session;
     if (!this.local || !sess) throw new Error('Press Play first, then add a player.');
+    const limits = project.playerLimits();
+    if (this.players.length >= limits.max) throw new Error(`The game allows at most ${limits.max} players.`);
     const n = this.playerCount + 1;
     const id = `player-${n}`;
     // On the server each player signs in as its own dev account, since the server keys players by account id.

@@ -8,7 +8,7 @@ import type { PlaytestReport } from './playtestReport';
 import { renderPlaytest } from './playtestView';
 import type { Project } from './project';
 import type { RunController } from './run';
-import { button, el } from './ui';
+import { announce, button, el } from './ui';
 
 export const blankInstructions = (): Instructions => parseInstructions({});
 
@@ -62,7 +62,7 @@ const MODE_TEXT: Record<OwnershipMode, string> = { player: "each player's own", 
 export function instructionsDiff(current: Instructions | null, proposed: Instructions): string[] {
   if (!current) return [`New instructions: ${quoted(proposed.title)}, ${plural(proposed.roles.length, 'role')}, ${plural(proposed.phases.length, 'phase')}.`];
   const out: string[] = [];
-  const scalars = [['Title', 'title'], ['Summary', 'summary'], ['Space', 'space'], ['Win condition', 'win']] as const;
+  const scalars = [['Title', 'title'], ['Summary', 'summary'], ['Space', 'space'], ['Win condition', 'win'], ['Lose condition', 'lose']] as const;
   for (const [label, key] of scalars) {
     const [a, b] = [current[key], proposed[key]];
     if (a === b) continue;
@@ -112,6 +112,16 @@ export function lintMessages(instructions: Instructions, describe: () => SceneDe
   return lintInstructions(instructions, scene).map((w) => w.message);
 }
 
+/** True when the scene declares a player count other than the instructions' (a file or cloud version made elsewhere): Studio never writes that, but it can open one. */
+export function playersMismatch(instructions: Instructions, describe: () => SceneDescription): boolean {
+  try {
+    const inputs = describe().inputs;
+    return !!inputs && (inputs.players[0] !== instructions.players.min || inputs.players[1] !== instructions.players.max);
+  } catch {
+    return false;
+  }
+}
+
 const PAD = 'padding:4px 12px';
 
 export function createInstructionsPanel(project: Project, run: RunController, sendToChat: (text: string) => string | undefined): PanelView {
@@ -144,20 +154,20 @@ export function createInstructionsPanel(project: Project, run: RunController, se
     control.setAttribute('aria-label', name);
     return el('label', { style: `display:grid;gap:2px;${PAD}` }, [label, control]);
   };
-  const textInput = (value: string, onChange: (v: string) => void): HTMLInputElement => {
-    const input = el('input', { type: 'text' });
+  const textInput = (value: string, onChange: (v: string) => void, placeholder: string): HTMLInputElement => {
+    const input = el('input', { type: 'text', placeholder });
     input.value = value;
     input.addEventListener('change', () => onChange(input.value));
     return input;
   };
-  const textArea = (value: string, rows: number, onChange: (v: string) => void): HTMLTextAreaElement => {
-    const area = el('textarea', { rows });
+  const textArea = (value: string, rows: number, onChange: (v: string) => void, placeholder: string): HTMLTextAreaElement => {
+    const area = el('textarea', { rows, placeholder });
     area.value = value;
     area.addEventListener('change', () => onChange(area.value));
     return area;
   };
-  const numberInput = (value: number): HTMLInputElement => {
-    const input = el('input', { type: 'number', min: 1, max: 32 });
+  const numberInput = (value: number, placeholder: string): HTMLInputElement => {
+    const input = el('input', { type: 'number', min: 1, max: 32, placeholder });
     input.value = String(value);
     return input;
   };
@@ -172,9 +182,9 @@ export function createInstructionsPanel(project: Project, run: RunController, se
     group(`Roles (${i.roles.length})`),
     ...i.roles.flatMap((r) => [
       el('div', { class: 'om-sub', style: PAD }, [`Role ${r.id}`]),
-      field('Name', textInput(r.name, (v) => edit((c) => ({ roles: c.roles.map((x) => (x.id === r.id ? { ...x, name: v } : x)) }))), `Name of role ${r.id}`),
+      field('Name', textInput(r.name, (v) => edit((c) => ({ roles: c.roles.map((x) => (x.id === r.id ? { ...x, name: v } : x)) })), 'What players call this role, e.g. Referee'), `Name of role ${r.id}`),
       field('Kind', selectOf([['player', 'Player'], ['ref', 'Referee']], r.kind, (v) => edit((c) => ({ roles: c.roles.map((x) => (x.id === r.id ? { ...x, kind: v === 'ref' ? 'ref' : 'player' } : x)) }))), `Kind of role ${r.id}`),
-      field('Brief', textArea(r.brief, 3, (v) => edit((c) => ({ roles: c.roles.map((x) => (x.id === r.id ? { ...x, brief: v } : x)) }))), `Brief of role ${r.id}`),
+      field('Brief', textArea(r.brief, 3, (v) => edit((c) => ({ roles: c.roles.map((x) => (x.id === r.id ? { ...x, brief: v } : x)) })), 'What this role does and knows, e.g. Starts each round and calls the winner'), `Brief of role ${r.id}`),
       el('div', { style: PAD }, [button('Remove', () => { const c = project.instructions; if (c) commit(removeRole(c, r.id), true); }, { variant: 'small', ariaLabel: `Remove role ${r.id}` })]),
     ]),
     el('div', { style: PAD }, [(() => {
@@ -188,9 +198,9 @@ export function createInstructionsPanel(project: Project, run: RunController, se
     group(`Phases (${i.phases.length})`),
     ...i.phases.flatMap((ph) => [
       el('div', { class: 'om-sub', style: PAD }, [`Phase ${ph.id}`]),
-      field('Title', textInput(ph.title, (v) => edit((c) => ({ phases: c.phases.map((x) => (x.id === ph.id ? { ...x, title: v } : x)) }))), `Title of phase ${ph.id}`),
-      field('Text', textArea(ph.text, 3, (v) => edit((c) => ({ phases: c.phases.map((x) => (x.id === ph.id ? { ...x, text: v } : x)) }))), `Text of phase ${ph.id}`),
-      field('Steps (one per line: role | what they do)', textArea(stepsText(ph.steps), 4, (v) => edit((c) => ({ phases: c.phases.map((x) => (x.id === ph.id ? { ...x, steps: parseStepsText(v) } : x)) }))), `Steps of phase ${ph.id}`),
+      field('Title', textInput(ph.title, (v) => edit((c) => ({ phases: c.phases.map((x) => (x.id === ph.id ? { ...x, title: v } : x)) })), 'e.g. Warm up'), `Title of phase ${ph.id}`),
+      field('Text', textArea(ph.text, 3, (v) => edit((c) => ({ phases: c.phases.map((x) => (x.id === ph.id ? { ...x, text: v } : x)) })), 'What happens in this phase, in a sentence or two'), `Text of phase ${ph.id}`),
+      field('Steps (one per line: role | what they do)', textArea(stepsText(ph.steps), 4, (v) => edit((c) => ({ phases: c.phases.map((x) => (x.id === ph.id ? { ...x, steps: parseStepsText(v) } : x)) })), 'One per line: role | what they do, e.g. runner | Pass the baton'), `Steps of phase ${ph.id}`),
       el('div', { style: PAD }, [button('Remove', () => { const c = project.instructions; if (c) commit(removePhase(c, ph.id), true); }, { variant: 'small', ariaLabel: `Remove phase ${ph.id}` })]),
     ]),
     el('div', { style: PAD }, [(() => {
@@ -209,9 +219,13 @@ export function createInstructionsPanel(project: Project, run: RunController, se
       );
       return;
     }
-    const min = numberInput(i.players.min);
-    const max = numberInput(i.players.max);
-    const players = () => edit(() => ({ players: { min: Math.round(Number(min.value)), max: Math.round(Number(max.value)) } }), true);
+    const min = numberInput(i.players.min, '2');
+    const max = numberInput(i.players.max, '4');
+    const players = () => {
+      const problem = project.setPlayers(Math.round(Number(min.value)), Math.round(Number(max.value)));
+      if (problem) announce(problem);
+      buildForm();
+    };
     min.addEventListener('change', players);
     max.addEventListener('change', players);
     min.setAttribute('aria-label', 'Fewest players');
@@ -225,17 +239,19 @@ export function createInstructionsPanel(project: Project, run: RunController, se
     const modes = [['player', "Each player's own"], ['free', 'Free in the room'], ['passed', 'Passed between players']] as const;
     formBox.replaceChildren(
       group('Game'),
-      field('Title', textInput(i.title, (v) => edit(() => ({ title: v }))), 'Title'),
-      field('Summary', textArea(i.summary, 3, (v) => edit(() => ({ summary: v }))), 'Summary'),
-      field('Space', textArea(i.space, 2, (v) => edit(() => ({ space: v }))), 'Space'),
+      field('Title', textInput(i.title, (v) => edit(() => ({ title: v })), 'The name players see, e.g. Relay Race'), 'Title'),
+      field('Summary', textArea(i.summary, 3, (v) => edit(() => ({ summary: v })), 'What the game is, in a few sentences'), 'Summary'),
+      field('Space', textArea(i.space, 2, (v) => edit(() => ({ space: v })), 'Where it is played, e.g. a clear 5 m by 5 m floor'), 'Space'),
       el('div', { style: `display:flex;gap:8px;align-items:center;${PAD}` }, ['Players', min, 'to', max]),
-      field('Setup (one line each)', textArea(i.setup.join('\n'), 4, (v) => edit(() => ({ setup: v.split(/\r?\n/) }))), 'Setup'),
+      field('Setup (one line each)', textArea(i.setup.join('\n'), 4, (v) => edit(() => ({ setup: v.split(/\r?\n/) })), 'One line each, e.g. Everyone stands in a line'), 'Setup'),
       el('div', { role: 'group', 'aria-label': 'Gestures', style: `display:flex;gap:12px;flex-wrap:wrap;${PAD}` }, GESTURE_TYPES.map((g, n) => el('label', {}, [boxes[n]!, ` ${g}`]))),
       ...PERIPHERAL_KINDS.map((kind) => field(`Device: ${kind}`, selectOf(modes, i.devices[kind] ?? 'player', (v) => edit((c) => ({ devices: { ...c.devices, [kind]: v as OwnershipMode } }))), `Who holds the ${kind}`)),
       ...rolesSection(i),
       ...phasesSection(i),
       group('Win'),
-      field('How the game is won', textArea(i.win, 2, (v) => edit(() => ({ win: v }))), 'Win condition'),
+      field('How the game is won', textArea(i.win, 2, (v) => edit(() => ({ win: v })), 'e.g. The first team across the line wins'), 'Win condition'),
+      group('Lose'),
+      field('How the game is lost', textArea(i.lose, 2, (v) => edit(() => ({ lose: v })), 'e.g. Drop the baton and you are out'), 'Lose condition'),
     );
   };
 
@@ -243,7 +259,10 @@ export function createInstructionsPanel(project: Project, run: RunController, se
     const i = project.instructions;
     if (!i) return lintBox.replaceChildren();
     const messages = lintMessages(i, () => project.description());
-    lintBox.replaceChildren(group('Scene check'), messages.length ? items('Scene check', messages) : el('p', { class: 'om-sub', role: 'status', style: PAD }, ['The scene agrees with the instructions.']));
+    const match = playersMismatch(i, () => project.description())
+      ? [el('div', { style: PAD }, [button('Match the scene to the instructions', () => { const c = project.instructions; if (c) project.setPlayers(c.players.min, c.players.max); }, { variant: 'small' })])]
+      : [];
+    lintBox.replaceChildren(group('Scene check'), messages.length ? items('Scene check', messages) : el('p', { class: 'om-sub', role: 'status', style: PAD }, ['The scene agrees with the instructions.']), ...match);
   };
 
   const refreshProposal = (): void => {

@@ -183,20 +183,25 @@ export function createInspectorPanel(project: Project, selection: Selection): Pa
     const location = el('input', { type: 'checkbox', 'aria-label': 'Location permission', 'aria-describedby': 'scene-location-help', checked: (s.permissions as { location?: boolean } | undefined)?.location === true });
     location.addEventListener('change', () => setting('permissions.location', location.checked));
     const playersGroup = (): HTMLElement[] => {
-      let declared: SceneInputs | null = null;
-      try {
-        declared = s.inputs ? parseInputs(s.inputs) : null;
-      } catch {
-        declared = null;
-      }
-      if (!declared) return [el('p', { class: 'om-secondary' }, ['Add a peripheral to set the player count.'])];
-      const now = declared;
-      const players = (label: string, i: 0 | 1) => {
-        const input = el('input', { type: 'number', min: 1, max: 32, step: 1, value: String(now.players[i]), 'aria-label': label });
-        input.addEventListener('change', () => setting('inputs', { ...now, players: i === 0 ? [Number(input.value), now.players[1]] : [now.players[0], Number(input.value)] }));
-        return prop(label, el('div', { class: 'om-field' }, [input]));
+      const limits = project.playerLimits();
+      if (limits.from === 'default') return [el('p', { class: 'om-secondary' }, ['Add a peripheral or write the instructions to set the player count.'])];
+      const inputs = { min: el('input', { type: 'number', min: 1, max: 32, step: 1, value: String(limits.min), 'aria-label': 'Min players' }), max: el('input', { type: 'number', min: 1, max: 32, step: 1, value: String(limits.max), 'aria-label': 'Max players' }) };
+      const apply = () => {
+        editing = true;
+        const error = project.setPlayers(Number(inputs.min.value), Number(inputs.max.value));
+        editing = false;
+        if (error) {
+          announce(error);
+          render();
+        }
       };
-      return [players('Min players', 0), players('Max players', 1)];
+      inputs.min.addEventListener('change', apply);
+      inputs.max.addEventListener('change', apply);
+      return [
+        prop('Min players', el('div', { class: 'om-field' }, [inputs.min])),
+        prop('Max players', el('div', { class: 'om-field' }, [inputs.max])),
+        ...(limits.from === 'instructions' ? [el('p', { class: 'om-secondary' }, ['Kept equal to the instructions: changing either changes both.'])] : []),
+      ];
     };
     return [
       el('div', { class: 'pn-title' }, [icon('cube'), el('span', {}, ['Scene settings'])]),

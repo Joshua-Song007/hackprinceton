@@ -11,7 +11,7 @@ from langchain.agents.middleware import TodoListMiddleware
 from langchain_core.tools import StructuredTool
 
 LIMITS = {"short": 300, "long": 2000, "id": 40, "setup": 20, "roles": 12, "phases": 20, "steps": 30}
-FIELDS = {"title", "summary", "space", "setup", "players", "gestures", "devices", "roles", "phases", "win"}
+FIELDS = {"title", "summary", "space", "setup", "players", "gestures", "devices", "roles", "phases", "win", "lose"}
 GESTURES = ["tap", "doubleTap", "flick", "squeeze", "pinch"]
 DEVICE_KINDS = ["phone", "watch", "airpods"]
 DEVICE_MODES = ["player", "free", "passed"]
@@ -51,7 +51,7 @@ def check_instructions(data) -> str | None:
     extra = sorted(set(data) - FIELDS)
     if extra:
         bad(f"unknown field(s): {', '.join(extra)}")
-    for key, limit in (("title", LIMITS["short"]), ("summary", LIMITS["long"]), ("space", LIMITS["long"]), ("win", LIMITS["long"])):
+    for key, limit in (("title", LIMITS["short"]), ("summary", LIMITS["long"]), ("space", LIMITS["long"]), ("win", LIMITS["long"]), ("lose", LIMITS["long"])):
         if key in data:
             text(data[key], key, limit)
     for i, line in enumerate(items(data["setup"], "setup", LIMITS["setup"]) if "setup" in data else []):
@@ -156,7 +156,7 @@ $task
   `passed` (one device that changes hands). Leave it out when every player has their own.
 - `roles`: [{id, name, brief, kind}] with kind `player` or `ref` (a referee). `brief` says what that role does and knows.
 - `phases`: [{id, title, text, steps: [{role, do}]}]. A step's `role` is a role id, or empty for every player; `do` is one short action.
-- `win`: how the game is won or ends.
+- `win`: how the game is won or ends. `lose`: how a player or the team loses. Every game needs both, even a simple one.
 Limits: $limits. Keep the player count, gestures and device holders in line with the scene below.
 
 ## Scene (summary; the full file is /scene.json)

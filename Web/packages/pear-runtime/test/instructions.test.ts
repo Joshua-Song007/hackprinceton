@@ -15,12 +15,14 @@ const good = () => parseInstructions({
   devices: { phone: 'passed' },
   roles: [{ id: 'ref', name: 'Referee', brief: 'Calls the draw.', kind: 'ref' }, { id: 'duelist', name: 'Duelist' }],
   phases: [{ id: 'draw', title: 'Draw', text: 'Wait for the cue.', steps: [{ role: 'duelist', do: 'Tap when the cue sounds' }, { role: '', do: 'Stand still' }] }],
+  win: 'The faster clean tap wins.',
+  lose: 'Tapping before the cue loses the round.',
 });
 
 describe('parseInstructions', () => {
   it('fills defaults from an empty object', () => {
     expect(parseInstructions({})).toEqual({
-      title: '', summary: '', space: '', setup: [], players: { min: 1, max: 32 }, gestures: [], devices: {}, roles: [], phases: [], win: '',
+      title: '', summary: '', space: '', setup: [], players: { min: 1, max: 32 }, gestures: [], devices: {}, roles: [], phases: [], win: '', lose: '',
     });
   });
 
@@ -106,6 +108,19 @@ describe('lintInstructions', () => {
     const bad = { ...base, phases: [{ id: 'x', title: '', text: '', steps: [{ role: 'ghost', do: 'boo' }] }, { id: 'y', title: '', text: '', steps: [] }] };
     expect(lintInstructions(bad, scene).map((x) => x.code)).toEqual(['step-role', 'phase-empty']);
     expect(lintInstructions({ ...bad, roles: [] }, scene).map((x) => x.code)).toEqual(['phase-empty']);
+  });
+
+  it('flags a game with no way to win or no way to lose', () => {
+    expect(lintInstructions({ ...good(), win: '' }, scene).map((x) => x.code)).toEqual(['win-missing']);
+    const w = lintInstructions({ ...good(), lose: '' }, scene);
+    expect(w.map((x) => [x.code, x.message])).toEqual([['lose-missing', 'The instructions say nothing about how the game is lost.']]);
+    expect(lintInstructions({ ...good(), win: '', lose: '' }, scene).map((x) => x.code)).toEqual(['win-missing', 'lose-missing']);
+  });
+
+  it('keeps and cuts the lose text like the win text', () => {
+    expect(parseInstructions({ lose: '  Drop it and you are out  ' }).lose).toBe('Drop it and you are out');
+    expect(parseInstructions({ lose: 'x'.repeat(INSTRUCTION_LIMITS.long + 50) }).lose).toHaveLength(INSTRUCTION_LIMITS.long);
+    expect(parseInstructions({ lose: 7 }).lose).toBe('');
   });
 
   it('skips the players and gesture checks when the scene declares no inputs', () => {

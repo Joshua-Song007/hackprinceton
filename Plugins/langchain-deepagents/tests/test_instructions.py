@@ -25,6 +25,7 @@ GOOD = {
     "roles": [{"id": "ref", "name": "Referee", "brief": "Calls the draw.", "kind": "ref"}, {"id": "duelist", "name": "Duelist", "brief": "Tap first."}],
     "phases": [{"id": "draw", "title": "Draw", "text": "Wait for the cue.", "steps": [{"role": "duelist", "do": "Tap when the cue sounds"}, {"role": "", "do": "Stand still"}]}],
     "win": "First clean tap wins the round.",
+    "lose": "Tapping before the cue loses the round.",
 }
 
 
@@ -37,6 +38,8 @@ def test_check_accepts_a_good_object_and_the_empty_one():
     ("text", "must be an object"),
     ({"extra": 1}, "unknown field(s): extra"),
     ({"title": 5}, "title must be text"),
+    ({"lose": 5}, "lose must be text"),
+    ({"lose": "x" * 2001}, "lose is 2001 characters"),
     ({"summary": "x" * 2001}, "summary is 2001 characters"),
     ({"setup": ["ok", ""]}, "setup[1] must not be empty"),
     ({"players": {"min": 0, "max": 3}}, "1 <= min <= max <= 32"),
@@ -111,6 +114,12 @@ def test_scripts_mode_still_writes_the_scripts_brief_and_knows_the_instructions_
 def test_unknown_mode_is_an_error(tmp_path):
     events = author_events(ScriptedModel(replies=[say("x")]), {}, tmp_path, mode="poetry")
     assert events == [{"type": "error", "message": "unknown mode 'poetry': use scripts or instructions"}]
+
+
+def test_the_brief_asks_for_both_a_win_and_a_lose_condition_and_keeps_the_current_lose(tmp_path):
+    server.prepare_project(tmp_path, {"scene": {"name": "s"}, "instructions": GOOD}, "instructions")
+    brief = (tmp_path / "AGENTS.md").read_text(encoding="utf-8")
+    assert "`lose`" in brief and "Every game needs both" in brief and "Tapping before the cue loses the round." in brief
 
 
 def test_instructions_prompt_over_a_socket_ends_with_the_proposal(tmp_path, monkeypatch):

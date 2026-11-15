@@ -5,8 +5,8 @@ import { PERSONAS, type AgentStatus, type Persona } from './agentPlayers';
 import { slotDevice } from './needs';
 import { button, el, icon, openMenu } from './ui';
 import type { PanelView } from './layout';
-import type { Project } from './project';
-import { SIM_DEVICE_NAMES, TIME_SCALES, rigWarning, type BotMode, type PlayerSource, type RunController, type TestPlayer } from './run';
+import { limitsText, type Project } from './project';
+import { SIM_DEVICE_NAMES, TIME_SCALES, loadSeatAgents, rigWarning, saveSeatAgents, type BotMode, type PlayerSource, type RunController, type TestPlayer } from './run';
 import { checkGame, gestureControls, type Check } from './gamePanel';
 import { renderPlaytest } from './playtestView';
 
@@ -180,9 +180,17 @@ export function createTestPanel(project: Project, run: RunController, sendToChat
 
   /** The playtest: a Finish button while agents play in local Play, and the last report (also after the run stopped). */
   const playtestSection = (): Node[] => {
-    const playing = run.running && run.status.kind === 'local' && run.players.some((p) => p.agent);
-    if (!playing && !run.report) return [];
+    const local = run.running && run.status.kind === 'local';
+    const playing = local && run.players.some((p) => p.agent);
+    if (!local && !run.report) return [];
     const out: Node[] = [group('Playtest')];
+    if (local) {
+      const seat = button('Seat agents', () => { msg.textContent = run.seatAgents() ?? ''; }, { variant: 'small', ariaLabel: 'Seat agents: every player nobody drives becomes an agent' });
+      const auto = el('input', { type: 'checkbox', 'aria-label': 'Seat agents when Play starts' });
+      auto.checked = loadSeatAgents();
+      auto.addEventListener('change', () => saveSeatAgents(auto.checked));
+      out.push(el('div', { style: 'padding:4px 12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap' }, [seat, el('label', {}, [auto, ' Seat agents when Play starts (uses model calls)'])]));
+    }
     if (playing) {
       const finish = button('Finish playtest', () => { void run.finishPlaytest().then((m) => { msg.textContent = m ?? ''; }); }, { variant: 'small', ariaLabel: 'Finish playtest: the agents look back at the instructions' });
       finish.disabled = run.finishing;
@@ -200,18 +208,18 @@ export function createTestPanel(project: Project, run: RunController, sendToChat
       const sub = el('span', { class: 'om-sub' });
       const dot = el('span', { class: 'om-haptic', role: 'img', 'aria-label': 'Haptic output' }, [icon('phone')]);
       const driven = run.driven === p.id;
-      const agent = i > 0 && run.status.kind === 'local' && !driven ? el('span', { class: 'om-sub', role: 'status', 'aria-label': `Agent status of ${p.name}`, style: 'grid-column:1/-1' }) : null;
+      const agent = run.status.kind === 'local' && !driven ? el('span', { class: 'om-sub', role: 'status', 'aria-label': `Agent status of ${p.name}`, style: 'grid-column:1/-1' }) : null;
       rows.set(p.id, { sub, dot, agent });
-      const drive = button(driven ? 'Driving' : 'Drive', () => run.drive(p.id), { variant: 'small', ariaLabel: `Drive ${p.name}` });
-      drive.disabled = driven;
+      const canStop = driven && run.status.kind === 'local';
+      const drive = button(driven ? (canStop ? 'Stop driving' : 'Driving') : 'Drive', () => run.drive(driven ? null : p.id), { variant: 'small', ariaLabel: canStop ? `Stop driving ${p.name}` : `Drive ${p.name}` });
+      drive.disabled = driven && !canStop;
       drive.setAttribute('aria-pressed', String(driven));
       const btns: Node[] = [drive];
-      if (i > 0) {
-        const w = button('Wander', () => run.setWander(p.id, !p.wander), { variant: 'small', ariaLabel: `Wander ${p.name}` });
-        w.setAttribute('aria-pressed', String(p.wander));
-        if (run.status.kind === 'local' && !driven) btns.push(...agentControls(p));
-        btns.push(w, button('Remove', () => run.removePlayer(p.id), { variant: 'small', ariaLabel: `Remove ${p.name}` }));
-      }
+      const w = button('Wander', () => run.setWander(p.id, !p.wander), { variant: 'small', ariaLabel: `Wander ${p.name}` });
+      w.setAttribute('aria-pressed', String(p.wander));
+      if (run.status.kind === 'local' && !driven) btns.push(...agentControls(p));
+      btns.push(w);
+      if (i > 0) btns.push(button('Remove', () => run.removePlayer(p.id), { variant: 'small', ariaLabel: `Remove ${p.name}` })); // the first player is the run's host seat
       const role = el('select', { 'aria-label': `Role of ${p.name}` }, [el('option', { value: 'player' }, ['Player']), el('option', { value: 'ref' }, ['Referee'])]);
       role.value = p.run.role;
       role.addEventListener('change', () => run.setRole(p.id, role.value as 'player' | 'ref'));
@@ -224,7 +232,11 @@ export function createTestPanel(project: Project, run: RunController, sendToChat
     }));
     const addRole = el('select', { 'aria-label': 'Role of the new player' }, [el('option', { value: 'player' }, ['Player']), el('option', { value: 'ref' }, ['Referee'])]);
     const add = button('Add player', () => { msg.textContent = ''; run.addPlayer(addRole.value as 'player' | 'ref').catch((e) => { msg.textContent = e instanceof Error ? e.message : String(e); }); }, { variant: 'small' });
-    return [list, el('div', { style: 'padding:4px 12px;display:flex;gap:8px;align-items:center' }, [addRole, add]), msg];
+    const limits = project.playerLimits();
+    add.disabled = run.players.length >= limits.max;
+    const note = run.players.length >= limits.max ? `The game allows at most ${limits.max} players.` : run.players.length < limits.min ? `The game needs at least ${limits.min} players.` : '';
+    const nobody = run.status.kind === 'local' && !run.driven ? [el('p', { class: 'om-sub', role: 'status', style: 'padding:0 12px' }, ['Nobody is driven. Press Drive on a player to play it yourself.'])] : [];
+    return [list, ...nobody, el('div', { style: 'padding:4px 12px;display:flex;gap:8px;align-items:center' }, [addRole, add]), ...(note ? [el('p', { class: 'om-sub', role: 'status', style: 'padding:0 12px' }, [note])] : []), msg];
   };
 
   const mapSection = (): Node[] => {
@@ -411,7 +423,7 @@ export function createTestPanel(project: Project, run: RunController, sendToChat
     root.replaceChildren(
       group('Checklist'), checklist(),
       ...timeScaleSection(),
-      group(`Players (${run.players.length})`), ...playersSection(),
+      group(`Players (${run.players.length} of ${limitsText(project.playerLimits())})`), ...playersSection(),
       ...playtestSection(),
       ...mapSection(), ...controlsSection(), ...devicesSection(),
     );

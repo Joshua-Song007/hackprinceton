@@ -10,7 +10,7 @@ import players
 import server
 from scripted_model import LOG, ScriptedModel, call, say
 
-INSTRUCTIONS = {"title": "Quick Draw", "summary": "A duel.", "roles": [{"id": "duelist", "name": "Duelist"}],
+INSTRUCTIONS = {"title": "Quick Draw", "summary": "A duel.", "win": "Fastest clean tap.", "lose": "Tapping early loses.", "roles": [{"id": "duelist", "name": "Duelist"}],
                 "phases": [{"id": "draw", "title": "Draw", "text": "Wait for the cue.", "steps": [{"role": "duelist", "do": "Tap on the cue"}]}]}
 ROLE = {"id": "duelist", "name": "Duelist", "brief": "Draw fast.", "kind": "player"}
 
@@ -75,6 +75,7 @@ def test_the_persona_and_role_shape_the_system_prompt():
     skims = players.system_prompt(ROLE, "skims", INSTRUCTIONS)
     assert "skimmed" in skims and "Draw fast." in skims and "Tap on the cue" in skims and "Reply with ONE JSON object" in skims
     assert players.system_prompt(ROLE, "cheats", INSTRUCTIONS) != skims
+    assert "Fastest clean tap." in skims and "Tapping early loses." in skims
 
 
 @pytest.mark.parametrize("over, fragment", [

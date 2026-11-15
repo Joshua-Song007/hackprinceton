@@ -20,8 +20,8 @@ import { createInstructionsPanel } from './instructionsPanel';
 import { createTestPanel } from './testPanel';
 import { openPhoneSheet } from './phonePlay';
 import { openNewGameSheet } from './newGame';
-import { walkEntities, Project, TEMPLATES, attachAutosave, templateSnapshot, type ProjectSnapshot } from './project';
-import { RunController, ViewportHost, createViewportPanel } from './run';
+import { walkEntities, Project, TEMPLATES, attachAutosave, limitsText, templateSnapshot, type ProjectSnapshot, type TemplateId } from './project';
+import { RunController, ViewportHost, createViewportPanel, loadSeatAgents } from './run';
 import { announce, button, el, openMenu, openSheet, promptSheet, rovingToolbar, type MenuItem } from './ui';
 import { installShortcuts, mod, mountMenuBar } from './menubar';
 import { renderLoginScreen } from './loginScreen';
@@ -54,7 +54,7 @@ const joinVersion = async (version: number | 'latest') => {
   history.replaceState(null, '', `${location.pathname}?${new URLSearchParams({ join: v.game_id, version: String(v.version), as: testPlayer!.name })}`);
   await run.join(v.game_id, v.version);
 };
-const run = new RunController({ project, debug, account, viewport, editor, reveal: (id) => layout.show(id), onReload: testPlayer ? joinVersion : undefined, onPhones: openPhoneSheet, agentUrl: () => marketplace.runtimeUrlOf('langchain-deepagents')?.ws ?? null });
+const run = new RunController({ project, debug, account, viewport, editor, reveal: (id) => layout.show(id), onReload: testPlayer ? joinVersion : undefined, onPhones: openPhoneSheet, agentUrl: () => marketplace.runtimeUrlOf('langchain-deepagents')?.ws ?? null, seatAgentsAtPlay: loadSeatAgents });
 
 const chat = createChatLink();
 const sendToChat = (text: string): string | undefined => {
@@ -178,6 +178,14 @@ const openSnapshot = async (snapshot: ProjectSnapshot): Promise<boolean> => {
   return true;
 };
 
+// A new game starts from its instructions (the New game form), then opens the editor with the Instructions panel showing.
+const startNewGame = (template?: TemplateId) => openNewGameSheet((snapshot) => void openSnapshot(snapshot).then((ok) => {
+  if (!ok) return;
+  hasProject = true;
+  showScreen('editor');
+  layout.show('instructions');
+}), template);
+
 // Screens: login and projects are full-window overlays; the editor stays mounted underneath.
 const screenEl = document.getElementById('screen')!;
 const studioEl = document.getElementById('studio')!;
@@ -192,6 +200,7 @@ const showScreen = (s: Screen) => {
   else if (s === 'projects') {
     renderProjectsScreen(screenEl, {
       account,
+      newGame: startNewGame,
       open: (snapshot, file) => void openSnapshot(snapshot).then((ok) => {
         if (!ok) return;
         if (file) projectFile = file;
@@ -257,7 +266,7 @@ const runServer = button('', () => openMenu(runServer, [
 ]), { icon: 'chev', variant: 'borderless', ariaLabel: 'More ways to play' });
 const stop = button('Stop', () => run.stop(), { icon: 'stop', variant: 'borderless', ariaLabel: 'Stop (Shift+F5)' });
 const projectButton = button('', () => {
-  const items = TEMPLATES.map((t) => ({ label: `Open template: ${t.label}`, run: () => openSnapshot(templateSnapshot(t.id)) }));
+  const items = TEMPLATES.map((t) => ({ label: `New game from template: ${t.label}`, run: () => startNewGame(t.id) }));
   openMenu(projectButton, [
     ...items,
     { label: 'Open from cloud (latest version)...', run: () => openAccountSheet(account, prefs, { project, openSnapshot }) },
@@ -299,7 +308,7 @@ const renderState = () => {
     el('span', {}, [`Rate ${s.rateHz} Hz`]),
     el('span', {}, [s.latencyMs === null ? 'Latency none yet' : `Latency ${s.latencyMs} ms`]),
     ...(s.serverLatencyMs === null ? [] : [el('span', {}, [`Server ${s.serverLatencyMs} ms`])]),
-    ...(s.players === null ? [] : [el('span', {}, [`Players ${s.players}`])]),
+    ...(s.players === null ? [] : [el('span', {}, [`Players ${s.players} (${limitsText(project.playerLimits())})`])]),
   );
 };
 const renderChrome = () => {
@@ -369,8 +378,8 @@ mountMenuBar(document.getElementById('menubar')!, [
     label: 'File',
     items: () => [
       { label: 'Projects...', run: () => showScreen('projects') },
-      { label: 'New game...', run: () => openNewGameSheet((snap) => void openSnapshot(snap)) },
-      ...TEMPLATES.map((t) => ({ label: `Open template: ${t.label}`, run: () => void openSnapshot(templateSnapshot(t.id)) })),
+      { label: 'New game...', run: () => startNewGame() },
+      ...TEMPLATES.map((t) => ({ label: `New game from template: ${t.label}`, run: () => startNewGame(t.id) })),
       { label: 'Open from cloud...', run: () => openAccountSheet(account, prefs, { project, openSnapshot }) },
       { label: 'Open file...', shortcut: mod('Ctrl+O'), run: () => void openFile() },
       { separator: true },

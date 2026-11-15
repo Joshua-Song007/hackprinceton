@@ -29,10 +29,11 @@ type Internals = {
 
 function setup(opts: { instructions?: boolean; url?: string | null; local?: boolean } = {}) {
   const logs: string[] = [];
+  const viewport = { setRunning: vi.fn() };
   const deps = {
     project: { instructions: opts.instructions === false ? null : instructions },
     debug: { addOutput: (_l: string, text: string) => void logs.push(text), setServerConnected: vi.fn() },
-    viewport: { setRunning: vi.fn() },
+    viewport,
     agentUrl: () => (opts.url === undefined ? 'ws://runtime' : opts.url),
   } as unknown as RunDeps;
   const run = new RunController(deps);
@@ -41,7 +42,7 @@ function setup(opts: { instructions?: boolean; url?: string | null; local?: bool
   run.driven = 'player-1';
   const internals = run as unknown as Internals;
   if (opts.local !== false) internals.server = { dispose() {} };
-  return { run, players, logs, internals };
+  return { run, players, logs, internals, viewport };
 }
 
 describe('observationFor', () => {
@@ -233,5 +234,65 @@ describe('the playtest report', () => {
     run.drive('player-2');
     run.stop();
     expect(run.report).toMatchObject({ players: [{ id: 'player-2' }], groups: [{ items: [{ line: 'Stretch', from: ['player-2'] }] }] });
+  });
+});
+
+describe('nobody driven', () => {
+  it('drive(null) stops driving but keeps the run on screen, and driving a player binds the viewport to it', () => {
+    const { run, players, viewport } = setup();
+    const seen = vi.fn();
+    run.onChange(seen);
+    run.drive(null);
+    expect(run.driven).toBeNull();
+    expect(run.drivenPlayer).toBeUndefined();
+    expect(viewport.setRunning).toHaveBeenLastCalledWith(null, undefined, true);
+    expect(seen).toHaveBeenCalledTimes(1);
+    run.drive('player-3');
+    expect(run.driven).toBe('player-3');
+    expect(viewport.setRunning).toHaveBeenLastCalledWith(players[2]!.run.devices);
+  });
+
+  it('removing the driven player leaves nobody driven in local Play', () => {
+    const { run } = setup();
+    run.status = { ...run.status, kind: 'local' };
+    run.drive('player-3');
+    run.removePlayer('player-3');
+    expect(run.driven).toBeNull();
+    expect(run.players.map((p) => p.id)).toEqual(['player-1', 'player-2', 'player-4']);
+  });
+
+  it('every player can be an agent when nobody is driven, but not the driven one', () => {
+    const { run } = setup();
+    expect(run.setAgent('player-1', { persona: 'follows', role: '' })).toMatch(/cannot be the player you drive/);
+    run.drive(null);
+    expect(run.setAgent('player-1', { persona: 'follows', role: '' })).toBeUndefined();
+  });
+
+  it('seat agents gives every player nobody drives an agent, with the roles in turn', () => {
+    const { run, players } = setup();
+    expect(run.seatAgents()).toBeUndefined();
+    expect(players[0]!.agent).toBeNull();
+    expect(players.slice(1).map((p) => p.agent?.seat)).toEqual([
+      { persona: 'follows', role: 'ref' }, { persona: 'follows', role: 'runner' }, { persona: 'follows', role: 'ref' },
+    ]);
+    expect(players[1]!.run.role).toBe('ref');
+    expect(players[2]!.run.role).toBe('player');
+    run.drive(null);
+    expect(run.seatAgents('skims')).toBeUndefined();
+    expect(players.map((p) => p.agent?.seat.persona)).toEqual(['skims', 'skims', 'skims', 'skims']);
+    expect(players[0]!.agent?.seat.role).toBe('ref');
+  });
+
+  it('a game with no roles seats agents without a role', () => {
+    const s = setup();
+    (s.run as unknown as { deps: { project: { instructions: unknown } } }).deps.project.instructions = parseInstructions({ title: 'T' });
+    expect(s.run.seatAgents()).toBeUndefined();
+    expect(s.players.slice(1).map((p) => p.agent?.seat.role)).toEqual(['', '', '']);
+  });
+
+  it('says why when it cannot seat anyone', () => {
+    expect(setup({ url: null }).run.seatAgents()).toMatch(/Install the Deep Agent plugin/);
+    expect(setup({ instructions: false }).run.seatAgents()).toMatch(/instructions first/);
+    expect(setup({ local: false }).run.seatAgents()).toMatch(/local Play/);
   });
 });

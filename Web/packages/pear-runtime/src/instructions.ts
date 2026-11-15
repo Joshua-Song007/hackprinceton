@@ -48,6 +48,8 @@ export interface Instructions {
   roles: InstructionRole[];
   phases: InstructionPhase[];
   win: string;
+  /** How a player or the team loses; every game needs one. */
+  lose: string;
 }
 
 type Obj = Record<string, unknown>;
@@ -122,10 +124,11 @@ export function parseInstructions(raw: unknown): Instructions {
     roles: roles.slice(0, L.roles),
     phases,
     win: text(raw.win, L.long),
+    lose: text(raw.lose, L.long),
   };
 }
 
-export type InstructionsWarningCode = 'players' | 'gesture-missing' | 'gesture-unused' | 'device' | 'step-role' | 'phase-empty';
+export type InstructionsWarningCode = 'players' | 'gesture-missing' | 'gesture-unused' | 'device' | 'step-role' | 'phase-empty' | 'win-missing' | 'lose-missing';
 
 export interface InstructionsWarning {
   code: InstructionsWarningCode;
@@ -142,6 +145,8 @@ const MODE_LABEL: Record<OwnershipMode, string> = { player: "each player's own",
 export function lintInstructions(instructions: Instructions, scene: SceneDescription): InstructionsWarning[] {
   const out: InstructionsWarning[] = [];
   const warn = (code: InstructionsWarningCode, message: string) => out.push({ code, message });
+  if (!instructions.win) warn('win-missing', 'The instructions say nothing about how the game is won.');
+  if (!instructions.lose) warn('lose-missing', 'The instructions say nothing about how the game is lost.');
   const inputs = scene.inputs;
   if (inputs) {
     const [min, max] = inputs.players;
