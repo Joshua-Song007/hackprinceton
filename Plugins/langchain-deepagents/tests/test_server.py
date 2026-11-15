@@ -15,7 +15,7 @@ from scripted_model import LOG, ScriptedModel, call, say
 ROOT = Path(__file__).resolve().parent.parent
 
 
-def test_agent_can_write_anywhere_in_project_but_not_outside_it(tmp_path):
+def test_agent_can_write_only_declared_scopes_and_not_outside_the_project(tmp_path):
     project = tmp_path / "project"
     project.mkdir()
     model = ScriptedModel(replies=[
@@ -27,7 +27,7 @@ def test_agent_can_write_anywhere_in_project_but_not_outside_it(tmp_path):
     agent = create_deep_agent(model=model, backend=FilesystemBackend(root_dir=project, virtual_mode=True),
                               permissions=server.PERMISSIONS)
     asyncio.run(agent.ainvoke({"messages": [{"role": "user", "content": "go"}]}))
-    assert (project / "tools" / "hub.js").read_text() == "x"
+    assert not (project / "tools" / "hub.js").exists()
     assert (project / "scripts" / "ok.js").read_text() == "y"
     assert not (tmp_path / "escape.js").exists()
 

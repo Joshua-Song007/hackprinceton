@@ -60,6 +60,7 @@ def test_agent_validates_fixes_and_reruns(tmp_path):
     project(tmp_path, "serverScript({")
     model = ScriptedModel(replies=[
         call("validate_game", "1"),
+        call("read_file", "r", file_path="/scripts/server/main.js"),
         call("write_file", "2", file_path="/scripts/server/main.js", content="serverScript({})"),
         call("validate_game", "3"),
         say("fixed"),
